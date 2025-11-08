@@ -1,0 +1,180 @@
+# =============================================================================
+# 13_Decision_Command_Center.py — AI-Enhanced Foundation
+# A unified command center for decisions + explainability + AI guidance
+# =============================================================================
+from __future__ import annotations
+import streamlit as st
+from datetime import date
+
+# Optional theme hook
+try:
+    from app_core.ui.theme import apply_css
+    apply_css()
+except Exception:
+    pass
+
+st.set_page_config(page_title="Decision Command Center", layout="wide")
+st.title("🧭 Decision Command Center")
+
+# -----------------------------------------------------------------------------
+# SESSION EXPECTATIONS (future integrations)
+# -----------------------------------------------------------------------------
+# st.session_state["results_summary_df"]       -> model metrics
+# st.session_state["forecast_fig"]             -> forecast plots
+# st.session_state["schedule_solution_df"]     -> staff optimization results
+# st.session_state["inventory_solution_df"]    -> inventory optimization results
+# st.session_state["shap_fig"] / ["lime_fig"]  -> explainability visuals
+# st.session_state["recommendations"]          -> list of text actions
+# st.session_state["ai_agent_history"]         -> list of chat turns (for persistence)
+# -----------------------------------------------------------------------------
+
+cfg = st.session_state.setdefault("dcc_config", {
+    "primary_kpi": "RMSE",
+    "decision_horizon_days": 7,
+    "confidence_level": 0.9,
+    "ai_agent_active": True
+})
+
+# ==============================
+# Global configuration section
+# ==============================
+with st.expander("⚙️ Global Decision Settings (placeholders)", expanded=False):
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        cfg["decision_horizon_days"] = st.number_input(
+            "Decision horizon (days)", 1, 60, int(cfg.get("decision_horizon_days", 7))
+        )
+    with c2:
+        cfg["primary_kpi"] = st.selectbox(
+            "Primary KPI", ["RMSE", "MAE", "MAPE", "R²"],
+            index=["RMSE","MAE","MAPE","R²"].index(cfg.get("primary_kpi","RMSE"))
+        )
+    with c3:
+        cfg["confidence_level"] = st.slider("Confidence level (placeholder)", 0.5, 0.99, 0.9)
+
+# ==============================
+# KPI summary deck
+# ==============================
+st.subheader("📊 Situation at a Glance")
+k1, k2, k3, k4 = st.columns(4)
+with k1: st.metric("Best Model", st.session_state.get("best_model_name", "—"))
+with k2: st.metric("Primary KPI", cfg["primary_kpi"])
+with k3: st.metric("Decision Horizon (days)", cfg["decision_horizon_days"])
+with k4: st.metric("Confidence Level", f"{int(cfg['confidence_level']*100)}%")
+
+# ==============================
+# Tabs for multi-domain insights
+# ==============================
+tab_overview, tab_explain, tab_staff, tab_inventory, tab_ai = st.tabs(
+    ["🏁 Overview", "🧩 Explainable AI", "👥 Staffing", "📦 Inventory", "🤖 AI Assistant"]
+)
+
+# ------------------- Overview -------------------
+with tab_overview:
+    st.markdown("### Consolidated Overview (placeholder)")
+    if "results_summary_df" in st.session_state:
+        st.dataframe(st.session_state["results_summary_df"], use_container_width=True)
+    else:
+        st.info("No summary yet. Train models to populate results.")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.caption("Forecast vs Actual")
+        if st.session_state.get("forecast_fig") is not None:
+            st.plotly_chart(st.session_state["forecast_fig"], use_container_width=True)
+        else:
+            st.info("Forecast plot will appear here.")
+    with c2:
+        st.caption("Residual Diagnostics (placeholder)")
+        st.info("Residual plots or metric charts can appear here later.")
+
+# ------------------- Explainable AI -------------------
+with tab_explain:
+    st.markdown("### Model Explainability & Feature Importance (placeholders)")
+    st.info(
+        "This section will visualize model interpretability using SHAP (SHapley Additive Explanations) "
+        "and LIME (Local Interpretable Model-agnostic Explanations)."
+    )
+
+    mode = st.radio(
+        "Choose interpretability method",
+        ["SHAP (Global feature importance)", "LIME (Local instance explanation)"],
+        horizontal=True
+    )
+
+    st.button("🚀 Generate Explanation (placeholder)")
+    if "shap_fig" in st.session_state and mode.startswith("SHAP"):
+        st.plotly_chart(st.session_state["shap_fig"], use_container_width=True)
+    elif "lime_fig" in st.session_state and mode.startswith("LIME"):
+        st.plotly_chart(st.session_state["lime_fig"], use_container_width=True)
+    else:
+        st.caption("Explanation visual will appear here after analysis.")
+
+    st.markdown("**Interpretation Panel (placeholder)**")
+    st.text_area(
+        "Insights (automated interpretation will appear here)",
+        value="Feature impact summary will be generated by SHAP/LIME later.",
+        height=120
+    )
+
+# ------------------- Staffing -------------------
+with tab_staff:
+    st.markdown("### Staffing Overview (placeholder)")
+    c1, c2 = st.columns(2)
+    with c1:
+        if "schedule_solution_df" in st.session_state:
+            st.dataframe(st.session_state["schedule_solution_df"], use_container_width=True)
+        else:
+            st.info("No schedule available yet.")
+    with c2:
+        if "schedule_fig" in st.session_state:
+            st.plotly_chart(st.session_state["schedule_fig"], use_container_width=True)
+        else:
+            st.info("Staff schedule Gantt or summary chart will be shown here.")
+
+# ------------------- Inventory -------------------
+with tab_inventory:
+    st.markdown("### Inventory Overview (placeholder)")
+    c1, c2 = st.columns(2)
+    with c1:
+        if "inventory_solution_df" in st.session_state:
+            st.dataframe(st.session_state["inventory_solution_df"], use_container_width=True)
+        else:
+            st.info("No inventory results yet.")
+    with c2:
+        if "inventory_fig" in st.session_state:
+            st.plotly_chart(st.session_state["inventory_fig"], use_container_width=True)
+        else:
+            st.info("Inventory trend or reorder plots will be shown here.")
+
+# ------------------- AI Assistant -------------------
+with tab_ai:
+    st.markdown("### 🤖 Decision Assistant (foundation)")
+    st.caption(
+        "This AI agent will later analyze model results, forecasts, and optimization outputs "
+        "to generate recommendations or answer questions about the hospital’s operational decisions."
+    )
+
+    # Simulated chat interface
+    if "ai_agent_history" not in st.session_state:
+        st.session_state["ai_agent_history"] = []
+
+    for turn in st.session_state["ai_agent_history"]:
+        role = "🧠 Assistant" if turn["role"] == "assistant" else "👤 You"
+        st.markdown(f"**{role}:** {turn['content']}")
+
+    user_input = st.text_input("Ask the Decision Assistant (placeholder):", "")
+    if st.button("Send", key="ai_agent_send"):
+        if user_input.strip():
+            st.session_state["ai_agent_history"].append({"role": "user", "content": user_input})
+            # Placeholder AI reply
+            reply = (
+                "This is a foundation. In the full version, the agent will read your model outputs "
+                "and suggest operational actions based on forecast trends, staffing gaps, and "
+                "inventory projections."
+            )
+            st.session_state["ai_agent_history"].append({"role": "assistant", "content": reply})
+            st.experimental_rerun()
+
+st.divider()
+st.caption("This page unifies results, explainability, and AI-based guidance — foundation only.")

@@ -1,0 +1,100 @@
+# =============================================================================
+# 09_Results.py — Results Hub (Foundation Only)
+# View metrics, plots, and saved artifacts from any model
+# =============================================================================
+from __future__ import annotations
+import streamlit as st
+
+# Optional theme hook
+try:
+    from app_core.ui.theme import apply_css
+    apply_css()
+except Exception:
+    pass
+
+st.set_page_config(page_title="Results", layout="wide")
+st.title("📊 Results")
+
+# -------------------------------------------------------------
+# Expected session keys (to be filled by your training pipelines later):
+# st.session_state["results_summary_df"]   -> pd.DataFrame of overall metrics by model
+# st.session_state["results_by_horizon"]   -> dict[str,pd.DataFrame] per horizon or a single df
+# st.session_state["residual_plots"]       -> dict[str, plotly.Figure] e.g., {"ARIMA": fig, ...}
+# st.session_state["forecast_plots"]       -> dict[str, plotly.Figure]
+# st.session_state["artifacts"]            -> dict with paths/metadata (model pickles, params, etc.)
+# -------------------------------------------------------------
+
+with st.expander("📂 Data & Session (placeholder)", expanded=False):
+    st.info("These placeholders will populate once training is implemented.")
+    st.write("Available session keys:", list(st.session_state.keys()))
+
+# Top summary section
+st.subheader("Overview")
+left, right = st.columns([2, 1])
+with left:
+    st.caption("High-level summary of best model(s) and metrics (placeholder).")
+    best_model = st.session_state.get("best_model_name", "(not set)")
+    st.metric("Best Model (placeholder)", best_model)
+with right:
+    st.selectbox(
+        "Primary score to display", 
+        ["RMSE", "MAE", "MAPE", "R²"], 
+        key="results_primary_score"
+    )
+
+# Tabs for different result views
+tab_summary, tab_horizons, tab_plots, tab_artifacts = st.tabs(
+    ["📋 Summary Table", "🗓️ Per-Horizon", "📈 Plots", "📦 Artifacts"]
+)
+
+with tab_summary:
+    st.markdown("#### Comparison table (by model)")
+    if "results_summary_df" in st.session_state:
+        st.dataframe(st.session_state["results_summary_df"], use_container_width=True)
+    else:
+        st.info("No summary table yet. Train a model to populate this.")
+
+with tab_horizons:
+    st.markdown("#### Metrics by forecast horizon")
+    horizon_opt = st.selectbox("Select horizon (placeholder)", ["1","2","3","4","5","6","7"], index=0)
+    if "results_by_horizon" in st.session_state:
+        horizon_map = st.session_state["results_by_horizon"]
+        df = horizon_map.get(str(horizon_opt)) if isinstance(horizon_map, dict) else None
+        if df is not None:
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No per-horizon metrics yet for this selection.")
+    else:
+        st.info("No per-horizon metrics yet.")
+
+with tab_plots:
+    st.markdown("#### Diagnostics & Forecast plots (placeholders)")
+    plot_type = st.radio(
+        "Plot type", ["Residual diagnostics", "Forecast vs Actual"], horizontal=True
+    )
+    container = st.container()
+    figs_key = "residual_plots" if "Residual" in plot_type else "forecast_plots"
+    figs = st.session_state.get(figs_key, {})
+    if isinstance(figs, dict) and figs:
+        model_name = st.selectbox("Select model", options=list(figs.keys()))
+        fig = figs.get(model_name)
+        if fig is not None:
+            container.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No figure available for this model yet.")
+    else:
+        st.info("No figures stored yet. Once training runs, plots will appear here.")
+
+with tab_artifacts:
+    st.markdown("#### Saved artifacts (placeholders)")
+    art = st.session_state.get("artifacts", {})
+    if art:
+        for name, meta in art.items():
+            with st.expander(f"{name}"):
+                st.write(meta)
+                st.button(f"Download {name}", key=f"dl_{name}")  # wire later
+    else:
+        st.info("No artifacts registered. After training, model files/metadata will list here.")
+
+st.divider()
+st.caption("This page will read from `st.session_state` as your pipelines produce outputs.")

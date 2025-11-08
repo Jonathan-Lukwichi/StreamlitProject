@@ -1,0 +1,121 @@
+import pandas as pd
+import streamlit as st
+from app_core.ui.theme import apply_css
+from app_core.state.session import init_state
+from app_core.ui.components import header
+from app_core.data.ingest import _find_datetime_col, _to_datetime_series, _combine_date_time_columns
+
+
+
+
+# Move these from your current code without changing behavior:
+# - _prep_patient
+# - _prep_weather
+# - _prep_calendar
+# - fuse_data
+
+def _prep_patient(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    dt_col = "datetime" if "datetime" in df.columns else _find_datetime_col(df, want="datetime")
+    if dt_col is None:
+        raise ValueError("Patient CSV must include a date/datetime column (e.g., 'datetime', 'Date', 'timestamp').")
+    dt = _to_datetime_series(df[dt_col])
+    if dt.isna().all():
+        raise ValueError("Could not parse any valid datetimes in patient date/datetime column.")
+    df["datetime"] = dt
+    df["Date"] = df["datetime"].dt.normalize()
+    if "patient_count" not in df.columns:
+        for alt in ["Target_1", "patients", "count", "y", "value"]:
+            if alt in df.columns:
+                df["patient_count"] = pd.to_numeric(df[alt], errors="coerce")
+                break
+    if "patient_count" not in df.columns:
+        raise ValueError("Patient CSV must include 'patient_count' (or a recognizable equivalent).")
+    df["patient_count"] = pd.to_numeric(df["patient_count"], errors="coerce")
+    return df[["Date", "datetime", "patient_count"]]
+
+def _prep_weather(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    dt_col = "datetime" if "datetime" in df.columns else _find_datetime_col(df, want="datetime")
+    if dt_col is None:
+        raise ValueError("Weather CSV must include a date/datetime column.")
+    df["datetime"] = _to_datetime_series(df[dt_col])
+    if df["datetime"].isna().all():
+        raise ValueError("Could not parse any valid datetimes in weather date/datetime column.")
+    df["Date"] = df["datetime"].dt.normalize()
+    out = df[["Date", "datetime"]].copy()
+    weather_cols = ["Average_Temp", "Max_temp", "Average_wind", "Max_wind", "Average_mslp", "Total_precipitation", "Moon_Phase"]
+    for col in weather_cols:
+        if col in df.columns:
+            out[col] = pd.to_numeric(df[col], errors="coerce")
+    return out
+
+def _prep_calendar(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    base_col = "date" if "date" in df.columns else _find_datetime_col(df, want="date")
+    if base_col is None:
+        raise ValueError("Calendar CSV must include a date column (e.g., 'date', 'Date').")
+    dt = _to_datetime_series(df[base_col])
+    if dt.isna().all():
+        raise ValueError("Could not parse any valid dates in calendar 'date' column.")
+    out = pd.DataFrame({"Date": dt.dt.normalize()})
+    out["Holiday"] = pd.to_numeric(df["Holiday"], errors="coerce").fillna(0).astype(int) if "Holiday" in df.columns else 0
+    out["Holiday_prev"] = pd.to_numeric(df["Holiday_prev"], errors="coerce").fillna(0).astype(float) if "Holiday_prev" in df.columns else 0.0
+    if "Day_of_week" in df.columns:
+        out["Day_of_week"] = pd.to_numeric(df["Day_of_week"], errors="coerce").astype('Int64')
+    return out
+
+def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: pd.DataFrame) -> tuple[pd.DataFrame | None, list[str]]:
+    log = []
+    if patient_df is None or weather_df is None or calendar_df is None:
+        log.append("❌ Error: All three datasets (Patient, Weather, Calendar) must be loaded before fusion.")
+        return None, log
+    try:
+        log.append("🚀 Starting data preparation...")
+        p = _prep_patient(patient_df); log.append("✅ Patient data prepared.")
+        w = _prep_weather(weather_df); log.append("✅ Weather data prepared.")
+        c = _prep_calendar(calendar_df); log.append("✅ Calendar data prepared.")
+        log.append("ℹ️ Verified 'Date' columns are aligned (datetime64[ns] @ 00:00).")
+        log.append("🔗 Merging Patient + Weather (inner join on Date)...")
+        merged = p.merge(w.drop(columns=['datetime'], errors='ignore'), on="Date", how="inner", suffixes=("", "_wx"))
+        log.append(f"  → Result: {merged.shape[0]} rows, {merged.shape[1]} cols")
+        if merged.empty:
+            log.append("❌ Error: Merge of Patient and Weather resulted in zero rows. Check date ranges.")
+            return None, log
+        log.append("🔗 Merging + Calendar (inner join on Date)...")
+        merged = merged.merge(c, on="Date", how="inner")
+        log.append(f"  → Final Result: {merged.shape[0]} rows, {merged.shape[1]} cols")
+        if merged.empty:
+            log.append("❌ Error: Final merge resulted in zero rows. Check date ranges.")
+            return None, log
+        if "Day_of_week" not in merged.columns:
+            merged["Day_of_week"] = merged["Date"].dt.dayofweek + 1
+            log.append("ℹ️ Derived 'Day_of_week' from Date.")
+        if "patient_count" in merged.columns:
+            merged = merged.rename(columns={"patient_count": "Target_1"})
+            log.append("ℹ️ Renamed 'patient_count' to 'Target_1'.")
+        elif "Target_1" not in merged.columns:
+            log.append("❌ Error: Neither 'patient_count' nor 'Target_1' found in merged data.")
+            return None, log
+        desired_order = [
+            "Date", "Day_of_week", "Holiday", "Moon_Phase", "Average_Temp", "Max_temp",
+            "Average_wind", "Max_wind", "Average_mslp", "Total_precipitation",
+            "Holiday_prev", "Target_1",
+        ]
+        final_cols = [col for col in desired_order if col in merged.columns]
+        missing_cols = [col for col in desired_order if col not in merged.columns]
+        if missing_cols:
+            log.append(f"⚠️ Warning: Expected columns missing from final merge: {', '.join(missing_cols)}")
+        merged = merged[final_cols].sort_values("Date").reset_index(drop=True)
+        log.append("✅ Selected, ordered, and sorted final columns.")
+        log.append("🎉 Data fusion complete!")
+        return merged, log
+    except ValueError as ve:
+        log.append(f"❌ Data Preparation Error: {ve}")
+        return None, log
+    except Exception as e:
+        log.append(f"❌ Unexpected Error during fusion: {e}")
+        import traceback
+        log.append(f"Traceback: {traceback.format_exc()}")
+        return None, log
+
