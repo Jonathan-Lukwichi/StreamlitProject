@@ -230,8 +230,13 @@ def _run_xgb_random_search(
 
     n_iter = min(n_iter, len(all_combos))
     sampled_combos = random.sample(all_combos, n_iter)
+    
+    # Create a param_grid from the sampled combos
+    param_grid_sampled = {
+        "combos": sampled_combos
+    }
 
-    return _run_xgb_grid_search(df, target_col, feature_cols, date_col, n_splits, {"combos": sampled_combos}, metric_to_optimize)
+    return _run_xgb_grid_search(df, target_col, feature_cols, date_col, n_splits, param_grid_sampled, metric_to_optimize)
 
 def _run_xgb_bayesian_opt(
     df: pd.DataFrame,
@@ -398,11 +403,9 @@ with tab2:
 
                 with st.spinner(f"Training on '{dataset_name}'..."):
                     try:
-                        # Detect date column
                         date_col_detected = _detect_date_col(df_current)
                         date_col_for_cfg = date_col_detected if date_col_detected != "__index__" else None
 
-                        # Validate target
                         if target not in df_current.columns:
                             st.error(f"Skipping '{dataset_name}': Target column '{target}' not found.")
                             continue
@@ -410,7 +413,6 @@ with tab2:
                             st.error(f"Skipping '{dataset_name}': Target column '{target}' is not numeric.")
                             continue
 
-                        # Determine feature columns
                         if feature_cols == "ALL_DYNAMIC":
                             datetime_keywords = ['date', 'time', 'datetime', 'timestamp', 'ds']
                             excluded = [target] + [c for c in df_current.columns if any(k in c.lower() for k in datetime_keywords)]
@@ -422,7 +424,6 @@ with tab2:
                             st.error(f"Skipping '{dataset_name}': No valid numeric feature columns found.")
                             continue
 
-                        # Build TrainConfig
                         cfg = TrainConfig(
                             target_col=target,
                             feature_cols=final_feature_cols,
@@ -431,13 +432,11 @@ with tab2:
                             date_col=date_col_for_cfg,
                         )
 
-                        # Prepare data for training
                         df_for_training = df_current.copy()
                         for col in final_feature_cols + [target]:
                             df_for_training[col] = pd.to_numeric(df_for_training[col], errors='coerce')
                         df_for_training = df_for_training.dropna(subset=final_feature_cols + [target])
 
-                        # Train model
                         art = train_xgb(df_for_training, cfg, params)
                         last_artifacts = art
                         last_dataset_name = dataset_name
@@ -449,18 +448,14 @@ with tab2:
                         st.error(f"Failed to train on '{dataset_name}': {e}")
                         st.code(traceback.format_exc())
 
-            # --- Results Display ---
             if 'xgboost_lab_artifacts' in st.session_state:
                 st.markdown("---")
                 st.markdown("### 📈 Results")
                 
                 art = st.session_state['xgboost_lab_artifacts']
-                cfg = st.session_state['xgboost_lab_cfg']
-                df_for_training = st.session_state['xgboost_lab_df']
                 
                 st.success(f"✅ Successfully trained XGBoost on the last dataset.")
 
-                # A) KPI Metrics
                 st.markdown("#### Key Performance Indicators")
                 
                 st.markdown("""
@@ -524,7 +519,6 @@ with tab2:
                 </style>
                 """, unsafe_allow_html=True)
 
-                # B) Forecast vs Actual Plot
                 st.markdown("#### Forecast vs. Actual")
                 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
                 
@@ -549,7 +543,6 @@ with tab2:
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                # C) Feature Importance
                 if art.importances:
                     st.markdown("#### Feature Importance")
                     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
