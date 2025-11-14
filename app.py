@@ -1,161 +1,435 @@
-# ============================================================================
-# pages/00_Welcome_minimal_linked.py — Enhanced Professional Welcome Page
-# Generic summary replacing feature cards for a broader prototype message.
-# ============================================================================
 from __future__ import annotations
-
 import streamlit as st
-import os
 
-try:
-    from app_core.state.session import init_state as _init_state
-except Exception:
-    def _init_state():
-        for k, v in {
-            "patient_loaded": False,
-            "weather_loaded": False,
-            "calendar_loaded": False,
-            "merged_data": None,
-            "_nav_intent": None,
-        }.items():
-            st.session_state.setdefault(k, v)
+from app_core.ui.theme import (
+    apply_css,
+    hero_card,
+    feature_card,
+)
 
-try:
-    from app_core.ui.theme import apply_css as _apply_css
-    from app_core.ui.theme import (
-        PRIMARY_COLOR, TEXT_COLOR, SUBTLE_TEXT,
-    )
-except Exception:
-    _apply_css = None
-    PRIMARY_COLOR = "#2563eb"
-    TEXT_COLOR = "#0f172a"
-    SUBTLE_TEXT = "#64748b"
-
+# Page Configuration
 st.set_page_config(
-    page_title="Healthcare Forecast Pro | Prototype",
+    page_title="HealthForecast AI - Enterprise Healthcare Intelligence",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-def _local_css():
-    st.markdown(
-        f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        html, body, [class*='css'] {{ font-family: 'Inter', system-ui, sans-serif; }}
-        .hero {{
-            border-radius: 20px; padding: 40px; color: #0b1220;
-            background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(99,102,241,.08), rgba(20,184,166,.12));
-            border: 1px solid rgba(37,99,235,.25);
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,.08), 0 10px 10px -5px rgba(0,0,0,.04);
-            position: relative; overflow: hidden;
-        }}
-        .hero::before {{
-            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: radial-gradient(circle at 80% 20%, rgba(99,102,241,.15), transparent 50%),
-                        radial-gradient(circle at 20% 80%, rgba(20,184,166,.15), transparent 50%);
-            pointer-events: none;
-        }}
-        .hero > * {{ position: relative; z-index: 1; }}
-        .hero-title {{ font-size: 2.5rem; font-weight: 800; margin-bottom: 12px; color: {TEXT_COLOR}; 
-                       letter-spacing: -0.03em; 
-                       background: linear-gradient(135deg, {TEXT_COLOR}, {PRIMARY_COLOR});
-                       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-                       background-clip: text; }}
-        .hero-sub {{ color: {SUBTLE_TEXT}; margin-bottom: 12px; font-size: 1.1rem; line-height: 1.5; }}
-        .hero-note {{ color: {SUBTLE_TEXT}; font-size: .95rem; line-height: 1.6; }}
-        .pill {{ display:inline-block; padding:6px 14px; border-radius:999px; font-size:.82rem; font-weight:600;
-                 color:#fff; background: linear-gradient(135deg, {PRIMARY_COLOR}, #6366f1); 
-                 border:1px solid rgba(255,255,255,.2); 
-                 margin-right:8px; margin-bottom:10px; transition: all 0.3s ease;
-                 box-shadow: 0 4px 6px -1px rgba(37,99,235,.3); }}
-        .pill:hover {{ transform: translateY(-2px); box-shadow: 0 6px 12px -2px rgba(37,99,235,.4); }}
-        .generic-card {{ border:1px solid #e5e7eb; border-radius:16px; padding:28px; 
-                         background: linear-gradient(to bottom, #fff, rgba(249,250,251,1)); 
-                         box-shadow: 0 4px 6px -1px rgba(0,0,0,.06), 0 2px 4px -1px rgba(0,0,0,.03);
-                         border: 1px solid rgba(37,99,235,.08); }}
-        .generic-title {{ font-weight:700; font-size:1.4rem; color:{TEXT_COLOR}; margin-bottom:14px; 
-                          letter-spacing: -0.02em; }}
-        .generic-text {{ color:{SUBTLE_TEXT}; font-size:1.05rem; line-height:1.8; }}
-        .stats-bar {{ display: flex; gap: 24px; margin-top: 20px; flex-wrap: wrap; }}
-        .stat-item {{ flex: 1; min-width: 140px; text-align: center; padding: 12px; 
-                      background: rgba(255,255,255,.6); border-radius: 10px; 
-                      border: 1px solid rgba(37,99,235,.15); }}
-        .stat-number {{ font-size: 1.8rem; font-weight: 800; color: {PRIMARY_COLOR}; 
-                        background: linear-gradient(135deg, {PRIMARY_COLOR}, #14b8a6);
-                        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-                        background-clip: text; }}
-        .stat-label {{ font-size: 0.85rem; color: {SUBTLE_TEXT}; font-weight: 500; text-transform: uppercase;
-                       letter-spacing: 0.5px; margin-top: 4px; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
+# Apply Premium CSS Theme
+apply_css()
+
+# ============================================================================
+# FLUORESCENT EFFECTS - Subtle Premium Visual Enhancements
+# ============================================================================
+st.markdown("""
+<style>
+/* ========================================
+   ANIMATED FLUORESCENT ORBS (REDUCED)
+   ======================================== */
+
+@keyframes float-orb {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.25;
+    }
+    50% {
+        transform: translate(30px, -30px) scale(1.05);
+        opacity: 0.35;
+    }
+}
+
+/* Floating Orbs - Subtle */
+.fluorescent-orb {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(70px);
+}
+
+.orb-1 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.25), transparent 70%);
+    top: 15%;
+    right: 20%;
+    animation: float-orb 25s ease-in-out infinite;
+}
+
+.orb-2 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.25), transparent 70%);
+    bottom: 20%;
+    left: 15%;
+    animation: float-orb 30s ease-in-out infinite;
+    animation-delay: 5s;
+}
+
+.orb-3 {
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.22), transparent 70%);
+    top: 50%;
+    right: 10%;
+    animation: float-orb 28s ease-in-out infinite;
+    animation-delay: 10s;
+}
+
+.orb-4 {
+    width: 320px;
+    height: 320px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.2), transparent 70%);
+    bottom: 30%;
+    right: 40%;
+    animation: float-orb 32s ease-in-out infinite;
+    animation-delay: 15s;
+}
+
+/* ========================================
+   SUBTLE GLOW ANIMATIONS
+   ======================================== */
+
+@keyframes subtle-text-glow {
+    0%, 100% {
+        text-shadow:
+            0 0 15px rgba(59, 130, 246, 0.3),
+            0 0 30px rgba(34, 211, 238, 0.2),
+            0 0 25px rgba(251, 191, 36, 0.15);
+    }
+    50% {
+        text-shadow:
+            0 0 20px rgba(59, 130, 246, 0.4),
+            0 0 40px rgba(34, 211, 238, 0.3),
+            0 0 35px rgba(251, 191, 36, 0.25);
+    }
+}
+
+@keyframes subtle-border-glow {
+    0%, 100% {
+        border-color: rgba(59, 130, 246, 0.3);
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.15), 0 0 10px rgba(34, 211, 238, 0.1);
+    }
+    33% {
+        border-color: rgba(34, 211, 238, 0.35);
+        box-shadow: 0 0 18px rgba(34, 211, 238, 0.2), 0 0 12px rgba(251, 191, 36, 0.1);
+    }
+    66% {
+        border-color: rgba(251, 191, 36, 0.3);
+        box-shadow: 0 0 16px rgba(251, 191, 36, 0.18), 0 0 10px rgba(34, 197, 94, 0.1);
+    }
+}
+
+@keyframes gentle-shimmer {
+    0% {
+        background-position: -1000px 0;
+    }
+    100% {
+        background-position: 1000px 0;
+    }
+}
+
+/* Apply to Hero Title - Subtle */
+.hf-hero-title {
+    animation: subtle-text-glow 4s ease-in-out infinite !important;
+}
+
+/* Apply to Pills - Subtle */
+.hf-pill {
+    animation: subtle-border-glow 3s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+}
+
+.hf-pill::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(59, 130, 246, 0.15),
+        rgba(34, 211, 238, 0.15),
+        rgba(251, 191, 36, 0.12),
+        rgba(34, 197, 94, 0.12),
+        transparent
+    );
+    animation: gentle-shimmer 5s infinite;
+}
+
+/* Feature Cards - Subtle Hover */
+.hf-feature-card:hover {
+    filter: brightness(1.1);
+}
+
+.hf-feature-card:hover .hf-feature-icon {
+    transform: scale(1.05);
+}
+
+/* ========================================
+   SPARKLES (REDUCED)
+   ======================================== */
+
+@keyframes sparkle {
+    0%, 100% {
+        opacity: 0;
+        transform: scale(0);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+}
+
+.sparkle {
+    position: fixed;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 2;
+    animation: sparkle 3s ease-in-out infinite;
+}
+
+.sparkle-1 {
+    top: 25%;
+    left: 35%;
+    animation-delay: 0s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+.sparkle-2 {
+    top: 65%;
+    left: 70%;
+    animation-delay: 1s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(251, 191, 36, 0.4));
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+}
+.sparkle-3 {
+    top: 45%;
+    left: 15%;
+    animation-delay: 2s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 197, 94, 0.3));
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+.sparkle-4 {
+    top: 35%;
+    left: 80%;
+    animation-delay: 1.5s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(168, 85, 247, 0.4));
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
+}
+.sparkle-5 {
+    top: 75%;
+    left: 45%;
+    animation-delay: 2.5s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 211, 238, 0.4));
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+
+/* ========================================
+   RESPONSIVE ADJUSTMENTS
+   ======================================== */
+
+@media (max-width: 768px) {
+    .fluorescent-orb {
+        width: 200px !important;
+        height: 200px !important;
+        filter: blur(50px);
+    }
+
+    .sparkle {
+        display: none;
+    }
+}
+</style>
+
+<!-- Fluorescent Floating Orbs (Reduced) -->
+<div class="fluorescent-orb orb-1"></div>
+<div class="fluorescent-orb orb-2"></div>
+<div class="fluorescent-orb orb-3"></div>
+<div class="fluorescent-orb orb-4"></div>
+
+<!-- Sparkle Particles (Reduced) -->
+<div class="sparkle sparkle-1"></div>
+<div class="sparkle sparkle-2"></div>
+<div class="sparkle sparkle-3"></div>
+<div class="sparkle sparkle-4"></div>
+<div class="sparkle sparkle-5"></div>
+
+""", unsafe_allow_html=True)
+
+# ============================================================================
+# HERO SECTION - Premium Enterprise Header
+# ============================================================================
+hero_html = hero_card(
+    title="Enterprise Healthcare Intelligence Platform",
+    subtitle="Transform hospital operations with AI-powered forecasting. Predict patient arrivals, optimize resources, and deliver superior care through advanced predictive analytics.",
+    pills=[
+        "🎯 Production-Ready AI",
+        "⚡ Real-Time Forecasting",
+        "🔬 Deep Learning Models",
+        "📊 Multi-Source Intelligence",
+        "🏥 Healthcare-Optimized",
+        "🚀 Enterprise Scale",
+    ],
+)
+st.markdown(hero_html, unsafe_allow_html=True)
+
+# ============================================================================
+# FEATURE GRID - Showcase Core Capabilities
+# ============================================================================
+st.markdown("<div class='hf-feature-grid'>", unsafe_allow_html=True)
+
+# Feature columns
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    card1 = feature_card(
+        icon="🤖",
+        title="Advanced AI Models",
+        description="State-of-the-art forecasting architecture combining statistical rigor with deep learning innovation.",
+        features=[
+            "LSTM Neural Networks for complex temporal patterns",
+            "XGBoost gradient boosting with feature importance",
+            "SARIMAX statistical modeling with exogenous variables",
+            "Hybrid ensemble methods for superior accuracy",
+            "Multi-horizon forecasting (1-7 days ahead)",
+            "Automated hyperparameter optimization"
+        ]
     )
+    st.markdown(card1, unsafe_allow_html=True)
 
-def main():
-    if _apply_css:
-        try:
-            _apply_css()
-        except Exception:
-            pass
-    _local_css()
-    _init_state()
+with col2:
+    card2 = feature_card(
+        icon="📡",
+        title="Intelligent Data Fusion",
+        description="Seamlessly integrate multi-source data streams for comprehensive operational intelligence.",
+        features=[
+            "Patient arrival data with automated datetime parsing",
+            "Weather impact analysis (temperature, precipitation, wind)",
+            "Calendar integration (holidays, seasonality, events)",
+            "Smart feature engineering with lag detection",
+            "Automated missing value imputation",
+            "Real-time data validation and quality checks"
+        ]
+    )
+    st.markdown(card2, unsafe_allow_html=True)
 
-    # HERO
-    st.markdown(
-        f"""
-        <div class='hero'>
-          <div>
-            <span class='pill'>🤖 AI‑Driven Forecasting</span>
-            <span class='pill'>📊 Data Integration</span>
-            <span class='pill'>⚡ Real-Time Analytics</span>
-          </div>
-          <h1 class='hero-title'>Healthcare Forecast Pro</h1>
-          <p class='hero-sub'>Next-generation platform for intelligent healthcare analytics and predictive insights</p>
-          <p class='hero-note'>Navigate through the <strong>sidebar modules</strong> to upload and process data, merge multiple sources, and generate patient‑arrival forecasts powered by advanced machine learning models.</p>
-          
-          <div class='stats-bar'>
-            <div class='stat-item'>
-              <div class='stat-number'>∞</div>
-              <div class='stat-label'>Data Points</div>
-            </div>
-            <div class='stat-item'>
-              <div class='stat-number'>AI</div>
-              <div class='stat-label'>Powered</div>
-            </div>
-            <div class='stat-item'>
-              <div class='stat-number'>24/7</div>
-              <div class='stat-label'>Monitoring</div>
-            </div>
-            <div class='stat-item'>
-              <div class='stat-number'>∞</div>
-              <div class='stat-label'>Scalability</div>
-            </div>
-          </div>
+with col3:
+    card3 = feature_card(
+        icon="⚙️",
+        title="Operational Excellence",
+        description="Deploy enterprise-grade forecasting that integrates seamlessly with hospital workflows.",
+        features=[
+            "Staff scheduling optimization based on demand",
+            "Inventory management with predictive restocking",
+            "Decision command center with AI recommendations",
+            "Explainable AI with SHAP feature importance",
+            "Model performance monitoring and diagnostics",
+            "Export-ready predictions with confidence intervals"
+        ]
+    )
+    st.markdown(card3, unsafe_allow_html=True)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ============================================================================
+# SECONDARY FEATURE CARDS - Additional Capabilities
+# ============================================================================
+st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+st.markdown("<div class='hf-feature-grid'>", unsafe_allow_html=True)
+
+col4, col5 = st.columns(2)
+
+with col4:
+    card4 = feature_card(
+        icon="🔍",
+        title="Comprehensive Analytics Suite",
+        description="Deep exploratory analysis and visualization tools for data-driven insights.",
+        features=[
+            "Automated EDA with statistical summaries",
+            "Time series decomposition and stationarity tests",
+            "ACF/PACF analysis for pattern identification",
+            "Interactive Plotly visualizations",
+            "Day-of-week and seasonal pattern detection",
+            "Distribution analysis and outlier detection"
+        ]
+    )
+    st.markdown(card4, unsafe_allow_html=True)
+
+with col5:
+    card5 = feature_card(
+        icon="🎓",
+        title="Research-Grade Framework",
+        description="Built on proven scientific methods with full reproducibility and transparency.",
+        features=[
+            "Time-series aware cross-validation",
+            "Expanding and rolling window evaluation",
+            "Comprehensive metrics (MAE, RMSE, MAPE, R²)",
+            "Residual diagnostics and model validation",
+            "Bayesian optimization with Optuna",
+            "Artifact versioning and experiment tracking"
+        ]
+    )
+    st.markdown(card5, unsafe_allow_html=True)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ============================================================================
+# VALUE PROPOSITION SECTION
+# ============================================================================
+st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
+
+st.markdown("""
+<div class='hf-feature-card' style='text-align: center;'>
+    <h2 class='hf-feature-title' style='font-size: 2rem; margin-bottom: 1.5rem;'>
+        Built for Healthcare Leaders
+    </h2>
+    <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 900px; margin: 0 auto 2rem auto;'>
+        HealthForecast AI empowers hospital executives, operations managers, and clinical teams
+        to make data-driven decisions with confidence. Our platform combines cutting-edge AI
+        with healthcare domain expertise to deliver actionable insights that improve patient
+        outcomes and operational efficiency.
+    </p>
+    <div style='display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem;'>
+        <div>
+            <div style='font-size: 2.5rem; font-weight: 800; color: #fbbf24; text-shadow: 0 0 20px rgba(251, 191, 36, 0.4);'>8+</div>
+            <div style='color: #94a3b8; margin-top: 0.5rem;'>Forecasting Models</div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.write("")
-
-    # GENERIC OVERVIEW SECTION
-    st.markdown(
-        f"""
-        <div class='generic-card'>
-            <div class='generic-title'>🚀 Empowering Healthcare Through Intelligence</div>
-            <div class='generic-text'>
-                This platform harnesses the power of artificial intelligence and data science to transform healthcare operations.
-                By seamlessly integrating patient records, weather patterns, and calendar events, our advanced machine learning 
-                algorithms predict patient arrival patterns with unprecedented accuracy. Healthcare professionals gain the insights 
-                needed to optimize resource allocation, reduce wait times, and deliver exceptional patient care through 
-                intelligent, data-driven decision-making.
-            </div>
+        <div>
+            <div style='font-size: 2.5rem; font-weight: 800; color: #22d3ee; text-shadow: 0 0 20px rgba(34, 211, 238, 0.4);'>3</div>
+            <div style='color: #94a3b8; margin-top: 0.5rem;'>Data Sources</div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        <div>
+            <div style='font-size: 2.5rem; font-weight: 800; color: #a855f7; text-shadow: 0 0 20px rgba(168, 85, 247, 0.4);'>1-7</div>
+            <div style='color: #94a3b8; margin-top: 0.5rem;'>Day Horizons</div>
+        </div>
+        <div>
+            <div style='font-size: 2.5rem; font-weight: 800; color: #22c55e; text-shadow: 0 0 20px rgba(34, 197, 94, 0.4);'>100%</div>
+            <div style='color: #94a3b8; margin-top: 0.5rem;'>Explainable AI</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    main()
+# ============================================================================
+# FOOTER
+# ============================================================================
+st.markdown("<div style='margin-top: 4rem;'></div>", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style='text-align: center; color: #64748b; padding: 2rem 0; border-top: 1px solid rgba(255,255,255,0.06);'>
+        <p style='margin: 0; font-size: 0.875rem;'>
+            <strong style='color: #d1d5db;'>HealthForecast AI</strong> · Enterprise Healthcare Intelligence Platform
+        </p>
+        <p style='margin: 0.5rem 0 0 0; font-size: 0.75rem;'>
+            Powered by Advanced Machine Learning · Built for Healthcare Excellence
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)

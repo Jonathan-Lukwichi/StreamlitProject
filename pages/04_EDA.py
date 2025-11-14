@@ -1,6 +1,6 @@
 # ============================================================================
-# pages/04_EDA_enhanced.py — Exploratory Data Analysis (Template-Matched)
-# Consistent hero + section cards + typography with Dashboard/Data Hub/Studio
+# pages/04_EDA.py — Exploratory Data Analysis (Premium Design)
+# Advanced analytics with premium visual design
 # ============================================================================
 
 from __future__ import annotations
@@ -19,23 +19,12 @@ from statsmodels.tsa.stattools import acf as sm_acf, pacf as sm_pacf, adfuller
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 # App core
-try:
-    from app_core.ui.theme import (
-        apply_css,
-        PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-        DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG_LIGHT,
-    )
-except Exception:
-    # Safe fallbacks for prototyping
-    def apply_css(): pass
-    PRIMARY_COLOR   = "#2563eb"
-    SECONDARY_COLOR = "#8b5cf6"
-    SUCCESS_COLOR   = "#10b981"
-    WARNING_COLOR   = "#f59e0b"
-    DANGER_COLOR    = "#ef4444"
-    TEXT_COLOR      = "#0f172a"
-    SUBTLE_TEXT     = "#64748b"
-    CARD_BG_LIGHT   = "#ffffff"
+from app_core.ui.theme import (
+    apply_css,
+    PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BODY_TEXT,
+)
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
 try:
     from app_core.state.session import init_state
@@ -49,34 +38,7 @@ try:
 except Exception:
     def add_grid(fig): return fig
 
-# -------------------------- Local CSS (template) -------------------------------
-def _eda_css():
-    st.markdown(
-        f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        html, body, [class*='css'] {{ font-family: 'Inter', system-ui, sans-serif; }}
 
-        .hero {{
-            border-radius: 20px; padding: 28px; color: #0b1220;
-            background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(99,102,241,.08), rgba(20,184,166,.12));
-            border: 1px solid rgba(37,99,235,.25);
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,.08), 0 10px 10px -5px rgba(0,0,0,.04);
-            position: relative; overflow: hidden; margin-bottom: 18px;
-        }}
-        .hero-title {{
-            font-size: 1.9rem; font-weight: 800; margin: 0 0 6px; letter-spacing: -0.02em;
-            background: linear-gradient(135deg, {TEXT_COLOR}, {PRIMARY_COLOR});
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }}
-        .hero-sub {{ color: {SUBTLE_TEXT}; font-size: 1.0rem; margin: 0; }}
-
-        .section-card {{ border:1px solid #e5e7eb; border-radius:16px; padding:14px; background:#fff; }}
-        .section-title {{ font-weight:800; font-size:1.05rem; margin-bottom:8px; color:{TEXT_COLOR}; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 # ------------------------- Robust Time Index Helpers ---------------------------
 def _coerce_datetime_like(series: pd.Series) -> pd.Series:
@@ -235,7 +197,7 @@ def _render_donut_charts(dff):
             except Exception: pass
         fig = go.Figure(data=[go.Pie(
             labels=labels, values=values, hole=0.6, sort=False,
-            marker=dict(colors=colors, line=dict(color=CARD_BG_LIGHT, width=3)),
+            marker=dict(colors=colors, line=dict(color=CARD_BG, width=3)),
             textinfo="percent", textposition="outside",
             textfont=dict(size=13, color=TEXT_COLOR),
             hovertemplate="<b>%{label}</b><br>Avg Arrivals: %{value:.1f}<extra></extra>",
@@ -245,7 +207,7 @@ def _render_donut_charts(dff):
             margin=dict(l=20, r=20, t=50, b=20),
             height=350, showlegend=True,
             legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.05, font=dict(size=11)),
-            paper_bgcolor=CARD_BG_LIGHT, plot_bgcolor=CARD_BG_LIGHT,
+            paper_bgcolor=CARD_BG, plot_bgcolor=CARD_BG,
         )
         return fig
 
@@ -365,14 +327,91 @@ def _render_time_series_diagnostics(df):
         except Exception as e:
             st.error(f"ADF test failed: {e}")
 
+# ---- Page Configuration ----
+st.set_page_config(
+    page_title="EDA - HealthForecast AI",
+    page_icon="📊",
+    layout="wide",
+)
+
 # ---------------------------------- Page ---------------------------------------
 def page_eda():
-    # HERO
+    # Apply premium theme and sidebar
+    apply_css()
+    inject_sidebar_style()
+    render_sidebar_brand()
+
+    # Apply fluorescent effects
+    st.markdown("""
+    <style>
+    /* Fluorescent Effects for EDA */
+    @keyframes float-orb {
+        0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.25; }
+        50% { transform: translate(30px, -30px) scale(1.05); opacity: 0.35; }
+    }
+    .fluorescent-orb {
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(70px);
+    }
+    .orb-1 {
+        width: 350px;
+        height: 350px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
+        top: 15%;
+        right: 20%;
+        animation: float-orb 25s ease-in-out infinite;
+    }
+    .orb-2 {
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+        bottom: 20%;
+        left: 15%;
+        animation: float-orb 30s ease-in-out infinite;
+        animation-delay: 5s;
+    }
+    @keyframes sparkle {
+        0%, 100% { opacity: 0; transform: scale(0); }
+        50% { opacity: 0.6; transform: scale(1); }
+    }
+    .sparkle {
+        position: fixed;
+        width: 3px;
+        height: 3px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 2;
+        animation: sparkle 3s ease-in-out infinite;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+    }
+    .sparkle-1 { top: 25%; left: 35%; animation-delay: 0s; }
+    .sparkle-2 { top: 65%; left: 70%; animation-delay: 1s; }
+    .sparkle-3 { top: 45%; left: 15%; animation-delay: 2s; }
+    @media (max-width: 768px) {
+        .fluorescent-orb { width: 200px !important; height: 200px !important; filter: blur(50px); }
+        .sparkle { display: none; }
+    }
+    </style>
+    <div class="fluorescent-orb orb-1"></div>
+    <div class="fluorescent-orb orb-2"></div>
+    <div class="sparkle sparkle-1"></div>
+    <div class="sparkle sparkle-2"></div>
+    <div class="sparkle sparkle-3"></div>
+    """, unsafe_allow_html=True)
+
+    # Premium Hero Header
     st.markdown(
         f"""
-        <div class='hero'>
-          <div class='hero-title'>📊 Exploratory Data Analysis</div>
-          <p class='hero-sub'>Work with the <strong>preprocessed dataset</strong> to understand structure, quality, and time-series behavior.</p>
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
+          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>📊</div>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Exploratory Data Analysis</h1>
+          <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 auto;'>
+            Uncover patterns, trends, and anomalies in your patient arrival data with advanced statistical analysis
+          </p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -421,44 +460,143 @@ def page_eda():
         start = pd.to_datetime(date_range[0]); end = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
         df = df.loc[(df.index >= start) & (df.index <= end)]
 
-    # Overview metrics (section card)
-    st.markdown("<div class='section-title'>📈 Dataset Overview</div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    # Overview metrics - Premium gradient cards
+    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.metric("Rows", f"{len(df):,}")
-    with c2: st.metric("Columns", f"{df.shape[1]}")
-    with c3:
-        sd = df.index.min(); sd_str = f"{(sd.date() if hasattr(sd,'date') else sd)}" if sd is not pd.NaT else "N/A"
-        st.metric("Start Date", sd_str)
-    with c4:
-        ed = df.index.max(); ed_str = f"{(ed.date() if hasattr(ed,'date') else ed)}" if ed is not pd.NaT else "N/A"
-        st.metric("End Date", ed_str)
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    # Data Quality (section card)
-    st.markdown("<div class='section-title'>🔍 Data Quality</div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    with c1:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Total Records</div>
+              <div class='hf-feature-title' style='font-size: 2rem; background: linear-gradient(135deg, {PRIMARY_COLOR}, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0.75rem 0;'>
+                {len(df):,}
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Data points analyzed</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Features</div>
+              <div class='hf-feature-title' style='font-size: 2rem; background: linear-gradient(135deg, {SECONDARY_COLOR}, {SUCCESS_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0.75rem 0;'>
+                {df.shape[1]}
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Available columns</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c3:
+        sd = df.index.min()
+        sd_str = f"{(sd.date() if hasattr(sd,'date') else sd)}" if sd is not pd.NaT else "N/A"
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Start Date</div>
+              <div style='font-size: 1.25rem; font-weight: 700; color: {TEXT_COLOR}; margin: 0.75rem 0;'>
+                {sd_str}
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>First data point</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c4:
+        ed = df.index.max()
+        ed_str = f"{(ed.date() if hasattr(ed,'date') else ed)}" if ed is not pd.NaT else "N/A"
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>End Date</div>
+              <div style='font-size: 1.25rem; font-weight: 700; color: {TEXT_COLOR}; margin: 0.75rem 0;'>
+                {ed_str}
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Latest data point</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Data Quality - Enhanced section
+    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class='hf-feature-card' style='padding: 1.5rem;'>
+          <div style='text-align: center; margin-bottom: 1rem;'>
+            <span style='font-size: 1.75rem;'>🔍</span>
+            <h2 class='hf-feature-title' style='margin: 0.5rem 0; font-size: 1.5rem;'>Data Quality Assessment</h2>
+            <p class='hf-feature-description'>Comprehensive analysis of data completeness and integrity</p>
+          </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     miss_tbl = _quick_missing_table(df, topn=12)
     if len(miss_tbl) == 0:
-        st.success("🎉 No missing values detected in the dataset")
+        st.markdown(
+            f"""
+            <div style='text-align: center; padding: 1.5rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05)); border-radius: 16px; border: 1px solid rgba(34, 197, 94, 0.2);'>
+              <div style='font-size: 2rem; margin-bottom: 0.75rem;'>✅</div>
+              <div style='font-size: 1.125rem; font-weight: 700; color: {SUCCESS_COLOR}; margin-bottom: 0.5rem;'>Perfect Data Quality</div>
+              <div style='color: {BODY_TEXT}; font-size: 0.875rem;'>No missing values detected across all {df.shape[1]} features</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
-        st.warning(f"⚠️ Found {len(miss_tbl)} columns with missing values")
+        st.markdown(
+            f"""
+            <div style='text-align: center; padding: 1.25rem; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05)); border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.2); margin-bottom: 1rem;'>
+              <div style='font-size: 2rem; margin-bottom: 0.5rem;'>⚠️</div>
+              <div style='font-size: 1rem; font-weight: 700; color: {WARNING_COLOR}; margin-bottom: 0.5rem;'>Data Quality Alert</div>
+              <div style='color: {BODY_TEXT}; font-size: 0.875rem;'>Found missing values in {len(miss_tbl)} columns - review details below</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         fig_miss = px.bar(miss_tbl, x='pct', y='column', orientation='h',
-                          title='Missing Values by Column',
+                          title='Missing Values by Column (%)',
                           labels={'pct': 'Missing %', 'column': 'Column'},
                           color_discrete_sequence=[WARNING_COLOR])
+        fig_miss.update_layout(
+            height=max(300, len(miss_tbl) * 40),
+            margin=dict(l=20, r=20, t=50, b=20),
+        )
         st.plotly_chart(add_grid(fig_miss), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Tabs
     tab_over, tab_hist, tab_ts, tab_adv = st.tabs(["📋 Overview","📊 Distributions","📈 Time Series","🔬 Advanced Analytics"])
 
-    # OVERVIEW
+    # OVERVIEW TAB
     with tab_over:
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
+              <span style='font-size: 2rem;'>📋</span>
+              <h2 class='hf-feature-title' style='margin: 0.5rem 0; font-size: 1.5rem;'>Dataset Overview</h2>
+              <p class='hf-feature-description'>Explore your data structure, schema, and key statistics</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         colA, colB = st.columns([2, 1])
         with colA:
-            st.markdown("#### Dataset Preview")
+            st.markdown(
+                """
+                <div class='hf-feature-card'>
+                  <h3 style='margin-bottom: 1rem; font-size: 1.125rem; font-weight: 700;'>📊 Data Preview</h3>
+                """,
+                unsafe_allow_html=True,
+            )
             all_columns = df.columns.tolist()
             default_cols = [c for c in ['Target_1','day_of_week','Month_name'] if c in all_columns]
             selected_cols = st.multiselect("Select columns to display:", options=all_columns, default=default_cols)
@@ -466,8 +604,16 @@ def page_eda():
             display_df = df[selected_cols] if selected_cols else df
             st.dataframe(display_df.head(row_count), use_container_width=True, height=400)
             st.download_button("📥 Download Full Dataset as CSV", df.to_csv(), "eda_dataset.csv", "text/csv")
+            st.markdown("</div>", unsafe_allow_html=True)
+
         with colB:
-            st.markdown("#### 🔑 Key Statistics")
+            st.markdown(
+                """
+                <div class='hf-feature-card'>
+                  <h3 style='margin-bottom: 1.5rem; font-size: 1.125rem; font-weight: 700; text-align: center;'>🔑 Key Statistics</h3>
+                """,
+                unsafe_allow_html=True,
+            )
             s = df["Target_1"].dropna() if "Target_1" in df.columns else pd.Series(dtype=float)
             if not s.empty:
                 stats = {"Mean": f"{s.mean():.1f}","Median": f"{s.median():.1f}","Std Dev": f"{s.std():.1f}",
@@ -475,19 +621,36 @@ def page_eda():
                 for k, v in stats.items(): st.metric(k, v)
             else:
                 st.warning("No valid Target_1 data")
-        with st.expander("📋 View Full Schema Details"):
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+        with st.expander("📋 View Full Schema Details", expanded=False):
+            st.markdown(
+                """
+                <div class='hf-feature-card'>
+                """,
+                unsafe_allow_html=True,
+            )
             st.markdown(f"**Dataset Shape:** {df.shape}")
             type_counts = df.dtypes.value_counts()
             st.markdown("**Column Types:**")
             for dtype, count in type_counts.items(): st.write(f"- {dtype}: {count} columns")
             st.markdown("**Complete Column List:**")
             for col in df.columns: st.write(f"- `{col}` ({df[col].dtype})")
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    # DISTRIBUTIONS
+    # DISTRIBUTIONS TAB
     with tab_hist:
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.markdown("### 📊 Distribution Analysis")
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
+              <span style='font-size: 2rem;'>📊</span>
+              <h2 class='hf-feature-title' style='margin: 0.5rem 0; font-size: 1.5rem;'>Distribution Analysis</h2>
+              <p class='hf-feature-description'>Analyze patterns across time, categories, and environmental factors</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         # Optional day-of-week quick filter
         if "day_of_week" in df.columns:
@@ -511,6 +674,13 @@ def page_eda():
         if dff.empty:
             st.warning("No data available for distribution analysis")
         else:
+            st.markdown(
+                """
+                <div class='hf-feature-card'>
+                  <h3 style='margin-bottom: 1rem; font-size: 1.125rem; font-weight: 700; text-align: center;'>📊 Arrival Distribution Patterns</h3>
+                """,
+                unsafe_allow_html=True,
+            )
             c1, c2 = st.columns(2)
             with c1:
                 fig_hist = px.histogram(dff, x="Target_1", nbins=30,
@@ -522,11 +692,32 @@ def page_eda():
                 fig_box = px.box(dff, y="Target_1", title="Arrivals Distribution Overview",
                                  color_discrete_sequence=[SECONDARY_COLOR])
                 st.plotly_chart(add_grid(fig_box), use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown("#### 📈 Categorical Breakdowns")
+            st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style='text-align: center; margin-bottom: 1.5rem;'>
+                  <span style='font-size: 2rem;'>📈</span>
+                  <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Categorical Breakdowns</h3>
+                  <p class='hf-feature-description'>Patient arrival patterns by day and month</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             _render_donut_charts(dff)
 
-            st.markdown("#### 🌡️ Weather-Based Arrival Distributions")
+            st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style='text-align: center; margin-bottom: 1.5rem;'>
+                  <span style='font-size: 2rem;'>🌡️</span>
+                  <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Weather Impact Analysis</h3>
+                  <p class='hf-feature-description'>How temperature, wind, and precipitation affect patient arrivals</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             # Temp
             if "Average_Temp" in dff.columns:
                 bins = st.slider("Temperature bins", 5, 50, 15, key="temp_bins")
@@ -566,17 +757,31 @@ def page_eda():
                 st.plotly_chart(add_grid(fig_precip), use_container_width=True)
             else:
                 st.info("Total_precipitation not found.")
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    # TIME SERIES
+    # TIME SERIES TAB
     with tab_ts:
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.markdown("### 📈 Time Series Analysis")
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
+              <span style='font-size: 2rem;'>📈</span>
+              <h2 class='hf-feature-title' style='margin: 0.5rem 0; font-size: 1.5rem;'>Time Series Analysis</h2>
+              <p class='hf-feature-description'>Explore trends, seasonality, and temporal patterns in patient arrivals</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         if df.empty:
             st.warning("No data available for time series analysis")
         else:
             c1, c2 = st.columns([3, 1])
             with c1:
+                st.markdown(
+                    """
+                    <div class='hf-feature-card'>
+                      <h3 style='margin-bottom: 1rem; font-size: 1.125rem; font-weight: 700;'>📈 Temporal Trends</h3>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 plot_df = df.copy()
                 temp_x = "__dt__"
                 while temp_x in plot_df.columns: temp_x = "_" + temp_x
@@ -587,8 +792,16 @@ def page_eda():
                 fig_ts.update_traces(line=dict(color=PRIMARY_COLOR, width=2),
                                      hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Arrivals: %{y}<extra></extra>")
                 st.plotly_chart(add_grid(fig_ts), use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
             with c2:
-                st.markdown("#### 📊 Performance Metrics")
+                st.markdown(
+                    """
+                    <div class='hf-feature-card'>
+                      <h3 style='margin-bottom: 1.5rem; font-size: 1.125rem; font-weight: 700; text-align: center;'>📊 Performance Metrics</h3>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 s = df["Target_1"].dropna()
                 if not s.empty:
                     current_avg = s.mean()
@@ -601,21 +814,69 @@ def page_eda():
                     for k,v in extras: st.metric(k, v)
                 else:
                     st.warning("No valid Target_1 data")
-            st.markdown("#### 🔬 Time Series Decomposition")
-            _render_decomposition(df)
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
-    # ADVANCED
+            st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style='text-align: center; margin-bottom: 1.5rem;'>
+                  <span style='font-size: 2rem;'>🔬</span>
+                  <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Time Series Decomposition</h3>
+                  <p class='hf-feature-description'>Break down your data into trend, seasonal, and residual components</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            _render_decomposition(df)
+
+    # ADVANCED ANALYTICS TAB
     with tab_adv:
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.markdown("### 🔍 Advanced Analytics")
-        st.markdown("#### 📊 Correlation Matrix")
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
+              <span style='font-size: 2rem;'>🔬</span>
+              <h2 class='hf-feature-title' style='margin: 0.5rem 0; font-size: 1.5rem;'>Advanced Analytics</h2>
+              <p class='hf-feature-description'>Deep statistical analysis including correlations, diagnostics, and frequency domain analysis</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin-bottom: 1rem;'>
+              <span style='font-size: 1.75rem;'>📊</span>
+              <h3 class='hf-feature-title' style='font-size: 1.25rem; margin: 0.5rem 0;'>Correlation Matrix</h3>
+              <p class='hf-feature-description'>Identify relationships between features and target variable</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         _render_correlation_analysis(df)
 
-        st.markdown("#### 📉 Time Series Diagnostics")
+        st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin-bottom: 1.5rem;'>
+              <span style='font-size: 2rem;'>📉</span>
+              <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Time Series Diagnostics</h3>
+              <p class='hf-feature-description'>ACF/PACF analysis and stationarity testing for model selection</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         _render_time_series_diagnostics(df)
 
-        st.markdown("#### 🧠 Dominant Cycles (FFT)")
+        st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin-bottom: 1.5rem;'>
+              <span style='font-size: 2rem;'>🧠</span>
+              <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Dominant Cycles (FFT)</h3>
+              <p class='hf-feature-description'>Frequency domain analysis to detect periodic patterns and seasonality</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         ts = df["Target_1"].asfreq("D").interpolate(method="time", limit_direction="both")
         if ts.dropna().empty or len(ts) < 8:
             st.info("Need at least ~8 daily points to extract dominant cycles.")
@@ -682,14 +943,9 @@ def page_eda():
                     st.write("\n".join(tips))
             except Exception as e:
                 st.error(f"FFT analysis failed: {e}")
-        st.markdown("</div>", unsafe_allow_html=True)
 
-# -------------------------------- Entrypoint -----------------------------------
-def main():
-    apply_css()
-    _eda_css()
-    init_state()
-    page_eda()
 
-if __name__ == "__main__":
-    main()
+init_state()
+page_eda()
+
+

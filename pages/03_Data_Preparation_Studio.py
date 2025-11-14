@@ -1,10 +1,6 @@
 # =============================================================================
-# pages/03_Data_Preparation_Studio_enhanced.py — Data Preparation Studio (Pro)
-# Matches the clean template used across your app:
-#  • Hero strip
-#  • Compact status badges / section cards
-#  • Sidebar stepper preserved
-#  • Defensive fallbacks if app_core modules are absent
+# pages/03_Data_Preparation_Studio.py — Data Preparation Studio (Premium)
+# Advanced data fusion and feature engineering with premium design
 # =============================================================================
 from __future__ import annotations
 
@@ -15,33 +11,12 @@ import pandas as pd
 import streamlit as st
 from typing import Optional
 
-# ---------- THEME / FRAMEWORK FALLBACKS ---------------------------------------
-try:
-    from app_core.ui.theme import apply_css
-    from app_core.ui.theme import (
-        PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-        DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
-    )
-except Exception:
-    PRIMARY_COLOR   = "#2563eb"
-    SECONDARY_COLOR = "#8b5cf6"
-    SUCCESS_COLOR   = "#10b981"
-    WARNING_COLOR   = "#f59e0b"
-    DANGER_COLOR    = "#ef4444"
-    TEXT_COLOR      = "#0f172a"
-    SUBTLE_TEXT     = "#64748b"
-
-    def apply_css():
-        # Minimal base so visuals aren’t broken if theme module is missing
-        st.markdown(
-            """
-            <style>
-            .muted {color:#6b7280}
-            .section-card {border:1px solid #e5e7eb;border-radius:16px;padding:14px;background:#fff;}
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+from app_core.ui.theme import apply_css
+from app_core.ui.theme import (
+    PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BODY_TEXT,
+)
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
 try:
     from app_core.state.session import init_state
@@ -109,48 +84,12 @@ except Exception:
 
 # ---------- PAGE CONFIG --------------------------------------------------------
 st.set_page_config(
-    page_title="Data Preparation Studio",
+    page_title="Data Preparation Studio - HealthForecast AI",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
-# ---------- LOCAL CSS to match template ---------------------------------------
-def _prep_css():
-    st.markdown(
-        f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        html, body, [class*='css'] {{ font-family: 'Inter', system-ui, sans-serif; }}
 
-        .hero {{
-            border-radius: 20px; padding: 28px; color: #0b1220;
-            background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(99,102,241,.08), rgba(20,184,166,.12));
-            border: 1px solid rgba(37,99,235,.25);
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,.08), 0 10px 10px -5px rgba(0,0,0,.04);
-            position: relative; overflow: hidden; margin-bottom: 18px;
-        }}
-        .hero-title {{
-            font-size: 1.9rem; font-weight: 800; margin: 0 0 6px; letter-spacing: -0.02em;
-            background: linear-gradient(135deg, {TEXT_COLOR}, {PRIMARY_COLOR});
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }}
-        .hero-sub {{ color: {SUBTLE_TEXT}; font-size: 1.0rem; margin: 0; }}
-
-        .section-card {{ border:1px solid #e5e7eb; border-radius:16px; padding:14px; background:#fff; }}
-        .section-title {{ font-weight:800; font-size:1.05rem; margin-bottom:8px; color:{TEXT_COLOR}; }}
-
-        .badge {{
-            border:1px solid #e9ecef; border-radius:10px; padding:.55rem .8rem;
-            margin-bottom:.4rem; display:flex; align-items:center; gap:.5rem;
-        }}
-        .ok {{ color:{SUCCESS_COLOR}; font-weight:700; }}
-        .warn {{ color:{WARNING_COLOR}; font-weight:700; }}
-        .fail {{ color:{DANGER_COLOR}; font-weight:700; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 # ---------- UTILITIES (time/columns/order) -------------------------------------
 def _find_time_like_col(df: pd.DataFrame) -> str | None:
@@ -273,6 +212,12 @@ def _preprocess_after_fusion_cached(merged_df: pd.DataFrame, n_lags: int, strict
         merged_df, n_lags=n_lags, date_col=None, ed_col=None, strict_drop_na_edges=strict_drop
     )
     processed_df = _ensure_datetime_and_date(processed_df)
+    
+    # Drop columns with _x and _y suffixes created by the merge
+    cols_to_drop = [c for c in processed_df.columns if c.endswith('_x') or c.endswith('_y')]
+    if cols_to_drop:
+        processed_df = processed_df.drop(columns=cols_to_drop)
+        
     processed_df = _harmonize_day_of_week_and_ed(processed_df)
     processed_df = order_columns_pipeline(processed_df)
     return processed_df
@@ -322,10 +267,15 @@ def _render_preprocessed_info(proc: pd.DataFrame):
 
 # ---------- UI HELPERS ----------------------------------------------------------
 def _dataset_badge(ok: bool, label: str):
-    cls = "ok" if ok else "fail"
-    icon = "✅" if ok else "❌"
+    rgb = "16,185,129" if ok else "245,158,11"
+    color = SUCCESS_COLOR if ok else WARNING_COLOR
+    icon = "✅" if ok else "⏳"
     st.markdown(
-        f"<div class='badge'><span>{icon}</span><span class='{cls}'>{label}</span></div>",
+        f"""
+        <span class='hf-pill' style='background:rgba({rgb},.12);color:{color};border:1px solid rgba({rgb},.25);'>
+            {icon} {label}
+        </span>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -337,33 +287,60 @@ def _merge_plan_preview(patient_df, weather_df, calendar_df):
     wk = _detect_key(weather_df)
     ck = _detect_key(calendar_df)
 
-    st.markdown("<div class='section-title'>Merge Keys Preview</div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.write(f"- Patient: `{pk or '—'}`")
-    st.write(f"- Weather: `{wk or '—'}`")
-    st.write(f"- Calendar: `{ck or '—'}`")
-    st.caption("Keys are auto-normalized to `datetime` and `Date` during processing.")
+    st.markdown("<div class='hf-feature-card' style='padding: 1.5rem;'>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style='margin-bottom: 1rem;'>
+          <h3 style='font-size: 1.125rem; font-weight: 700; margin-bottom: 0.75rem;'>🔑 Detected Time Keys</h3>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"**Patient Dataset**")
+        st.code(pk or "—", language=None)
+    with col2:
+        st.markdown(f"**Weather Dataset**")
+        st.code(wk or "—", language=None)
+    with col3:
+        st.markdown(f"**Calendar Dataset**")
+        st.code(ck or "—", language=None)
+
+    st.caption("✨ Keys are auto-normalized to `datetime` and `Date` columns during the fusion process")
+
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
     try:
         import graphviz
+        st.markdown("**Merge Flow Diagram**")
         dot = graphviz.Digraph()
         dot.attr(rankdir="LR", nodesep="0.4", splines="spline")
-        dot.node("P", f"Patient\nkey: {pk or '—'}", shape="box")
-        dot.node("W", f"Weather\nkey: {wk or '—'}", shape="box")
-        dot.node("C", f"Calendar\nkey: {ck or '—'}", shape="box")
-        dot.node("M", "Merged\nData", shape="ellipse")
+        dot.node("P", f"Patient\nkey: {pk or '—'}", shape="box", style="filled", fillcolor="#3b82f6", fontcolor="white")
+        dot.node("W", f"Weather\nkey: {wk or '—'}", shape="box", style="filled", fillcolor="#22d3ee", fontcolor="white")
+        dot.node("C", f"Calendar\nkey: {ck or '—'}", shape="box", style="filled", fillcolor="#22c55e", fontcolor="white")
+        dot.node("M", "Merged\nDataset", shape="ellipse", style="filled", fillcolor="#f59e0b", fontcolor="white")
         dot.edges([("P","M"), ("W","M"), ("C","M")])
         st.graphviz_chart(dot, use_container_width=True)
     except Exception:
-        st.caption("Graphviz not available; skipping diagram.")
+        st.caption("📊 Graphviz not available; skipping merge flow diagram")
     st.markdown("</div>", unsafe_allow_html=True)
 
 def _summarize_df(df: pd.DataFrame, title: str):
-    st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class='hf-feature-card' style='padding: 1.5rem;'>
+          <h3 style='margin-bottom: 0.75rem; font-size: 1.125rem; font-weight: 700;'>{title}</h3>
+        """,
+        unsafe_allow_html=True,
+    )
     c1, c2 = st.columns([1.5, 1])
     with c1:
+        st.markdown("**Data Preview (First 10 rows)**")
         st.dataframe(df.head(10), use_container_width=True)
     with c2:
+        st.markdown("**Schema Summary**")
         non_null = df.notnull().sum()
         missing = df.isnull().sum()
         summary = pd.DataFrame({
@@ -376,12 +353,154 @@ def _summarize_df(df: pd.DataFrame, title: str):
 
 # ---------- PAGE BODY -----------------------------------------------------------
 def page_data_preparation_studio():
-    # HERO
+    # Apply premium theme and sidebar
+    apply_css()
+    inject_sidebar_style()
+    render_sidebar_brand()
+
+    # Apply fluorescent effects + Custom Tab Styling
+    st.markdown(f"""
+    <style>
+    /* Fluorescent Effects for Data Preparation Studio */
+    @keyframes float-orb {{
+        0%, 100% {{ transform: translate(0, 0) scale(1); opacity: 0.25; }}
+        50% {{ transform: translate(30px, -30px) scale(1.05); opacity: 0.35; }}
+    }}
+    .fluorescent-orb {{
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(70px);
+    }}
+    .orb-1 {{
+        width: 350px;
+        height: 350px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
+        top: 15%;
+        right: 20%;
+        animation: float-orb 25s ease-in-out infinite;
+    }}
+    .orb-2 {{
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+        bottom: 20%;
+        left: 15%;
+        animation: float-orb 30s ease-in-out infinite;
+        animation-delay: 5s;
+    }}
+    @keyframes sparkle {{
+        0%, 100% {{ opacity: 0; transform: scale(0); }}
+        50% {{ opacity: 0.6; transform: scale(1); }}
+    }}
+    .sparkle {{
+        position: fixed;
+        width: 3px;
+        height: 3px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 2;
+        animation: sparkle 3s ease-in-out infinite;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+    }}
+    .sparkle-1 {{ top: 25%; left: 35%; animation-delay: 0s; }}
+    .sparkle-2 {{ top: 65%; left: 70%; animation-delay: 1s; }}
+    .sparkle-3 {{ top: 45%; left: 15%; animation-delay: 2s; }}
+
+    /* ========================================
+       CUSTOM TAB STYLING (Modern Design)
+       ======================================== */
+
+    /* Tab container */
+    .stTabs {{
+        background: transparent;
+        margin-top: 1rem;
+    }}
+
+    /* Tab list (container for all tab buttons) */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 0.5rem;
+        background: linear-gradient(135deg, rgba(11, 17, 32, 0.6), rgba(5, 8, 22, 0.5));
+        padding: 0.5rem;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }}
+
+    /* Individual tab buttons */
+    .stTabs [data-baseweb="tab"] {{
+        height: 50px;
+        background: transparent;
+        border-radius: 12px;
+        padding: 0 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: {BODY_TEXT};
+        border: 1px solid transparent;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }}
+
+    /* Tab button hover effect */
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+        border-color: rgba(59, 130, 246, 0.3);
+        color: {TEXT_COLOR};
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }}
+
+    /* Active/selected tab */
+    .stTabs [aria-selected="true"] {{
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(34, 211, 238, 0.2)) !important;
+        border: 1px solid rgba(59, 130, 246, 0.5) !important;
+        color: {TEXT_COLOR} !important;
+        box-shadow:
+            0 0 20px rgba(59, 130, 246, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    }}
+
+    /* Active tab indicator (underline) - hide it */
+    .stTabs [data-baseweb="tab-highlight"] {{
+        background-color: transparent;
+    }}
+
+    /* Tab panels (content area) */
+    .stTabs [data-baseweb="tab-panel"] {{
+        padding-top: 1.5rem;
+    }}
+
+    @media (max-width: 768px) {{
+        .fluorescent-orb {{ width: 200px !important; height: 200px !important; filter: blur(50px); }}
+        .sparkle {{ display: none; }}
+
+        /* Make tabs stack vertically on mobile */
+        .stTabs [data-baseweb="tab-list"] {{
+            flex-direction: column;
+        }}
+
+        .stTabs [data-baseweb="tab"] {{
+            width: 100%;
+        }}
+    }}
+    </style>
+    <div class="fluorescent-orb orb-1"></div>
+    <div class="fluorescent-orb orb-2"></div>
+    <div class="sparkle sparkle-1"></div>
+    <div class="sparkle sparkle-2"></div>
+    <div class="sparkle sparkle-3"></div>
+    """, unsafe_allow_html=True)
+
+    # Premium Hero Header
     st.markdown(
         f"""
-        <div class='hero'>
-          <div class='hero-title'>🧠 Data Preparation Studio</div>
-          <p class='hero-sub'>Upload sources → preview plan → merge → engineer features → validate</p>
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
+          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🧠</div>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Data Preparation Studio</h1>
+          <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 auto;'>
+            Intelligent data fusion and feature engineering pipeline for production-ready forecasting models
+          </p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -397,73 +516,214 @@ def page_data_preparation_studio():
     calendar_ready = calendar_df is not None and not getattr(calendar_df, "empty", True)
     all_ready = patient_ready and weather_ready and calendar_ready
 
-    # Top status badges
+    # Premium Data Source Status Cards
     col1, col2, col3 = st.columns(3)
-    with col1: _dataset_badge(patient_ready, "Patient dataset")
-    with col2: _dataset_badge(weather_ready, "Weather dataset")
-    with col3: _dataset_badge(calendar_ready, "Calendar dataset")
 
-    st.write("")
+    with col1:
+        status_icon = "✅" if patient_ready else "⏳"
+        status_text = "Ready" if patient_ready else "Pending"
+        rgb = "16,185,129" if patient_ready else "245,158,11"
+        color = SUCCESS_COLOR if patient_ready else WARNING_COLOR
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Patient Dataset</div>
+              <div style='margin: 1rem 0;'>
+                <span class='hf-pill' style='background:rgba({rgb},.15);color:{color};border:1px solid rgba({rgb},.3); font-size: 0.875rem; padding: 0.5rem 1rem;'>
+                  {status_icon} {status_text}
+                </span>
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Core patient arrival data</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    # Sidebar workflow (kept)
-    st.sidebar.markdown("### Workflow")
-    step = st.sidebar.radio(
-        label="Steps",
-        options=[
-            "1) Validate Sources",
-            "2) Preview Merge Plan",
-            "3) Run Fusion",
-            "4) Preprocess Features",
-            "5) Preprocessed Info",
-        ],
-        index=0,
-    )
+    with col2:
+        status_icon = "✅" if weather_ready else "⏳"
+        status_text = "Ready" if weather_ready else "Pending"
+        rgb = "16,185,129" if weather_ready else "245,158,11"
+        color = SUCCESS_COLOR if weather_ready else WARNING_COLOR
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Weather Dataset</div>
+              <div style='margin: 1rem 0;'>
+                <span class='hf-pill' style='background:rgba({rgb},.15);color:{color};border:1px solid rgba({rgb},.3); font-size: 0.875rem; padding: 0.5rem 1rem;'>
+                  {status_icon} {status_text}
+                </span>
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Environmental conditions</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    # STEP 1 — Validate Sources
-    if step == "1) Validate Sources":
-        st.markdown("<div class='section-title'>Source Validation</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    with col3:
+        status_icon = "✅" if calendar_ready else "⏳"
+        status_text = "Ready" if calendar_ready else "Pending"
+        rgb = "16,185,129" if calendar_ready else "245,158,11"
+        color = SUCCESS_COLOR if calendar_ready else WARNING_COLOR
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Calendar Dataset</div>
+              <div style='margin: 1rem 0;'>
+                <span class='hf-pill' style='background:rgba({rgb},.15);color:{color};border:1px solid rgba({rgb},.3); font-size: 0.875rem; padding: 0.5rem 1rem;'>
+                  {status_icon} {status_text}
+                </span>
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Temporal features & holidays</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+
+    # Tabular Workflow Navigation
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "1️⃣ Validate Sources",
+        "2️⃣ Preview Merge Plan",
+        "3️⃣ Run Fusion",
+        "4️⃣ Preprocess Features",
+        "5️⃣ Preprocessed Info"
+    ])
+
+    # TAB 1 — Validate Sources
+    with tab1:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 2rem 0; padding: 3rem 2rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1)); border: 2px solid rgba(59, 130, 246, 0.3); box-shadow: 0 0 40px rgba(59, 130, 246, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.6));'>✓</div>
+              <h1 style='font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, {PRIMARY_COLOR}, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(59, 130, 246, 0.3);'>Source Validation</h1>
+              <p style='font-size: 1.25rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Verify that all required datasets are loaded and ready for processing</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='hf-feature-card'>", unsafe_allow_html=True)
         if not all_ready:
-            st.warning("Please upload all three datasets in **Data Hub** to proceed.")
+            st.markdown(
+                f"""
+                <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05)); border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.2);'>
+                  <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>⚠️</div>
+                  <div style='font-size: 1.125rem; font-weight: 700; color: {WARNING_COLOR}; margin-bottom: 0.5rem;'>Missing Datasets</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Please upload all three datasets in the Data Hub to proceed with data fusion</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.success("All sources are loaded. Move to *Preview Merge Plan*.")
+            st.markdown(
+                f"""
+                <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05)); border-radius: 16px; border: 1px solid rgba(34, 197, 94, 0.2);'>
+                  <div style='font-size: 3rem; margin-bottom: 1rem;'>✅</div>
+                  <div style='font-size: 1.25rem; font-weight: 700; color: {SUCCESS_COLOR}; margin-bottom: 0.5rem;'>All Sources Ready</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>All datasets are loaded. Proceed to Preview Merge Plan</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         st.markdown("</div>", unsafe_allow_html=True)
 
         if patient_ready:  _summarize_df(patient_df,  "Patient — sample & schema")
         if weather_ready:  _summarize_df(weather_df,  "Weather — sample & schema")
         if calendar_ready: _summarize_df(calendar_df, "Calendar — sample & schema")
 
-    # STEP 2 — Preview Merge Plan
-    if step == "2) Preview Merge Plan":
+    # TAB 2 — Preview Merge Plan
+    with tab2:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 2rem 0; padding: 3rem 2rem; background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(59, 130, 246, 0.1)); border: 2px solid rgba(34, 211, 238, 0.3); box-shadow: 0 0 40px rgba(34, 211, 238, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.6));'>🔍</div>
+              <h1 style='font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, {SECONDARY_COLOR}, {PRIMARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(34, 211, 238, 0.3);'>Merge Plan Preview</h1>
+              <p style='font-size: 1.25rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Review how datasets will be joined based on detected time keys</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         if not all_ready:
-            st.info("Upload all sources first.")
+            st.markdown("<div class='hf-feature-card'>", unsafe_allow_html=True)
+            st.info("Upload all sources first to preview the merge plan.")
+            st.markdown("</div>", unsafe_allow_html=True)
         else:
             _merge_plan_preview(patient_df, weather_df, calendar_df)
-            with st.expander("What happens during fusion?", expanded=False):
+            st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+            with st.expander("📖 What happens during fusion?", expanded=False):
                 st.markdown(
-                    "- Normalize time keys to **datetime** and **Date**\n"
-                    "- Smart-join Patient, Weather, Calendar on time keys\n"
-                    "- Preserve original columns; resolve duplicates\n"
-                    "- Validate row count & missingness"
+                    """
+                    <div class='hf-feature-card'>
+                      <h4 style='margin-bottom: 1rem;'>Fusion Process Overview</h4>
+                      <ul style='line-height: 1.8;'>
+                        <li>Normalize time keys to <strong>datetime</strong> and <strong>Date</strong> columns</li>
+                        <li>Intelligently join Patient, Weather, and Calendar datasets on time keys</li>
+                        <li>Preserve all original columns and resolve duplicate column names</li>
+                        <li>Validate row counts and check for missing values</li>
+                        <li>Ensure temporal alignment across all data sources</li>
+                      </ul>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-    # STEP 3 — Run Fusion
-    if step == "3) Run Fusion":
-        st.markdown("<div class='section-title'>Execute Fusion</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.write("Ready to merge? This will combine Patient, Weather, and Calendar datasets on their time keys.")
+    # TAB 3 — Run Fusion
+    with tab3:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 2rem 0; padding: 3rem 2rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1)); border: 2px solid rgba(34, 197, 94, 0.3); box-shadow: 0 0 40px rgba(34, 197, 94, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 0 20px rgba(34, 197, 94, 0.6));'>🔄</div>
+              <h1 style='font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, {SUCCESS_COLOR}, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(34, 197, 94, 0.3);'>Execute Data Fusion</h1>
+              <p style='font-size: 1.25rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Merge all datasets into a unified time-aligned dataframe</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='hf-feature-card'>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style='text-align: center; margin-bottom: 1.5rem;'>
+              <p style='font-size: 1rem; color: {BODY_TEXT};'>
+                Ready to merge? This will combine Patient, Weather, and Calendar datasets on their time keys.
+              </p>
+            </div>
+            """.format(BODY_TEXT=BODY_TEXT),
+            unsafe_allow_html=True,
+        )
 
         keys_ok = all([
             _detect_key(patient_df)  is not None if patient_ready  else False,
             _detect_key(weather_df)  is not None if weather_ready  else False,
             _detect_key(calendar_df) is not None if calendar_ready else False
         ])
-        if not all_ready:
-            st.error("Missing sources. Upload all three datasets.")
-        elif not keys_ok:
-            st.warning("Could not detect time keys in one or more datasets. Fusion may fail.")
 
-        do_merge = st.button("🔄 Merge datasets now", type="primary", use_container_width=False, disabled=not all_ready)
+        if not all_ready:
+            st.markdown(
+                f"""
+                <div style='text-align: center; padding: 1.5rem; background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05)); border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2); margin-bottom: 1.5rem;'>
+                  <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>❌</div>
+                  <div style='font-size: 1.125rem; font-weight: 700; color: {DANGER_COLOR}; margin-bottom: 0.5rem;'>Missing Sources</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Upload all three datasets before running fusion</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        elif not keys_ok:
+            st.markdown(
+                f"""
+                <div style='text-align: center; padding: 1.5rem; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05)); border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.2); margin-bottom: 1.5rem;'>
+                  <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>⚠️</div>
+                  <div style='font-size: 1.125rem; font-weight: 700; color: {WARNING_COLOR}; margin-bottom: 0.5rem;'>Time Key Detection Warning</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Could not detect time keys in one or more datasets. Fusion may fail.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        do_merge = st.button("🔄 Merge Datasets Now", type="primary", use_container_width=True, disabled=not all_ready)
 
         if do_merge:
             prog = st.progress(0, text="Starting fusion…")
@@ -475,7 +735,17 @@ def page_data_preparation_studio():
 
                 if st.session_state["merged_data"] is not None:
                     prog.progress(100, text="Fusion complete ✓")
-                    st.success("✅ Data fusion completed successfully!")
+                    st.markdown(
+                        f"""
+                        <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05)); border-radius: 16px; border: 1px solid rgba(34, 197, 94, 0.2); margin: 1.5rem 0;'>
+                          <div style='font-size: 3rem; margin-bottom: 1rem;'>✅</div>
+                          <div style='font-size: 1.25rem; font-weight: 700; color: {SUCCESS_COLOR}; margin-bottom: 0.5rem;'>Fusion Complete</div>
+                          <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Successfully merged {len(st.session_state["merged_data"]):,} rows across all datasets</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**Merged Dataset Preview (First 20 rows)**")
                     st.dataframe(st.session_state["merged_data"].head(20), use_container_width=True)
                 else:
                     prog.empty()
@@ -485,17 +755,49 @@ def page_data_preparation_studio():
                 st.error(f"❌ Fusion failed: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # STEP 4 — Preprocess (feature engineering)
-    if step == "4) Preprocess Features":
-        st.markdown("<div class='section-title'>Preprocess (Feature Engineering)</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    # TAB 4 — Preprocess (feature engineering)
+    with tab4:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 2rem 0; padding: 3rem 2rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1)); border: 2px solid rgba(168, 85, 247, 0.3); box-shadow: 0 0 40px rgba(168, 85, 247, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.6));'>🧪</div>
+              <h1 style='font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, #a855f7, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(168, 85, 247, 0.3);'>Feature Engineering</h1>
+              <p style='font-size: 1.25rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Generate lag features, targets, and prepare data for model training</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='hf-feature-card'>", unsafe_allow_html=True)
         md = st.session_state.get("merged_data")
         if md is None or getattr(md, "empty", True):
-            st.info("Run fusion first to enable preprocessing.")
+            st.markdown(
+                f"""
+                <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(34, 211, 238, 0.05)); border-radius: 16px; border: 1px solid rgba(59, 130, 246, 0.2);'>
+                  <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>ℹ️</div>
+                  <div style='font-size: 1.125rem; font-weight: 700; color: {PRIMARY_COLOR}; margin-bottom: 0.5rem;'>Fusion Required</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Run data fusion first to enable feature engineering</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
+            st.markdown(
+                """
+                <div style='margin-bottom: 1.5rem;'>
+                  <h3 style='font-size: 1.125rem; font-weight: 700; margin-bottom: 1rem;'>⚙️ Configuration</h3>
+                  <p style='color: {BODY_TEXT}; font-size: 0.9375rem; margin-bottom: 1rem;'>
+                    Configure how lag features and future targets are generated from the merged dataset
+                  </p>
+                </div>
+                """.format(BODY_TEXT=BODY_TEXT),
+                unsafe_allow_html=True,
+            )
+
             c1, c2 = st.columns([1, 1])
             with c1:
-                n_lags = st.number_input("Lags/Targets (days)", min_value=1, max_value=30, value=7, step=1)
+                n_lags = st.number_input("Lags/Targets (days)", min_value=1, max_value=30, value=7, step=1,
+                                        help="Number of lag features (ED_1..ED_n) and targets (Target_1..Target_n) to create")
             with c2:
                 strict_drop = st.checkbox(
                     "Drop edge rows (recommended)",
@@ -503,23 +805,33 @@ def page_data_preparation_studio():
                     help="Removes NaNs at the edges caused by lag/target shifts."
                 )
 
-            run = st.button("🧪 Build features", type="primary")
+            run = st.button("🧪 Build Features", type="primary", use_container_width=True)
             if run:
                 with st.spinner("Engineering features, harmonising schema, and ordering columns…"):
                     try:
                         processed = _preprocess_after_fusion_cached(md, n_lags=n_lags, strict_drop=strict_drop)
                         st.session_state["processed_df"] = processed
-                        st.success("✅ Preprocessing complete!")
+                        st.markdown(
+                            f"""
+                            <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05)); border-radius: 16px; border: 1px solid rgba(34, 197, 94, 0.2); margin: 1.5rem 0;'>
+                              <div style='font-size: 3rem; margin-bottom: 1rem;'>✅</div>
+                              <div style='font-size: 1.25rem; font-weight: 700; color: {SUCCESS_COLOR}; margin-bottom: 0.5rem;'>Feature Engineering Complete</div>
+                              <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Generated {len(processed.columns)} features across {len(processed):,} rows</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                     except Exception as e:
                         st.error(f"❌ Preprocessing failed: {e}")
 
             proc = st.session_state.get("processed_df")
             if proc is not None and not getattr(proc, "empty", True):
-                st.markdown("#### Processed Dataset (First 30 rows)")
+                st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+                st.markdown("**Processed Dataset Preview (First 30 rows)**")
                 st.dataframe(proc.head(30), use_container_width=True)
                 csv = proc.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    label="Download processed CSV",
+                    label="📥 Download Processed CSV",
                     data=csv,
                     file_name="processed_dataset.csv",
                     mime="text/csv",
@@ -527,24 +839,38 @@ def page_data_preparation_studio():
                 )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # STEP 5 — Preprocessed Info
-    if step == "5) Preprocessed Info":
-        st.markdown("<div class='section-title'>Preprocessed Data Info</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    # TAB 5 — Preprocessed Info
+    with tab5:
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 2rem 0; padding: 3rem 2rem; background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1)); border: 2px solid rgba(245, 158, 11, 0.3); box-shadow: 0 0 40px rgba(245, 158, 11, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 4rem; margin-bottom: 1.5rem; filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.6));'>📊</div>
+              <h1 style='font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, {WARNING_COLOR}, #fbbf24); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(245, 158, 11, 0.3);'>Preprocessed Dataset Summary</h1>
+              <p style='font-size: 1.25rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Comprehensive overview of the final feature-engineered dataset</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='hf-feature-card'>", unsafe_allow_html=True)
         proc = st.session_state.get("processed_df")
         if proc is not None and not getattr(proc, "empty", True):
             _render_preprocessed_info(proc)
         else:
-            st.info("Run preprocessing first to view the preprocessed dataset info.")
+            st.markdown(
+                f"""
+                <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(34, 211, 238, 0.05)); border-radius: 16px; border: 1px solid rgba(59, 130, 246, 0.2);'>
+                  <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>ℹ️</div>
+                  <div style='font-size: 1.125rem; font-weight: 700; color: {PRIMARY_COLOR}; margin-bottom: 0.5rem;'>No Preprocessed Data</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Run feature engineering first to view the dataset summary</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- ENTRYPOINT ----------------------------------------------------------
-def main():
-    apply_css()
-    _prep_css()
-    init_state()
-    header("Data Preparation Studio", "Upload sources → preview plan → merge → engineer features → validate", icon="🧠")
-    page_data_preparation_studio()
 
-if __name__ == "__main__":
-    main()
+init_state()
+page_data_preparation_studio()
+
+

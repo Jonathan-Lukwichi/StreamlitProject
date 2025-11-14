@@ -15,10 +15,10 @@ from datetime import datetime
 from app_core.ui.theme import (
     apply_css,
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BG_BLACK, BODY_TEXT
 )
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.state.session import init_state
-from app_core.ui.components import header
 
 # Plot builders for multi-horizon results (expects matplotlib figs)
 from app_core.plots import build_multihorizon_results_dashboard
@@ -30,17 +30,13 @@ from app_core.models.sarimax_pipeline import (
 )
 
 # === ARIMA helpers (with graceful fallbacks for plotting) ===
-_plt_import_ok = True
+from app_core.models.arima_pipeline import run_arima_pipeline
 try:
-    from app_core.models.arima_pipeline import (
-        run_arima_pipeline,
-        create_arima_metrics_table,
-        plot_arima_forecast,
-        plot_arima_residuals,
-    )
-except Exception:
-    from app_core.models.arima_pipeline import run_arima_pipeline, create_arima_metrics_table
+    from app_core.plots import plot_arima_forecast
+    _plt_import_ok = True
+except ImportError:
     _plt_import_ok = False
+
 
 # ---------------------------- Small utilities ----------------------------
 _DEF_FLOAT_FMT = {
@@ -130,9 +126,18 @@ def _sanitize_artifacts(F, L, U):
 def _plot_arima_forecast_local(arima_out, title="ARIMA Forecast"):
     y_train = arima_out.get("y_train")
     y_test  = arima_out.get("y_test")
-    y_pred  = arima_out.get("forecasts") or arima_out.get("y_pred")
-    ci_low  = arima_out.get("forecast_lower") or arima_out.get("ci_lower")
-    ci_up   = arima_out.get("forecast_upper") or arima_out.get("ci_upper")
+    
+    y_pred = arima_out.get("forecasts")
+    if y_pred is None:
+        y_pred = arima_out.get("y_pred")
+        
+    ci_low = arima_out.get("forecast_lower")
+    if ci_low is None:
+        ci_low = arima_out.get("ci_lower")
+        
+    ci_up = arima_out.get("forecast_upper")
+    if ci_up is None:
+        ci_up = arima_out.get("ci_upper")
 
     fig = go.Figure()
 
@@ -193,7 +198,7 @@ def _plot_arima_forecast_local(arima_out, title="ARIMA Forecast"):
                    showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
         yaxis=dict(title="Number of Patient Arrivals", title_font=dict(size=14, color=TEXT_COLOR),
                    showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
-        plot_bgcolor='white', paper_bgcolor='white',
+        plot_bgcolor=CARD_BG, paper_bgcolor=CARD_BG,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     return fig
@@ -229,7 +234,7 @@ def _plot_arima_residuals_local(arima_out):
                    showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
         yaxis=dict(title="Residual Value", title_font=dict(size=14, color=TEXT_COLOR),
                    showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
-        plot_bgcolor='white', paper_bgcolor='white'
+        plot_bgcolor=CARD_BG, paper_bgcolor=CARD_BG
     )
     return fig
 
@@ -254,7 +259,7 @@ def _indicator(title: str, value, suffix: str = "", color: str = PRIMARY_COLOR):
 
     fig.update_layout(
         margin=dict(l=10, r=10, t=45, b=10),
-        paper_bgcolor="rgba(248,249,250,0.5)",
+        paper_bgcolor=CARD_BG,
         height=150
     )
 
@@ -550,10 +555,197 @@ def _build_error_evolution(per_h: dict, title: str):
 # PAGE
 # =====================================================================
 
+# Page Configuration
+st.set_page_config(
+    page_title="Benchmarks - HealthForecast AI",
+    page_icon="🤖",
+    layout="wide",
+)
+
 def page_benchmarks():
     apply_css()
+    inject_sidebar_style()
+    render_sidebar_brand()
     init_state()
-    header("Benchmark Models", "Train and evaluate forecasting models for patient arrivals", icon="🤖")
+
+    # Fluorescent effects + Custom Tab Styling
+    st.markdown(f"""
+    <style>
+    /* ========================================
+       FLUORESCENT EFFECTS FOR BENCHMARKS
+       ======================================== */
+
+    @keyframes float-orb {{
+        0%, 100% {{
+            transform: translate(0, 0) scale(1);
+            opacity: 0.25;
+        }}
+        50% {{
+            transform: translate(30px, -30px) scale(1.05);
+            opacity: 0.35;
+        }}
+    }}
+
+    .fluorescent-orb {{
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(70px);
+    }}
+
+    .orb-1 {{
+        width: 350px;
+        height: 350px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
+        top: 15%;
+        right: 20%;
+        animation: float-orb 25s ease-in-out infinite;
+    }}
+
+    .orb-2 {{
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+        bottom: 20%;
+        left: 15%;
+        animation: float-orb 30s ease-in-out infinite;
+        animation-delay: 5s;
+    }}
+
+    @keyframes sparkle {{
+        0%, 100% {{
+            opacity: 0;
+            transform: scale(0);
+        }}
+        50% {{
+            opacity: 0.6;
+            transform: scale(1);
+        }}
+    }}
+
+    .sparkle {{
+        position: fixed;
+        width: 3px;
+        height: 3px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 2;
+        animation: sparkle 3s ease-in-out infinite;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+    }}
+
+    .sparkle-1 {{ top: 25%; left: 35%; animation-delay: 0s; }}
+    .sparkle-2 {{ top: 65%; left: 70%; animation-delay: 1s; }}
+    .sparkle-3 {{ top: 45%; left: 15%; animation-delay: 2s; }}
+
+    /* ========================================
+       CUSTOM TAB STYLING (Modern Design)
+       ======================================== */
+
+    /* Tab container */
+    .stTabs {{
+        background: transparent;
+        margin-top: 1rem;
+    }}
+
+    /* Tab list (container for all tab buttons) */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 0.5rem;
+        background: linear-gradient(135deg, rgba(11, 17, 32, 0.6), rgba(5, 8, 22, 0.5));
+        padding: 0.5rem;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }}
+
+    /* Individual tab buttons */
+    .stTabs [data-baseweb="tab"] {{
+        height: 50px;
+        background: transparent;
+        border-radius: 12px;
+        padding: 0 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: {BODY_TEXT};
+        border: 1px solid transparent;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }}
+
+    /* Tab button hover effect */
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+        border-color: rgba(59, 130, 246, 0.3);
+        color: {TEXT_COLOR};
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }}
+
+    /* Active/selected tab */
+    .stTabs [aria-selected="true"] {{
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(34, 211, 238, 0.2)) !important;
+        border: 1px solid rgba(59, 130, 246, 0.5) !important;
+        color: {TEXT_COLOR} !important;
+        box-shadow:
+            0 0 20px rgba(59, 130, 246, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    }}
+
+    /* Active tab indicator (underline) - hide it */
+    .stTabs [data-baseweb="tab-highlight"] {{
+        background-color: transparent;
+    }}
+
+    /* Tab panels (content area) */
+    .stTabs [data-baseweb="tab-panel"] {{
+        padding-top: 2rem;
+    }}
+
+    @media (max-width: 768px) {{
+        .fluorescent-orb {{
+            width: 200px !important;
+            height: 200px !important;
+            filter: blur(50px);
+        }}
+        .sparkle {{
+            display: none;
+        }}
+
+        /* Make tabs stack vertically on mobile */
+        .stTabs [data-baseweb="tab-list"] {{
+            flex-direction: column;
+        }}
+
+        .stTabs [data-baseweb="tab"] {{
+            width: 100%;
+        }}
+    }}
+    </style>
+
+    <!-- Fluorescent Floating Orbs -->
+    <div class="fluorescent-orb orb-1"></div>
+    <div class="fluorescent-orb orb-2"></div>
+
+    <!-- Sparkle Particles -->
+    <div class="sparkle sparkle-1"></div>
+    <div class="sparkle sparkle-2"></div>
+    <div class="sparkle sparkle-3"></div>
+    """, unsafe_allow_html=True)
+
+    # Premium Hero Header
+    st.markdown(
+        f"""
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
+          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🤖</div>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Benchmark Models</h1>
+          <p class='hf-feature-description' style='font-size: 1rem; max-width: 700px; margin: 0 auto;'>
+            Train and evaluate forecasting models for patient arrivals with advanced statistical and machine learning techniques
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Prefer preprocessed data; fallback to merged
     processed = st.session_state.get("processed_df")
@@ -581,37 +773,37 @@ def page_benchmarks():
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown(f"""
-            <div class="metric-card">
-                <div style="color:{SUBTLE_TEXT};font-size:.9rem">Total Records</div>
-                <div style="color:{PRIMARY_COLOR};font-size:1.8rem;font-weight:600">{len(data):,}</div>
-                <div style="color:#adb5bd;font-size:.8rem">Time Points</div>
+            <div class="hf-section-card">
+                <div class="hf-section-body">Total Records</div>
+                <div class="hf-section-title" style="color:{PRIMARY_COLOR};">{len(data):,}</div>
+                <div class="hf-section-body">Time Points</div>
             </div>
         """, unsafe_allow_html=True)
     with col2:
         date_range = f"{pd.to_datetime(data['Date']).min().date()} to {pd.to_datetime(data['Date']).max().date()}"
         st.markdown(f"""
-            <div class="metric-card">
-                <div style="color:{SUBTLE_TEXT};font-size:.9rem">Date Range</div>
-                <div style="color:{SECONDARY_COLOR};font-size:1rem;font-weight:600">{date_range}</div>
-                <div style="color:#adb5bd;font-size:.8rem">Coverage Period</div>
+            <div class="hf-section-card">
+                <div class="hf-section-body">Date Range</div>
+                <div class="hf-section-title" style="color:{SECONDARY_COLOR};">{date_range}</div>
+                <div class="hf-section-body">Coverage Period</div>
             </div>
         """, unsafe_allow_html=True)
     with col3:
         avg_arrivals = pd.to_numeric(data['Target_1'], errors='coerce').mean()
         st.markdown(f"""
-            <div class="metric-card">
-                <div style="color:{SUBTLE_TEXT};font-size:.9rem">Avg Arrivals</div>
-                <div style="color:{SUCCESS_COLOR};font-size:1.8rem;font-weight:600">{avg_arrivals:.1f}</div>
-                <div style="color:#adb5bd;font-size:.8rem">Per Day</div>
+            <div class="hf-section-card">
+                <div class="hf-section-body">Avg Arrivals</div>
+                <div class="hf-section-title" style="color:{SUCCESS_COLOR};">{avg_arrivals:.1f}</div>
+                <div class="hf-section-body">Per Day</div>
             </div>
         """, unsafe_allow_html=True)
     with col4:
         features_count = len([c for c in data.columns if c not in ['Date'] and not c.startswith('Target_')])
         st.markdown(f"""
-            <div class="metric-card">
-                <div style="color:{SUBTLE_TEXT};font-size:.9rem">Features</div>
-                <div style="color:{WARNING_COLOR};font-size:1.8rem;font-weight:600">{max(0, features_count)}</div>
-                <div style="color:#adb5bd;font-size:.8rem">Variables</div>
+            <div class="hf-section-card">
+                <div class="hf-section-body">Features</div>
+                <div class="hf-section-title" style="color:{WARNING_COLOR};">{max(0, features_count)}</div>
+                <div class="hf-section-body">Variables</div>
             </div>
         """, unsafe_allow_html=True)
     st.markdown("---")
@@ -624,16 +816,23 @@ def page_benchmarks():
     # 🎯 Model Selection
     # ------------------------------------------------------------
     with tab_select:
-        st.markdown("### 🎯 Select Forecasting Model")
-        st.markdown("*Choose a time series forecasting model to predict patient arrivals*")
-        st.markdown("---")
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 2rem 1.5rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1)); border: 2px solid rgba(59, 130, 246, 0.3); box-shadow: 0 0 40px rgba(59, 130, 246, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 2.5rem; margin-bottom: 1rem; filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.6));'>🎯</div>
+              <h1 style='font-size: 1.75rem; font-weight: 800; margin-bottom: 0.75rem; background: linear-gradient(135deg, {PRIMARY_COLOR}, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(59, 130, 246, 0.3);'>Model Selection</h1>
+              <p style='font-size: 1rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Choose a time series forecasting model to predict patient arrivals</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         col_model1, col_model2 = st.columns(2)
 
         with col_model1:
             st.markdown(f"""
-                <div class="metric-card" style="min-height:250px;">
-                    <h4 style="color:{PRIMARY_COLOR};margin-bottom:1rem;">📈 ARIMA</h4>
-                    <p style="color:{SUBTLE_TEXT};font-size:0.9rem;line-height:1.6;">
+                <div class="hf-section-card" style="min-height:250px;">
+                    <h4 class="hf-section-title" style="color:{PRIMARY_COLOR};">📈 ARIMA</h4>
+                    <p class="hf-section-body">
                         <strong>AutoRegressive Integrated Moving Average</strong><br><br>
                         ✓ Classic univariate model<br>
                         ✓ Handles trends/seasonality (via differencing)<br>
@@ -649,13 +848,14 @@ def page_benchmarks():
 
         with col_model2:
             st.markdown(f"""
-                <div class="metric-card" style="min-height:250px;">
-                    <h4 style="color:{SECONDARY_COLOR};margin-bottom:1rem;">📊 SARIMAX</h4>
-                    <p style="color:{SUBTLE_TEXT};font-size:0.9rem;line-height:1.6;">
+                <div class="hf-section-card" style="min-height:250px;">
+                    <h4 class="hf-section-title" style="color:{SECONDARY_COLOR};">📊 SARIMAX</h4>
+                    <p class="hf-section-body">
                         <strong>Seasonal ARIMA with eXogenous variables</strong><br><br>
                         ✓ Explicit seasonality<br>
                         ✓ Add external (weather/calendar) features<br>
-                        ✓ Powerful for complex patterns<br><br>
+                        ✓ Powerful for complex patterns<br>
+                        ✓ Simple and robust<br><br>
                         <em>Use when exogenous vars matter</em>
                     </p>
                 </div>
@@ -676,14 +876,23 @@ def page_benchmarks():
     # ⚙️ Configuration
     # ------------------------------------------------------------
     with tab_config:
-        st.markdown("### ⚙️ Model Configuration")
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 2rem 1.5rem; background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(59, 130, 246, 0.1)); border: 2px solid rgba(34, 211, 238, 0.3); box-shadow: 0 0 40px rgba(34, 211, 238, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 2.5rem; margin-bottom: 1rem; filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.6));'>⚙️</div>
+              <h1 style='font-size: 1.75rem; font-weight: 800; margin-bottom: 0.75rem; background: linear-gradient(135deg, {SECONDARY_COLOR}, {PRIMARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(34, 211, 238, 0.3);'>Model Configuration</h1>
+              <p style='font-size: 1rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Fine-tune model parameters and feature selection for optimal performance</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         current_model = st.session_state.get("selected_model")
         if not current_model:
             st.warning("⚠️ Please select a model first in **Model Selection**.")
             return
 
         st.info(f"🎯 Configuring: **{current_model}**")
-        st.markdown("---")
 
         if current_model == "ARIMA":
             mode = st.radio("Parameter Mode", ["Automatic (recommended)", "Manual (enter p,d,q)"],
@@ -752,7 +961,17 @@ def page_benchmarks():
     # 🚀 Train Model
     # ------------------------------------------------------------
     with tab_train:
-        st.markdown("### 🚀 Train Model")
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 2rem 1.5rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1)); border: 2px solid rgba(34, 197, 94, 0.3); box-shadow: 0 0 40px rgba(34, 197, 94, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 2.5rem; margin-bottom: 1rem; filter: drop-shadow(0 0 20px rgba(34, 197, 94, 0.6));'>🚀</div>
+              <h1 style='font-size: 1.75rem; font-weight: 800; margin-bottom: 0.75rem; background: linear-gradient(135deg, {SUCCESS_COLOR}, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(34, 197, 94, 0.3);'>Train Model</h1>
+              <p style='font-size: 1rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Execute model training and generate forecasts for patient arrivals</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         current_model = st.session_state.get("selected_model")
         if not current_model:
             st.warning("⚠️ Select a model first.")
@@ -907,7 +1126,17 @@ def page_benchmarks():
     # 📊 Results — Unified Template (SARIMAX-style artifacts for both)
     # ------------------------------------------------------------
     with tab_results:
-        st.markdown("### 📊 Model Results")
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 2rem 1.5rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1)); border: 2px solid rgba(168, 85, 247, 0.3); box-shadow: 0 0 40px rgba(168, 85, 247, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 2.5rem; margin-bottom: 1rem; filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.6));'>📊</div>
+              <h1 style='font-size: 1.75rem; font-weight: 800; margin-bottom: 0.75rem; background: linear-gradient(135deg, #a855f7, {SECONDARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(168, 85, 247, 0.3);'>Model Results</h1>
+              <p style='font-size: 1rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Comprehensive performance metrics, forecasts, and diagnostic visualizations</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         current_model = st.session_state.get("selected_model")
         if not current_model:
             st.warning("⚠️ Select and train a model first.")
@@ -1068,8 +1297,17 @@ def page_benchmarks():
     # 🆚 Model Comparison
     # ------------------------------------------------------------
     with tab_compare:
-        st.markdown("### 🆚 Model Comparison Dashboard")
-        st.markdown("*Compare performance metrics across all trained models*")
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 2rem 1.5rem; background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1)); border: 2px solid rgba(245, 158, 11, 0.3); box-shadow: 0 0 40px rgba(245, 158, 11, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);'>
+              <div style='font-size: 2.5rem; margin-bottom: 1rem; filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.6));'>🆚</div>
+              <h1 style='font-size: 1.75rem; font-weight: 800; margin-bottom: 0.75rem; background: linear-gradient(135deg, {WARNING_COLOR}, #fbbf24); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 30px rgba(245, 158, 11, 0.3);'>Model Comparison</h1>
+              <p style='font-size: 1rem; color: {BODY_TEXT}; margin: 0; line-height: 1.6;'>Compare performance metrics across all trained models and identify the best performer</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         _init_comparison_table()
 
         col_reset, col_export = st.columns([1, 5])
@@ -1244,7 +1482,9 @@ def page_benchmarks():
                             ))
                             fig_mini.update_layout(
                                 height=250,
-                                margin=dict(l=20, r=20, t=50, b=20)
+                                margin=dict(l=20, r=20, t=50, b=20),
+                                paper_bgcolor=BG_BLACK,
+                                font=dict(color=TEXT_COLOR)
                             )
                             st.plotly_chart(fig_mini, use_container_width=True)
 
@@ -1267,9 +1507,9 @@ def page_benchmarks():
                             mae_txt = _fmt_num(row.get("MAE"))
                             rmse_txt = _fmt_num(row.get("RMSE"))
                             st.markdown(f"""
-                            <div style="border: 2px solid {rank_color}; border-radius: 10px; padding: 15px; background: white;">
+                            <div style="border: 2px solid {rank_color}; border-radius: 10px; padding: 15px; background: {BG_BLACK};">
                                 <div style="text-align: center; font-size: 2rem;">{medal}</div>
-                                <h5 style="text-align: center; color: {TEXT_COLOR}; margin: 10px 0;">{row['Model']}</h5>
+                                <h5 style="text-align: center; color: {TEXT_COLOR}; margin: 10px 0; word-wrap: break-word;">{row['Model']}</h5>
                                 <div style="text-align: center; color: {rank_color}; font-size: 1.5rem; font-weight: 600; margin: 10px 0;">
                                     {acc_txt}
                                 </div>
@@ -1330,16 +1570,17 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
             marker_color=color,
             text=df_work[metric].round(2),
             textposition='outside',
-            texttemplate='%{text}'
+            texttemplate='%{text}',
+            textfont=dict(size=12, color='white')
         ))
 
     fig_metrics.update_layout(
-        title=dict(text="📊 Multi-Metric Model Comparison", x=0.5, xanchor='center', font=dict(size=16, color=TEXT_COLOR)),
+        title=dict(text="📊 Multi-Metric Model Comparison", x=0.5, xanchor='center'),
         xaxis_title="Model",
         yaxis_title="Score (Higher is Better)",
         barmode='group',
-        plot_bgcolor='white',
-        paper_bgcolor='white',
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
         margin=dict(t=70, b=80, l=60, r=40),
         height=400,
         legend=dict(
@@ -1349,7 +1590,8 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
             xanchor="right",
             x=1
         ),
-        xaxis=dict(tickangle=-45)
+        xaxis=dict(tickangle=-45),
+        font_color='white'
     )
 
     # 2. Runtime vs Accuracy scatter
@@ -1367,23 +1609,27 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
                     color=df_work["Accuracy_%"],
                     colorscale='RdYlGn',
                     showscale=True,
-                    colorbar=dict(title="Accuracy %"),
-                    line=dict(width=2, color='white')
+                    colorbar=dict(
+                        title=dict(text="Accuracy %"),
+                        tickfont=dict(color='white')
+                    ),
+                    line=dict(width=2, color=BG_BLACK)
                 ),
                 text=df_work["Model"],
                 textposition="top center",
-                textfont=dict(size=10),
+                textfont=dict(size=10, color='white'),
                 hovertemplate='<b>%{text}</b><br>Runtime: %{x:.2f}s<br>Accuracy: %{y:.2f}%<extra></extra>'
             ))
 
             fig_scatter.update_layout(
-                title=dict(text="⚡ Runtime vs Accuracy Trade-off", x=0.5, xanchor='center', font=dict(size=16, color=TEXT_COLOR)),
+                title=dict(text="⚡ Runtime vs Accuracy Trade-off", x=0.5, xanchor='center'),
                 xaxis=dict(title="Runtime (seconds)", showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
                 yaxis=dict(title="Accuracy (%)", showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
-                plot_bgcolor='white',
-                paper_bgcolor='white',
+                plot_bgcolor=BG_BLACK,
+                paper_bgcolor=BG_BLACK,
                 margin=dict(t=70, b=60, l=60, r=60),
-                height=400
+                height=400,
+                font_color='white'
             )
 
     # 3. Error metrics comparison (MAE, RMSE side by side)
@@ -1400,7 +1646,8 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
                 text=df_work["MAE"].round(3),
                 textposition='outside',
                 yaxis='y',
-                offsetgroup=1
+                offsetgroup=1,
+                textfont=dict(size=12, color='white')
             ))
 
         if "RMSE" in df_work.columns and df_work["RMSE"].notna().any():
@@ -1412,16 +1659,17 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
                 text=df_work["RMSE"].round(3),
                 textposition='outside',
                 yaxis='y',
-                offsetgroup=2
+                offsetgroup=2,
+                textfont=dict(size=12, color='white')
             ))
 
         fig_errors.update_layout(
-            title=dict(text="📉 Error Metrics Comparison (Lower is Better)", x=0.5, xanchor='center', font=dict(size=16, color=TEXT_COLOR)),
+            title=dict(text="📉 Error Metrics Comparison (Lower is Better)", x=0.5, xanchor='center'),
             xaxis_title="Model",
             yaxis_title="Error Value",
             barmode='group',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
+            plot_bgcolor=BG_BLACK,
+            paper_bgcolor=BG_BLACK,
             margin=dict(t=70, b=80, l=60, r=40),
             height=400,
             legend=dict(
@@ -1431,7 +1679,8 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
                 xanchor="right",
                 x=1
             ),
-            xaxis=dict(tickangle=-45)
+            xaxis=dict(tickangle=-45),
+            font_color='white'
         )
 
     return {
@@ -1479,32 +1728,32 @@ def _create_model_performance_summary(comp_df: pd.DataFrame):
         rt_txt = f"{runtime:.2f}s" if np.isfinite(runtime) else "N/A"
 
         summary_html = f"""
-        <div style="border: 2px solid {badge_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background: linear-gradient(135deg, rgba(255,255,255,1) 0%, rgba(248,249,250,1) 100%);">
+        <div class='hf-section-card' style="border: 2px solid {badge_color};">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h4 style="color: {TEXT_COLOR}; margin: 0;">{model_name}</h4>
-                <span style="background: {badge_color}; color: white; padding: 5px 15px; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">{badge_text}</span>
+                <h4 class='hf-section-title' style="color: {TEXT_COLOR}; margin: 0;">{model_name}</h4>
+                <span class='hf-pill' style="background: {badge_color}; color: {BG_BLACK};">{badge_text}</span>
             </div>
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 15px;">
-                <div style="background: white; padding: 10px; border-radius: 5px; border-left: 3px solid {SUCCESS_COLOR};">
+                <div class='hf-section-card' style="padding: 10px; border-left: 3px solid {SUCCESS_COLOR};">
                     <div style="color: {SUBTLE_TEXT}; font-size: 0.75rem;">Accuracy</div>
                     <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: 600;">{acc_txt}</div>
                 </div>
-                <div style="background: white; padding: 10px; border-radius: 5px; border-left: 3px solid {PRIMARY_COLOR};">
+                <div class='hf-section-card' style="padding: 10px; border-left: 3px solid {PRIMARY_COLOR};">
                     <div style="color: {SUBTLE_TEXT}; font-size: 0.75rem;">MAE</div>
                     <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: 600;">{mae_txt}</div>
                 </div>
-                <div style="background: white; padding: 10px; border-radius: 5px; border-left: 3px solid {SECONDARY_COLOR};">
+                <div class='hf-section-card' style="padding: 10px; border-left: 3px solid {SECONDARY_COLOR};">
                     <div style="color: {SUBTLE_TEXT}; font-size: 0.75rem;">RMSE</div>
                     <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: 600;">{rmse_txt}</div>
                 </div>
-                <div style="background: white; padding: 10px; border-radius: 5px; border-left: 3px solid {WARNING_COLOR};">
+                <div class='hf-section-card' style="padding: 10px; border-left: 3px solid {WARNING_COLOR};">
                     <div style="color: {SUBTLE_TEXT}; font-size: 0.75rem;">Runtime</div>
                     <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: 600;">{rt_txt}</div>
                 </div>
             </div>
-            <div style="margin-top: 15px; padding: 10px; background: rgba(248,249,250,0.8); border-radius: 5px;">
+            <div class='hf-section-card' style="margin-top: 15px; padding: 10px;">
                 <div style="color: {SUBTLE_TEXT}; font-size: 0.75rem; margin-bottom: 5px;">Configuration</div>
-                <div style="color: {TEXT_COLOR}; font-size: 0.85rem; line-height: 1.5;">
+                <div style="color: {TEXT_COLOR}; font-size: 0.85rem; line-height: 1.5; overflow-wrap: break-word; word-wrap: break-word; white-space: normal;">
                     <strong>Train/Test:</strong> {train_ratio}<br>
                     <strong>Parameters:</strong> {params}
                 </div>
@@ -1515,8 +1764,6 @@ def _create_model_performance_summary(comp_df: pd.DataFrame):
 
     return summaries
 
-def main():
-    page_benchmarks()
+page_benchmarks()
 
-if __name__ == "__main__":
-    main()
+

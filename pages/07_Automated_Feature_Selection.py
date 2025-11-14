@@ -1,6 +1,3 @@
-# =============================================================================
-# pages/07_Automated_Feature_Selection.py — Feature Selection Studio (Part A)
-# =============================================================================
 from __future__ import annotations
 import time, json, warnings
 from typing import List, Dict, Any, Optional
@@ -24,6 +21,13 @@ try:
     import seaborn as sns
 except ImportError:
     sns = None
+
+from app_core.ui.theme import apply_css
+from app_core.ui.theme import (
+    PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
+)
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
 # ----------------------- Version-safe helpers ---------------------------------
 def _rmse(y_true, y_pred) -> float:
@@ -284,10 +288,17 @@ class FeatureSelectionPipeline:
 # pages/07_Automated_Feature_Selection.py — Feature Selection Studio (Part B)
 # =============================================================================
 
+# Page Configuration
+st.set_page_config(
+    page_title="Automated Feature Selection - HealthForecast AI",
+    page_icon="🧩",
+    layout="wide",
+)
+
 # ---------- Visual helpers ----------
 def _chip_list(items: List[str], color: str):
-    if not items: return "<span style='color:#64748b'>—</span>"
-    return " ".join([f"<span style='color:{color}; padding:2px 6px; border:1px solid {color}; border-radius:8px; margin:2px; display:inline-block'>{x}</span>" for x in items])
+    if not items: return f"<span style='color:{SUBTLE_TEXT}'>—</span>"
+    return " ".join([f"<span class='hf-pill' style='background:rgba(34,211,238,0.12); color:{PRIMARY_COLOR}; border:1px solid rgba(34,211,238,0.25);'>{x}</span>" for x in items])
 
 def _bar_importances(imp_df: Optional[pd.DataFrame], selected: List[str], label_col="importance", title=""):
     if imp_df is None or (isinstance(imp_df, pd.DataFrame) and imp_df.empty):
@@ -362,17 +373,18 @@ def _pick_target(df: pd.DataFrame) -> List[str]:
 
 # ---------- Page ----------
 def page_feature_selection():
-    # Compact hero (no redundancy)
+    # Premium Hero Header
     st.markdown(
-        """
-        <div style="
-          border-radius: 18px; padding: 18px;
-          background: linear-gradient(135deg, rgba(37,99,235,.10), rgba(16,185,129,.10));
-          border: 1px solid rgba(37,99,235,.18); margin-bottom: 14px;">
-          <div style="font-weight:800; font-size:1.25rem;">🧩 Feature Selection Studio</div>
-          <div class="muted">Run a selector and receive a <b>ready-to-train</b> dataset (selected features + Target_1..Target_7).</div>
+        f"""
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
+          <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🧩</div>
+          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Automated Feature Selection</h1>
+          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
+            Intelligently select the most impactful features using advanced selection algorithms and machine learning techniques
+          </p>
         </div>
-        """, unsafe_allow_html=True
+        """,
+        unsafe_allow_html=True,
     )
 
     variants, train_idx, test_idx = _variants_from_session()
@@ -470,11 +482,12 @@ def page_feature_selection():
     with st.spinner("Selecting features…"):
         pipe.fit(X, y, option=opt_choice)
 
-    # Build ready-to-train datasets: selected + Target_1..7 (from variant)
+    # Build ready-to-train datasets: selected + Target_1..7 + datetime columns (from variant)
     filtered_datasets: Dict[int, pd.DataFrame] = {}
     for opt, feats in pipe.selected_features.items():
         feats = list(dict.fromkeys(feats))
-        keep_cols = [c for c in feats + targets_1_7 if c in dfv.columns]
+        # Include datetime columns in the output datasets (for plotting/tracking)
+        keep_cols = [c for c in date_like + feats + targets_1_7 if c in dfv.columns]
         filtered = dfv[keep_cols].copy() if keep_cols else dfv.copy()
         filtered_datasets[opt] = filtered
 
@@ -609,12 +622,104 @@ def page_feature_selection():
 
 # ---------- Entrypoint ----------
 def main():
-    try:
-        from app_core.ui.theme import apply_css
-        apply_css()
+    apply_css()
+    inject_sidebar_style()
+    render_sidebar_brand()
 
-    except Exception:
-        pass
+    # Fluorescent effects
+    st.markdown("""
+    <style>
+    /* ========================================
+       FLUORESCENT EFFECTS FOR AUTOMATED FEATURE SELECTION
+       ======================================== */
+
+    @keyframes float-orb {
+        0%, 100% {
+            transform: translate(0, 0) scale(1);
+            opacity: 0.25;
+        }
+        50% {
+            transform: translate(30px, -30px) scale(1.05);
+            opacity: 0.35;
+        }
+    }
+
+    .fluorescent-orb {
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(70px);
+    }
+
+    .orb-1 {
+        width: 350px;
+        height: 350px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
+        top: 15%;
+        right: 20%;
+        animation: float-orb 25s ease-in-out infinite;
+    }
+
+    .orb-2 {
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+        bottom: 20%;
+        left: 15%;
+        animation: float-orb 30s ease-in-out infinite;
+        animation-delay: 5s;
+    }
+
+    @keyframes sparkle {
+        0%, 100% {
+            opacity: 0;
+            transform: scale(0);
+        }
+        50% {
+            opacity: 0.6;
+            transform: scale(1);
+        }
+    }
+
+    .sparkle {
+        position: fixed;
+        width: 3px;
+        height: 3px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 2;
+        animation: sparkle 3s ease-in-out infinite;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+    }
+
+    .sparkle-1 { top: 25%; left: 35%; animation-delay: 0s; }
+    .sparkle-2 { top: 65%; left: 70%; animation-delay: 1s; }
+    .sparkle-3 { top: 45%; left: 15%; animation-delay: 2s; }
+
+    @media (max-width: 768px) {
+        .fluorescent-orb {
+            width: 200px !important;
+            height: 200px !important;
+            filter: blur(50px);
+        }
+        .sparkle {
+            display: none;
+        }
+    }
+    </style>
+
+    <!-- Fluorescent Floating Orbs -->
+    <div class="fluorescent-orb orb-1"></div>
+    <div class="fluorescent-orb orb-2"></div>
+
+    <!-- Sparkle Particles -->
+    <div class="sparkle sparkle-1"></div>
+    <div class="sparkle sparkle-2"></div>
+    <div class="sparkle sparkle-3"></div>
+    """, unsafe_allow_html=True)
+
     page_feature_selection()
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import streamlit as st
 from .theme import (PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-                    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, GRID_COLOR, CARD_BG_LIGHT)
+                    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG)
 
 def header(title: str, subtitle: str, icon: str = "🩺"):
     """Paste your current header() function here (no design changes)."""
@@ -20,13 +20,14 @@ def header(title: str, subtitle: str, icon: str = "🩺"):
 
 def add_grid(fig):
     """Paste your existing add_grid(fig) implementation here to keep plot styling consistent."""
-    fig.update_xaxes(showgrid=True, gridcolor=GRID_COLOR, zeroline=False,
-                     showline=True, linecolor=GRID_COLOR,
+    grid_color = 'rgba(255, 255, 255, 0.2)'
+    fig.update_xaxes(showgrid=True, gridcolor=grid_color, zeroline=False,
+                     showline=True, linecolor=grid_color,
                      tickfont=dict(color=SUBTLE_TEXT), title_font=dict(color=TEXT_COLOR))
-    fig.update_yaxes(showgrid=True, gridcolor=GRID_COLOR, zeroline=False,
-                     showline=True, linecolor=GRID_COLOR,
+    fig.update_yaxes(showgrid=True, gridcolor=grid_color, zeroline=False,
+                     showline=True, linecolor=grid_color,
                      tickfont=dict(color=SUBTLE_TEXT), title_font=dict(color=TEXT_COLOR))
-    fig.update_layout(plot_bgcolor=CARD_BG_LIGHT, paper_bgcolor=CARD_BG_LIGHT,
+    fig.update_layout(plot_bgcolor=CARD_BG, paper_bgcolor=CARD_BG,
                       font=dict(family="Segoe UI, sans-serif", size=12, color=TEXT_COLOR),
                       title_font=dict(color=TEXT_COLOR))
     return fig

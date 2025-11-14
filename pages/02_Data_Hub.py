@@ -1,8 +1,6 @@
 # =============================================================================
-# pages/02_Data_Hub_enhanced.py — Data Integration Hub (Pro Prototype)
-# Matches the dashboard’s clean template: hero strip, tabs for uploads, previews,
-# compact data-health summaries, and a context-aware CTA to “Data Preprocessing Studio”.
-# Defensive: runs even if some app_core modules are missing.
+# pages/02_Data_Hub.py — Data Integration Hub (Premium Design)
+# Upload and manage patient, weather, and calendar data with premium UI.
 # =============================================================================
 from __future__ import annotations
 
@@ -12,32 +10,12 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
-# ---- Theme / framework fallbacks ------------------------------------------------
-try:
-    from app_core.ui.theme import apply_css
-    from app_core.ui.theme import (
-        PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-        DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
-    )
-except Exception:
-    PRIMARY_COLOR   = "#2563eb"
-    SECONDARY_COLOR = "#8b5cf6"
-    SUCCESS_COLOR   = "#10b981"
-    WARNING_COLOR   = "#f59e0b"
-    DANGER_COLOR    = "#ef4444"
-    TEXT_COLOR      = "#0f172a"
-    SUBTLE_TEXT     = "#64748b"
-
-    def apply_css():
-        st.markdown(
-            """
-            <style>
-            .muted {color:#6b7280}
-            .metric-card {border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:#fff;}
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+from app_core.ui.theme import apply_css
+from app_core.ui.theme import (
+    PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
+)
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
 try:
     from app_core.state.session import init_state
@@ -94,36 +72,7 @@ except Exception:
             except Exception as e:
                 st.error(f"Failed to load {title}: {e}")
 
-# ---- Local CSS to mirror dashboard style ---------------------------------------
-def _datahub_css():
-    st.markdown(
-        f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        html, body, [class*='css'] {{ font-family: 'Inter', system-ui, sans-serif; }}
 
-        .hero {{
-            border-radius: 20px; padding: 28px; color: #0b1220;
-            background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(99,102,241,.08), rgba(20,184,166,.12));
-            border: 1px solid rgba(37,99,235,.25);
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,.08), 0 10px 10px -5px rgba(0,0,0,.04);
-            position: relative; overflow: hidden; margin-bottom: 18px;
-        }}
-        .hero-title {{
-            font-size: 1.8rem; font-weight: 800; margin: 0 0 6px; letter-spacing: -0.02em;
-            background: linear-gradient(135deg, {TEXT_COLOR}, {PRIMARY_COLOR});
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }}
-        .hero-sub {{ color: {SUBTLE_TEXT}; font-size: 1.0rem; margin: 0; }}
-
-        .section-card {{ border:1px solid #e5e7eb; border-radius:16px; padding:14px; background:#fff; }}
-        .section-title {{ font-weight:800; font-size:1.05rem; margin-bottom:8px; color:{TEXT_COLOR}; }}
-        .badge-ok {{ color:{SUCCESS_COLOR}; font-weight:700; }}
-        .badge-warn {{ color:{WARNING_COLOR}; font-weight:700; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 # ---- Small utilities ------------------------------------------------------------
 def _date_col(df: pd.DataFrame) -> Optional[str]:
@@ -172,16 +121,123 @@ def _go_preprocessing():
             pass
     st.rerun()
 
+# ---- Page Configuration ----
+st.set_page_config(
+    page_title="Data Hub - HealthForecast AI",
+    page_icon="📤",
+    layout="wide",
+)
+
 # ---- Page body -----------------------------------------------------------------
 def page_data_hub():
-    _datahub_css()
+    # Apply premium theme and sidebar
+    apply_css()
+    inject_sidebar_style()
+    render_sidebar_brand()
 
-    # HERO (aligned with dashboard styling)
+    # Apply fluorescent effects
+    st.markdown("""
+    <style>
+    /* ========================================
+       FLUORESCENT EFFECTS FOR DATA HUB
+       ======================================== */
+
+    @keyframes float-orb {
+        0%, 100% {
+            transform: translate(0, 0) scale(1);
+            opacity: 0.25;
+        }
+        50% {
+            transform: translate(30px, -30px) scale(1.05);
+            opacity: 0.35;
+        }
+    }
+
+    .fluorescent-orb {
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(70px);
+    }
+
+    .orb-1 {
+        width: 350px;
+        height: 350px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
+        top: 15%;
+        right: 20%;
+        animation: float-orb 25s ease-in-out infinite;
+    }
+
+    .orb-2 {
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+        bottom: 20%;
+        left: 15%;
+        animation: float-orb 30s ease-in-out infinite;
+        animation-delay: 5s;
+    }
+
+    @keyframes sparkle {
+        0%, 100% {
+            opacity: 0;
+            transform: scale(0);
+        }
+        50% {
+            opacity: 0.6;
+            transform: scale(1);
+        }
+    }
+
+    .sparkle {
+        position: fixed;
+        width: 3px;
+        height: 3px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 2;
+        animation: sparkle 3s ease-in-out infinite;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+    }
+
+    .sparkle-1 { top: 25%; left: 35%; animation-delay: 0s; }
+    .sparkle-2 { top: 65%; left: 70%; animation-delay: 1s; }
+    .sparkle-3 { top: 45%; left: 15%; animation-delay: 2s; }
+
+    @media (max-width: 768px) {
+        .fluorescent-orb {
+            width: 200px !important;
+            height: 200px !important;
+            filter: blur(50px);
+        }
+        .sparkle {
+            display: none;
+        }
+    }
+    </style>
+
+    <!-- Fluorescent Floating Orbs -->
+    <div class="fluorescent-orb orb-1"></div>
+    <div class="fluorescent-orb orb-2"></div>
+
+    <!-- Sparkle Particles -->
+    <div class="sparkle sparkle-1"></div>
+    <div class="sparkle sparkle-2"></div>
+    <div class="sparkle sparkle-3"></div>
+    """, unsafe_allow_html=True)
+
+    # Premium Hero Header
     st.markdown(
         f"""
-        <div class='hero'>
-          <div class='hero-title'>📤 Data Integration Hub</div>
-          <p class='hero-sub'>Upload and validate your source datasets. Patient, weather, and calendar files are supported.</p>
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
+          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>📤</div>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Data Integration Hub</h1>
+          <p class='hf-feature-description' style='font-size: 1rem; max-width: 700px; margin: 0 auto;'>
+            Upload and manage your patient, weather, and calendar data
+          </p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -191,57 +247,164 @@ def page_data_hub():
     for k in ["patient_data", "weather_data", "calendar_data"]:
         st.session_state.setdefault(k, None)
 
-    # Tabs
-    t1, t2, t3 = st.tabs(["📊 Patient Data", "🌤️ Weather Data", "📅 Calendar Data"])
+    # ========================================================================
+    # THREE-COLUMN GRID LAYOUT FOR DATA UPLOAD CARDS
+    # ========================================================================
+    col1, col2, col3 = st.columns(3)
 
-    with t1:
-        _upload_generic("📊 Patient Arrival Data", "patient", "datetime")
-        df = st.session_state.get("patient_data")
-        st.markdown("<div class='section-title'>Preview</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            st.dataframe(df.head(20), use_container_width=True)
-            st.caption(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
-            _data_health(df)
-        else:
-            st.info("Upload a Patient dataset to preview.")
+    # ========================================================================
+    # PATIENT DATA CARD (Column 1)
+    # ========================================================================
+    with col1:
+        st.markdown("""
+        <div class='hf-feature-card' style='height: 100%; padding: 1.25rem;'>
+            <div style='text-align: center; margin-bottom: 1rem;'>
+                <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2rem;'>📊</div>
+                <h2 class='hf-feature-title' style='margin: 0; font-size: 1.25rem;'>Patient Data</h2>
+                <p class='hf-feature-description' style='margin: 0.5rem 0 0 0; font-size: 0.8125rem;'>Historical arrival records</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        _upload_generic("Upload CSV", "patient", "datetime")
+        df_patient = st.session_state.get("patient_data")
+
+        if isinstance(df_patient, pd.DataFrame) and not df_patient.empty:
+            st.markdown("<div style='margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.06);'></div>", unsafe_allow_html=True)
+            st.metric("Rows", f"{df_patient.shape[0]:,}")
+            st.metric("Columns", df_patient.shape[1])
+
+            dcol = _date_col(df_patient)
+            if dcol:
+                dt = pd.to_datetime(df_patient[dcol], errors="coerce")
+                if dt.notna().any():
+                    st.caption(f"📅 {dt.min().date()} → {dt.max().date()}")
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with t2:
-        _upload_generic("🌤️ Weather Data", "weather", "datetime")
-        df = st.session_state.get("weather_data")
-        st.markdown("<div class='section-title'>Preview</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            st.dataframe(df.head(20), use_container_width=True)
-            st.caption(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
-            _data_health(df)
-        else:
-            st.info("Upload a Weather dataset to preview.")
+    # ========================================================================
+    # WEATHER DATA CARD (Column 2)
+    # ========================================================================
+    with col2:
+        st.markdown("""
+        <div class='hf-feature-card' style='height: 100%; padding: 1.25rem;'>
+            <div style='text-align: center; margin-bottom: 1rem;'>
+                <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2rem;'>🌤️</div>
+                <h2 class='hf-feature-title' style='margin: 0; font-size: 1.25rem;'>Weather Data</h2>
+                <p class='hf-feature-description' style='margin: 0.5rem 0 0 0; font-size: 0.8125rem;'>Meteorological conditions</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        _upload_generic("Upload CSV", "weather", "datetime")
+        df_weather = st.session_state.get("weather_data")
+
+        if isinstance(df_weather, pd.DataFrame) and not df_weather.empty:
+            st.markdown("<div style='margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.06);'></div>", unsafe_allow_html=True)
+            st.metric("Rows", f"{df_weather.shape[0]:,}")
+            st.metric("Columns", df_weather.shape[1])
+
+            dcol = _date_col(df_weather)
+            if dcol:
+                dt = pd.to_datetime(df_weather[dcol], errors="coerce")
+                if dt.notna().any():
+                    st.caption(f"📅 {dt.min().date()} → {dt.max().date()}")
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    with t3:
-        _upload_generic("📅 Calendar Data", "calendar", "date")
-        df = st.session_state.get("calendar_data")
-        st.markdown("<div class='section-title'>Preview</div>", unsafe_allow_html=True)
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            st.dataframe(df.head(20), use_container_width=True)
-            st.caption(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
-            _data_health(df)
-        else:
-            st.info("Upload a Calendar dataset to preview.")
+    # ========================================================================
+    # CALENDAR DATA CARD (Column 3)
+    # ========================================================================
+    with col3:
+        st.markdown("""
+        <div class='hf-feature-card' style='height: 100%; padding: 1.25rem;'>
+            <div style='text-align: center; margin-bottom: 1rem;'>
+                <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2rem;'>📅</div>
+                <h2 class='hf-feature-title' style='margin: 0; font-size: 1.25rem;'>Calendar Data</h2>
+                <p class='hf-feature-description' style='margin: 0.5rem 0 0 0; font-size: 0.8125rem;'>Holidays & events</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        _upload_generic("Upload CSV", "calendar", "date")
+        df_calendar = st.session_state.get("calendar_data")
+
+        if isinstance(df_calendar, pd.DataFrame) and not df_calendar.empty:
+            st.markdown("<div style='margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.06);'></div>", unsafe_allow_html=True)
+            st.metric("Rows", f"{df_calendar.shape[0]:,}")
+            st.metric("Columns", df_calendar.shape[1])
+
+            dcol = _date_col(df_calendar)
+            if dcol:
+                dt = pd.to_datetime(df_calendar[dcol], errors="coerce")
+                if dt.notna().any():
+                    st.caption(f"📅 {dt.min().date()} → {dt.max().date()}")
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Footer CTA — enabled only when all three sources are loaded
+    # ========================================================================
+    # DETAILED DATA PREVIEW SECTION (EXPANDABLE)
+    # ========================================================================
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
+    # Get all loaded datasets
+    df_patient = st.session_state.get("patient_data")
+    df_weather = st.session_state.get("weather_data")
+    df_calendar = st.session_state.get("calendar_data")
+
+    # Show detailed previews for loaded data
+    if isinstance(df_patient, pd.DataFrame) and not df_patient.empty:
+        with st.expander("📊 Patient Data - Detailed View", expanded=False):
+            st.dataframe(df_patient.head(20), use_container_width=True)
+            st.markdown("**Data Health**")
+            _data_health(df_patient)
+
+    if isinstance(df_weather, pd.DataFrame) and not df_weather.empty:
+        with st.expander("🌤️ Weather Data - Detailed View", expanded=False):
+            st.dataframe(df_weather.head(20), use_container_width=True)
+            st.markdown("**Data Health**")
+            _data_health(df_weather)
+
+    if isinstance(df_calendar, pd.DataFrame) and not df_calendar.empty:
+        with st.expander("📅 Calendar Data - Detailed View", expanded=False):
+            st.dataframe(df_calendar.head(20), use_container_width=True)
+            st.markdown("**Data Health**")
+            _data_health(df_calendar)
+
+    # Premium Footer CTA
     all_loaded = all([
         bool(st.session_state.get("patient_data")  is not None and not getattr(st.session_state.get("patient_data"),  "empty", True)),
         bool(st.session_state.get("weather_data")  is not None and not getattr(st.session_state.get("weather_data"),  "empty", True)),
         bool(st.session_state.get("calendar_data") is not None and not getattr(st.session_state.get("calendar_data"), "empty", True)),
     ])
 
-    st.markdown("\n")
-    c1, c2, c3 = st.columns([1, 1, 1])
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
+    # Status Summary Card
+    st.markdown(f"""
+    <div class='hf-feature-card' style='text-align: center; margin-bottom: 1.5rem; padding: 1.5rem;'>
+        <h3 class='hf-feature-title' style='font-size: 1.125rem; margin-bottom: 1rem;'>📋 Data Upload Status</h3>
+        <div style='display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap;'>
+            <div>
+                <div style='font-size: 1.25rem; margin-bottom: 0.25rem;'>
+                    {'✅' if st.session_state.get("patient_data") is not None else '⏳'}
+                </div>
+                <div style='color: {SUBTLE_TEXT}; font-size: 0.8125rem;'>Patient Data</div>
+            </div>
+            <div>
+                <div style='font-size: 1.25rem; margin-bottom: 0.25rem;'>
+                    {'✅' if st.session_state.get("weather_data") is not None else '⏳'}
+                </div>
+                <div style='color: {SUBTLE_TEXT}; font-size: 0.8125rem;'>Weather Data</div>
+            </div>
+            <div>
+                <div style='font-size: 1.25rem; margin-bottom: 0.25rem;'>
+                    {'✅' if st.session_state.get("calendar_data") is not None else '⏳'}
+                </div>
+                <div style='color: {SUBTLE_TEXT}; font-size: 0.8125rem;'>Calendar Data</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         if all_loaded:
             if st.button("🧠 Continue to Data Preprocessing Studio", use_container_width=True, type="primary"):
@@ -254,11 +417,7 @@ def page_data_hub():
                 help="Upload all three datasets to proceed.",
             )
 
-# ---- Entrypoint -----------------------------------------------------------------
-def main():
-    apply_css()
-    init_state()
-    page_data_hub()
+init_state()
+page_data_hub()
 
-if __name__ == "__main__":
-    main()
+
