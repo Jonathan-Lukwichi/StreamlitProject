@@ -1,0 +1,124 @@
+# =============================================================================
+# .gitignore for Python/Streamlit Forecast Application
+# =============================================================================
+
+# Python Cache & Compiled Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE & Editor Configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code Configuration
+.claude/
+
+# Streamlit Cache
+.streamlit/
+
+# Data Files (exclude large datasets and sensitive data)
+data/
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+
+# Model Artifacts (trained models can be large)
+models/
+*.joblib
+*.pt
+*.pth
+*.onnx
+*.pb
+
+# Logs & Temporary Files
+logs/
+*.log
+*.tmp
+*.temp
+*.cache
+
+# Environment Variables (sensitive credentials)
+.env
+.env.local
+.env.*.local
+credentials.json
+secrets.toml
+
+# OS-Specific Files
+Thumbs.db
+Desktop.ini
+.DS_Store
+._*
+
+# Build & Distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# MyPy Type Checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyright
+pyrightconfig.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation Builds
+docs/_build/
+site/
+
+# Assets (optional - uncomment if you want to exclude large media files)
+# app_core/assets/
+# *.png
+# *.jpg
+# *.jpeg
+# *.gif
+# *.svg
+
+# Backup Files
+*.bak
+*.backup
+*~
+
+# Package Manager
+pip-log.txt
+pip-delete-this-directory.txt
