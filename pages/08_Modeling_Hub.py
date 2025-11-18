@@ -1441,12 +1441,6 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
             use_container_width=True
         )
 
-    st.divider()
-
-    # Detailed metrics table in expander
-    with st.expander("📋 Detailed Metrics by Horizon", expanded=False):
-        st.dataframe(results_df, use_container_width=True)
-
 # -----------------------------------------------------------------------------
 # MACHINE LEARNING (LSTM / ANN / XGBoost)
 # -----------------------------------------------------------------------------
