@@ -18,6 +18,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.plots import build_multihorizon_results_dashboard
 
 st.set_page_config(
     page_title="Modeling Hub - HealthForecast AI",
@@ -550,6 +551,26 @@ def _extract_sarimax_metrics():
         "Accuracy": _mean_from_any(results_df, ["Test_Acc", "Accuracy_%", "Accuracy"]),
     }
 
+def _extract_ml_metrics():
+    """Extract average metrics from ML multi-horizon results."""
+    ml_mh_results = st.session_state.get("ml_mh_results")
+    if ml_mh_results is None:
+        return None
+
+    results_df = ml_mh_results.get("results_df")
+    if results_df is None or results_df.empty:
+        return None
+
+    results_df = _sanitize_metrics_df(results_df)
+
+    return {
+        "MAE": _mean_from_any(results_df, ["Test_MAE", "MAE"]),
+        "RMSE": _mean_from_any(results_df, ["Test_RMSE", "RMSE"]),
+        "MAPE": _mean_from_any(results_df, ["Test_MAPE", "MAPE_%", "MAPE"]),
+        "Accuracy": _mean_from_any(results_df, ["Test_Acc", "Accuracy_%", "Accuracy"]),
+        "Model": results_df["Model"].iloc[0] if "Model" in results_df.columns else "ML Model",
+    }
+
 # -----------------------------------------------------------------------------
 # BENCHMARKS (ARIMA / SARIMAX)
 # -----------------------------------------------------------------------------
@@ -621,25 +642,32 @@ def page_benchmarks():
     # Extract metrics from session state
     arima_metrics = _extract_arima_metrics()
     sarimax_metrics = _extract_sarimax_metrics()
+    ml_metrics = _extract_ml_metrics()
 
     # Check if any results are available
-    has_results = arima_metrics is not None or sarimax_metrics is not None
+    has_results = arima_metrics is not None or sarimax_metrics is not None or ml_metrics is not None
 
     if not has_results:
         st.info(
-            "📊 **No benchmark results available yet.** Train ARIMA or SARIMAX models in the **Benchmarks** page (Page 05) to see performance metrics here."
+            "📊 **No benchmark results available yet.**\n\n"
+            "- Train **ARIMA/SARIMAX** models in the **Benchmarks** page (Page 05)\n"
+            "- Train **ML models** in the **Machine Learning** tab above\n\n"
+            "Results will appear here automatically."
         )
 
         # Show example of what will appear
         with st.expander("📖 What you'll see here", expanded=False):
             st.markdown("""
-            After training models in the Benchmarks page, this dashboard will display:
+            After training models, this dashboard will display:
 
             - 📈 **ARIMA Performance** - Average metrics across all forecast horizons
             - 📊 **SARIMAX Performance** - Average metrics across all forecast horizons
+            - 🧮 **ML Model Performance** - Average metrics across all forecast horizons (XGBoost, LSTM, ANN)
             - 📉 **Key Metrics** - MAE, RMSE, MAPE, and Accuracy displayed as interactive KPI cards
 
-            **To get started:** Navigate to **Benchmarks** (Page 05) → Configure and train models → Return here
+            **To get started:**
+            - For ARIMA/SARIMAX: Navigate to **Benchmarks** (Page 05) → Configure and train
+            - For ML models: **Machine Learning** tab → Configure and train
             """)
 
         return
@@ -715,6 +743,42 @@ def page_benchmarks():
                 use_container_width=True
             )
 
+    # ML Model Results
+    if ml_metrics is not None:
+        model_name = ml_metrics.get("Model", "ML Model")
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 1rem 0 0.5rem 0;'>
+              <h3 style='font-size: 1.1rem; font-weight: 700; color: {SUCCESS_COLOR}; margin: 0;'>
+                🧮 {model_name} Performance (Avg Across All Horizons)
+              </h3>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", ml_metrics["MAE"], "", PRIMARY_COLOR),
+                use_container_width=True
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", ml_metrics["RMSE"], "", SECONDARY_COLOR),
+                use_container_width=True
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", ml_metrics["MAPE"], "%", WARNING_COLOR),
+                use_container_width=True
+            )
+        with col4:
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", ml_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                use_container_width=True
+            )
+
     # Additional info
     st.markdown(
         f"""
@@ -724,7 +788,11 @@ def page_benchmarks():
                     border-radius: 6px;
                     margin-top: 1rem;'>
           <p style='margin: 0; color: {TEXT_COLOR}; font-size: 0.85rem;'>
-            💡 <strong>Note:</strong> Metrics averaged across all forecast horizons. For per-horizon analysis, visit <strong>Benchmarks</strong> (Page 05).
+            💡 <strong>Note:</strong> Metrics averaged across all forecast horizons. For per-horizon analysis, visit:
+            <ul style='margin: 0.5rem 0 0 1.5rem;'>
+              <li><strong>Benchmarks</strong> (Page 05) for ARIMA/SARIMAX</li>
+              <li><strong>Machine Learning</strong> tab for ML models</li>
+            </ul>
           </p>
         </div>
         """,
@@ -732,7 +800,199 @@ def page_benchmarks():
     )
 
 # -----------------------------------------------------------------------------
-# ML Training Pipeline
+# ML Multi-Horizon Training Pipeline
+# -----------------------------------------------------------------------------
+def run_ml_multihorizon(
+    model_type: str,
+    config: dict,
+    df: pd.DataFrame,
+    feature_cols: list,
+    split_ratio: float,
+    horizons: int = 7,
+    date_col: str = None,
+) -> dict:
+    """
+    Train independent ML models for Target_1..Target_H (multi-horizon forecasting).
+
+    Args:
+        model_type: Model name ("LSTM", "ANN", or "XGBoost")
+        config: Model configuration dictionary
+        df: Training dataframe with Target_1...Target_H columns
+        feature_cols: List of feature column names
+        split_ratio: Train/validation split ratio
+        horizons: Number of forecast horizons (default 7)
+        date_col: Optional datetime column for visualization
+
+    Returns:
+        dict: Multi-horizon results with structure:
+            - results_df: DataFrame with metrics per horizon
+            - per_h: Dict mapping horizon to predictions/actuals/metrics
+            - successful: List of successful horizons
+    """
+    import time
+    from datetime import datetime
+
+    rows = []
+    per_h = {}
+    successful = []
+
+    # Parameter sharing: find optimal parameters once for h=1, reuse for h>1 (if using auto mode)
+    shared_params = None
+
+    for h in range(1, int(horizons) + 1):
+        target_col = f"Target_{h}"
+
+        if target_col not in df.columns:
+            continue
+
+        try:
+            # Train model for this horizon
+            result = run_ml_model(
+                model_type=model_type,
+                config=config,
+                df=df,
+                target_col=target_col,
+                feature_cols=feature_cols,
+                split_ratio=split_ratio,
+            )
+
+            if not result.get("success", False):
+                continue
+
+            # Extract metrics
+            train_metrics = result.get("train_metrics", {})
+            val_metrics = result.get("val_metrics", {})
+            predictions = result.get("predictions")
+
+            # Store per-horizon data
+            rows.append({
+                "Horizon": h,
+                "Model": model_type,
+                "Train_MAE": train_metrics.get("MAE", np.nan),
+                "Train_RMSE": train_metrics.get("RMSE", np.nan),
+                "Train_MAPE": train_metrics.get("MAPE", np.nan),
+                "Train_Acc": train_metrics.get("Accuracy", np.nan),
+                "Test_MAE": val_metrics.get("MAE", np.nan),
+                "Test_RMSE": val_metrics.get("RMSE", np.nan),
+                "Test_MAPE": val_metrics.get("MAPE", np.nan),
+                "Test_Acc": val_metrics.get("Accuracy", np.nan),
+                "Train_N": result.get("n_train", 0),
+                "Test_N": result.get("n_val", 0),
+            })
+
+            per_h[h] = {
+                "y_train": None,  # Not stored currently
+                "y_test": predictions["actual"].values if predictions is not None else None,
+                "forecast": predictions["predicted"].values if predictions is not None else None,
+                "datetime": predictions["datetime"].values if predictions is not None else None,
+                "ci_lo": None,  # ML models don't have confidence intervals by default
+                "ci_hi": None,
+                "params": result.get("params", {}),
+            }
+
+            successful.append(h)
+
+        except Exception as e:
+            # Skip failed horizons
+            continue
+
+    results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
+
+    return {
+        "results_df": results_df,
+        "per_h": per_h,
+        "successful": successful,
+    }
+
+def ml_to_multihorizon_artifacts(ml_out: dict):
+    """
+    Convert ML multi-horizon results to unified artifact format (compatible with ARIMA/SARIMAX).
+
+    Args:
+        ml_out: Multi-horizon results from run_ml_multihorizon()
+
+    Returns:
+        tuple: (metrics_df, F, L, U, test_eval_df, train, res, horizons)
+            - metrics_df: DataFrame with formatted metrics
+            - F: Forecast matrix (T x H)
+            - L: Lower CI matrix (T x H) - None for ML
+            - U: Upper CI matrix (T x H) - None for ML
+            - test_eval_df: DataFrame with actual values per horizon
+            - train: Training data (None for ML)
+            - res: Model results (None for ML)
+            - horizons: List of horizon indices
+    """
+    per_h = ml_out.get("per_h", {})
+    results_df = ml_out.get("results_df")
+    successful = ml_out.get("successful", [])
+
+    if not per_h or not successful:
+        # Return empty structure
+        empty_df = pd.DataFrame()
+        empty_array = np.array([])
+        return (results_df if results_df is not None else empty_df,
+                empty_array, empty_array, empty_array, empty_df,
+                None, None, [])
+
+    # Get dimensions
+    horizons = sorted(successful)
+    H = len(horizons)
+
+    # Get test set length from first horizon
+    first_h = horizons[0]
+    y_test_first = per_h[first_h].get("y_test")
+    T = len(y_test_first) if y_test_first is not None else 0
+
+    if T == 0:
+        # No test data
+        return (results_df, np.array([]), np.array([]), np.array([]),
+                pd.DataFrame(), None, None, horizons)
+
+    # Initialize matrices
+    F = np.full((T, H), np.nan)
+    L = None  # ML models don't have confidence intervals
+    U = None
+    test_eval = {}
+
+    # Fill matrices from per_h data
+    for idx, h in enumerate(horizons):
+        h_data = per_h[h]
+
+        # Get forecast and actuals
+        fc = h_data.get("forecast")
+        yt = h_data.get("y_test")
+
+        if fc is not None and len(fc) == T:
+            F[:, idx] = fc
+
+        if yt is not None and len(yt) == T:
+            test_eval[f"Target_{h}"] = yt
+
+    # Create test_eval DataFrame
+    test_eval_df = pd.DataFrame(test_eval)
+
+    # Format metrics_df for compatibility
+    metrics_df = results_df.copy() if results_df is not None else pd.DataFrame()
+    if not metrics_df.empty and "Horizon" in metrics_df.columns:
+        # Rename columns to match expected format
+        rename_map = {
+            "Test_MAE": "MAE",
+            "Test_RMSE": "RMSE",
+            "Test_MAPE": "MAPE_%",
+            "Test_Acc": "Accuracy_%"
+        }
+        for old_col, new_col in rename_map.items():
+            if old_col in metrics_df.columns and new_col not in metrics_df.columns:
+                metrics_df[new_col] = metrics_df[old_col]
+
+        # Format Horizon column as "h=1", "h=2", etc.
+        if metrics_df["Horizon"].dtype in ['int64', 'int32']:
+            metrics_df["Horizon"] = metrics_df["Horizon"].apply(lambda x: f"h={x}")
+
+    return (metrics_df, F, L, U, test_eval_df, None, None, horizons)
+
+# -----------------------------------------------------------------------------
+# ML Training Pipeline (Single Horizon)
 # -----------------------------------------------------------------------------
 def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
                  target_col: str, feature_cols: list, split_ratio: float):
@@ -1012,6 +1272,84 @@ def render_ml_results(results: dict):
         with col4:
             st.metric("Train Accuracy", f"{train_metrics['Accuracy']:.2f}%")
 
+def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
+    """
+    Render multi-horizon ML training results with comprehensive visualizations.
+
+    Args:
+        ml_mh_results: Multi-horizon results from run_ml_multihorizon()
+        model_name: Name of the model (e.g., "XGBoost", "LSTM", "ANN")
+    """
+    if not ml_mh_results:
+        st.warning("No multi-horizon results available.")
+        return
+
+    results_df = ml_mh_results.get("results_df")
+    successful = ml_mh_results.get("successful", [])
+
+    if results_df is None or results_df.empty or not successful:
+        st.error("❌ **Training Failed** - No successful horizons")
+        return
+
+    # Success summary
+    st.success(f"✅ **Multi-Horizon {model_name} Training Completed!**")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Successful Horizons", f"{len(successful)}/{ml_mh_results.get('successful', []).__len__() if ml_mh_results else 0}")
+    with col2:
+        avg_test_mae = results_df["Test_MAE"].mean()
+        st.metric("Avg Test MAE", f"{avg_test_mae:.4f}")
+    with col3:
+        avg_test_acc = results_df["Test_Acc"].mean()
+        st.metric("Avg Test Accuracy", f"{avg_test_acc:.2f}%")
+
+    st.divider()
+
+    # Convert to artifacts for visualization
+    metrics_df, F, L, U, test_eval_df, train, res, horizons = ml_to_multihorizon_artifacts(ml_mh_results)
+
+    # Use the comprehensive multi-horizon dashboard from app_core.plots
+    try:
+        figs = build_multihorizon_results_dashboard(
+            metrics_df=metrics_df,
+            F=F,
+            L=L,
+            U=U,
+            test_eval=test_eval_df,
+            train=train,
+            res=res,
+            horizons=horizons,
+            model_label=model_name,
+        )
+
+        # Display all dashboard figures
+        if figs:
+            for fig_name, fig in figs.items():
+                st.pyplot(fig)
+    except Exception as e:
+        # Fallback to basic metrics table if dashboard fails
+        st.warning(f"⚠️ Could not generate full dashboard visualization: {str(e)}")
+
+        st.markdown("### 📊 Performance Metrics by Horizon")
+        st.dataframe(
+            results_df.style.format({
+                "Train_MAE": "{:.4f}",
+                "Train_RMSE": "{:.4f}",
+                "Train_MAPE": "{:.2f}",
+                "Train_Acc": "{:.2f}",
+                "Test_MAE": "{:.4f}",
+                "Test_RMSE": "{:.4f}",
+                "Test_MAPE": "{:.2f}",
+                "Test_Acc": "{:.2f}",
+            }),
+            use_container_width=True
+        )
+
+    # Detailed metrics table in expander
+    with st.expander("📋 Detailed Metrics by Horizon", expanded=False):
+        st.dataframe(results_df, use_container_width=True)
+
 # -----------------------------------------------------------------------------
 # MACHINE LEARNING (LSTM / ANN / XGBoost)
 # -----------------------------------------------------------------------------
@@ -1090,16 +1428,53 @@ def page_ml():
         help="Proportion of data to use for training"
     )
 
-    # 5. Target & Features Selection (based on selected dataset)
-    target_feature_placeholders(prefix="ml", df=selected_df)
+    # 5. Forecast Horizons Selection
+    st.subheader("⏰ Forecast Horizons")
+    cfg["ml_horizons"] = st.slider(
+        "Number of forecast horizons",
+        min_value=1,
+        max_value=7,
+        value=cfg.get("ml_horizons", 7),
+        help="Train separate models for Target_1 through Target_N (multi-horizon forecasting)"
+    )
 
-    # 6. Run Model Button
+    # 6. Features Selection (based on selected dataset)
+    # Note: No target selection needed for multi-horizon - we train for all Target_1...Target_H
+    st.subheader("🎯 Features Selection")
+
+    if selected_df is not None and not selected_df.empty:
+        # Feature columns are all non-target columns
+        all_columns = selected_df.columns.tolist()
+        feature_columns = [col for col in all_columns if not col.startswith("Target_")]
+
+        if feature_columns:
+            current_features = cfg.get("ml_feature_cols", feature_columns)
+            current_features = [f for f in current_features if f in feature_columns]
+            if not current_features:
+                current_features = feature_columns
+
+            selected_features = st.multiselect(
+                "Feature columns",
+                options=feature_columns,
+                default=current_features,
+                help="Select features to use for training (all selected by default)",
+                key="ml_tf_feats"
+            )
+            cfg["ml_feature_cols"] = selected_features
+
+            st.caption(f"✓ {len(selected_features)} features selected | Training {cfg.get('ml_horizons', 7)} horizons (Target_1...Target_{cfg.get('ml_horizons', 7)})")
+        else:
+            st.warning("⚠️ No feature columns found in dataset")
+            cfg["ml_feature_cols"] = []
+    else:
+        st.caption("Select a dataset above to configure features")
+
+    # 7. Run Model Button
     st.divider()
 
     # Check if all required data is available
     can_run = all([
         selected_df is not None,
-        cfg.get("ml_target_col") is not None,
         cfg.get("ml_feature_cols") and len(cfg.get("ml_feature_cols", [])) > 0
     ])
 
@@ -1107,36 +1482,35 @@ def page_ml():
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             run_button = st.button(
-                f"🚀 Run {cfg['ml_choice']}",
+                f"🚀 Train Multi-Horizon {cfg['ml_choice']}",
                 type="primary",
                 use_container_width=True,
-                help="Train and validate the model"
+                help=f"Train {cfg.get('ml_horizons', 7)} models for horizons 1-{cfg.get('ml_horizons', 7)}"
             )
 
         if run_button:
-            with st.spinner(f"Training {cfg['ml_choice']}..."):
-                results = run_ml_model(
+            with st.spinner(f"Training {cfg['ml_choice']} for {cfg.get('ml_horizons', 7)} horizons..."):
+                results = run_ml_multihorizon(
                     model_type=cfg['ml_choice'],
                     config=cfg,
                     df=selected_df,
-                    target_col=cfg['ml_target_col'],
                     feature_cols=cfg['ml_feature_cols'],
-                    split_ratio=cfg.get('split_ratio', 0.8)
+                    split_ratio=cfg.get('split_ratio', 0.8),
+                    horizons=cfg.get('ml_horizons', 7),
                 )
 
                 # Store results in session state
-                st.session_state["ml_results"] = results
+                st.session_state["ml_mh_results"] = results
 
         # Display results if available
-        if "ml_results" in st.session_state:
+        if "ml_mh_results" in st.session_state:
             st.divider()
-            render_ml_results(st.session_state["ml_results"])
+            render_ml_multihorizon_results(st.session_state["ml_mh_results"], cfg['ml_choice'])
     else:
         st.warning(
             "⚠️ **Cannot run model**\n\n"
             "Please ensure:\n"
             f"- {'✅' if selected_df is not None else '❌'} Dataset is selected\n"
-            f"- {'✅' if cfg.get('ml_target_col') else '❌'} Target variable is selected\n"
             f"- {'✅' if cfg.get('ml_feature_cols') and len(cfg.get('ml_feature_cols', [])) > 0 else '❌'} Features are selected"
         )
 
