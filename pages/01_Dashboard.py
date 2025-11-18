@@ -1152,7 +1152,7 @@ def page_dashboard():
     <div class='forecast-card' style='padding: 2rem 1.75rem;'>
     """, unsafe_allow_html=True)
 
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4, gap="medium")
 
     with kpi_col1:
         status = "Active" if system_active else "Offline"
@@ -1161,7 +1161,7 @@ def page_dashboard():
         color = SUCCESS_COLOR if system_active else DANGER_COLOR
         st.markdown(
             f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
               <span class='kpi-label' style='margin-bottom: 0.5rem;'>System Status</span>
               <div style='margin: 0.75rem 0;'>
                 <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
@@ -1176,7 +1176,7 @@ def page_dashboard():
     with kpi_col2:
         st.markdown(
             f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
               <span class='kpi-label' style='margin-bottom: 0.5rem;'>Datasets Loaded</span>
               <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/3</div>
               <div style='
@@ -1207,7 +1207,7 @@ def page_dashboard():
         label = "Complete" if pipeline_complete else "Pending"
         st.markdown(
             f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
               <span class='kpi-label' style='margin-bottom: 0.5rem;'>Data Pipeline</span>
               <div style='margin: 0.75rem 0;'>
                 <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
@@ -1236,7 +1236,7 @@ def page_dashboard():
                     ratio = std_v / mean_v if mean_v > 0 else np.nan
                     st.markdown(
                         f"""
-                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
                           <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
                           <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{mean_v:,.0f}</div>
                           <div style='font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;'>Mean Patient Count</div>
@@ -1261,7 +1261,7 @@ def page_dashboard():
                 else:
                     st.markdown(
                         """
-                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
                           <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
                           <div style='margin: 0.75rem 0; color: #94a3b8;'>No data</div>
                         </div>
@@ -1271,7 +1271,7 @@ def page_dashboard():
             else:
                 st.markdown(
                     """
-                    <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                    <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
                       <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
                       <div style='margin: 0.75rem 0; color: #94a3b8;'>No data</div>
                     </div>
@@ -1281,7 +1281,7 @@ def page_dashboard():
         else:
             st.markdown(
                 """
-                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
                   <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
                   <div style='margin: 0.75rem 0; color: #94a3b8;'>Load data</div>
                 </div>
