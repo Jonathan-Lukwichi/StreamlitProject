@@ -1361,22 +1361,26 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
     with col1:
         st.plotly_chart(
             _create_kpi_indicator("MAE", avg_test_mae, "", PRIMARY_COLOR),
-            use_container_width=True
+            use_container_width=True,
+            key="ml_kpi_mae"
         )
     with col2:
         st.plotly_chart(
             _create_kpi_indicator("RMSE", avg_test_rmse, "", SECONDARY_COLOR),
-            use_container_width=True
+            use_container_width=True,
+            key="ml_kpi_rmse"
         )
     with col3:
         st.plotly_chart(
             _create_kpi_indicator("MAPE", avg_test_mape, "%", WARNING_COLOR),
-            use_container_width=True
+            use_container_width=True,
+            key="ml_kpi_mape"
         )
     with col4:
         st.plotly_chart(
             _create_kpi_indicator("Accuracy", avg_test_acc, "%", SUCCESS_COLOR),
-            use_container_width=True
+            use_container_width=True,
+            key="ml_kpi_accuracy"
         )
 
     st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
