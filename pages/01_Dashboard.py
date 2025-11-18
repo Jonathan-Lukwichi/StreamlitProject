@@ -1209,6 +1209,121 @@ def page_dashboard():
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
+                    # --- ACTUAL VS FORECAST TIME SERIES GRAPH ---
+                    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class='forecast-card'>
+                        <div class='forecast-header'>
+                            <div>
+                                <div class='forecast-title'>
+                                    📊 Actual vs Forecast Comparison
+                                </div>
+                                <div class='forecast-subtitle'>
+                                    Time series visualization showing model predictions vs actual values
+                                </div>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                    # Create the comparison plot
+                    try:
+                        import matplotlib.pyplot as plt
+                        import matplotlib.dates as mdates
+
+                        # Get data for visualization
+                        # We'll show a window around the selected date
+                        window_days = 30  # Show 30 days before and forecast_days after
+
+                        # Find the range to display
+                        start_idx = max(0, forecast_idx - window_days)
+                        end_idx = min(len(test_eval), forecast_idx + forecast_days + 1)
+
+                        # Extract dates for the window
+                        dates_window = test_eval.index[start_idx:end_idx]
+
+                        # Get actual values for the window (using first target column available)
+                        actual_values = None
+                        for target_col in [f"Target_{i}" for i in range(1, 8)]:
+                            if target_col in test_eval.columns:
+                                actual_values = test_eval[target_col].iloc[start_idx:end_idx].values
+                                break
+
+                        # Create figure with premium styling
+                        fig, ax = plt.subplots(figsize=(14, 6))
+                        fig.patch.set_facecolor('#0f172a')
+                        ax.set_facecolor('#1e293b')
+
+                        # Plot actual values
+                        if actual_values is not None:
+                            ax.plot(dates_window, actual_values,
+                                   label='Actual', linewidth=2.5, color='#22d3ee',
+                                   marker='o', markersize=4, alpha=0.9)
+
+                        # Plot forecasts for each horizon
+                        for h in range(min(forecast_days, F.shape[1])):
+                            forecast_date = base_date + pd.Timedelta(days=h+1)
+                            if forecast_date in dates_window:
+                                forecast_value = F[forecast_idx, h]
+                                lower_value = L[forecast_idx, h]
+                                upper_value = U[forecast_idx, h]
+
+                                # Plot forecast point
+                                ax.plot([forecast_date], [forecast_value],
+                                       marker='s', markersize=8, color='#a78bfa',
+                                       markeredgecolor='#fff', markeredgewidth=1.5,
+                                       zorder=10)
+
+                                # Plot confidence interval
+                                if pd.notna(lower_value) and pd.notna(upper_value):
+                                    ax.fill_between([forecast_date, forecast_date],
+                                                   [lower_value], [upper_value],
+                                                   alpha=0.2, color='#a78bfa')
+
+                        # Add forecast line connecting all forecast points
+                        forecast_dates = [base_date + pd.Timedelta(days=h+1) for h in range(min(forecast_days, F.shape[1]))]
+                        forecast_values = [F[forecast_idx, h] for h in range(min(forecast_days, F.shape[1]))]
+                        valid_forecast = [(d, v) for d, v in zip(forecast_dates, forecast_values) if d in dates_window and pd.notna(v)]
+
+                        if valid_forecast:
+                            f_dates, f_vals = zip(*valid_forecast)
+                            ax.plot(f_dates, f_vals,
+                                   label='Forecast', linewidth=2.5, color='#a78bfa',
+                                   linestyle='--', alpha=0.8)
+
+                        # Add vertical line at forecast start
+                        ax.axvline(x=base_date, color='#ef4444', linestyle=':',
+                                  linewidth=2, alpha=0.6, label='Forecast Start')
+
+                        # Styling
+                        ax.set_xlabel('Date', fontsize=12, color='#cbd5e1', fontweight='600')
+                        ax.set_ylabel('Patient Count', fontsize=12, color='#cbd5e1', fontweight='600')
+                        ax.tick_params(colors='#94a3b8', labelsize=10)
+                        ax.grid(True, alpha=0.15, linestyle='--', linewidth=0.8, color='#475569')
+                        ax.spines['top'].set_visible(False)
+                        ax.spines['right'].set_visible(False)
+                        ax.spines['left'].set_color('#475569')
+                        ax.spines['bottom'].set_color('#475569')
+
+                        # Legend
+                        legend = ax.legend(loc='upper left', framealpha=0.9,
+                                          facecolor='#1e293b', edgecolor='#475569',
+                                          fontsize=10, labelcolor='#cbd5e1')
+                        legend.get_frame().set_linewidth(1.5)
+
+                        # Format x-axis dates
+                        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+                        ax.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(dates_window)//10)))
+                        plt.xticks(rotation=45, ha='right')
+
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        plt.close()
+
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not generate time series comparison graph: {str(e)}")
+
+                    st.markdown("</div>", unsafe_allow_html=True)
+
 
     # ========================================
     # SYSTEM OVERVIEW SECTION
