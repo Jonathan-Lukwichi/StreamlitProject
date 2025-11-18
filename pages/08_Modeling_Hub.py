@@ -953,6 +953,7 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
     L = None  # ML models don't have confidence intervals
     U = None
     test_eval = {}
+    datetime_index = None
 
     # Fill matrices from per_h data
     for idx, h in enumerate(horizons):
@@ -961,6 +962,7 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
         # Get forecast and actuals
         fc = h_data.get("forecast")
         yt = h_data.get("y_test")
+        dt = h_data.get("datetime")
 
         if fc is not None and len(fc) == T:
             F[:, idx] = fc
@@ -968,8 +970,14 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
         if yt is not None and len(yt) == T:
             test_eval[f"Target_{h}"] = yt
 
-    # Create test_eval DataFrame
+        # Get datetime index from first horizon
+        if datetime_index is None and dt is not None and len(dt) == T:
+            datetime_index = pd.to_datetime(dt)
+
+    # Create test_eval DataFrame with datetime index
     test_eval_df = pd.DataFrame(test_eval)
+    if datetime_index is not None:
+        test_eval_df.index = datetime_index
 
     # Format metrics_df for compatibility
     metrics_df = results_df.copy() if results_df is not None else pd.DataFrame()
