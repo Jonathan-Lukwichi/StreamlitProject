@@ -1147,6 +1147,11 @@ def page_dashboard():
     st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
     st.markdown(f"<h2 class='section-header' style='margin-bottom: 1rem;'>📋 System Overview</h2>", unsafe_allow_html=True)
 
+    # Large container card wrapping all 4 KPI cards
+    st.markdown("""
+    <div class='forecast-card' style='padding: 2rem 1.75rem;'>
+    """, unsafe_allow_html=True)
+
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
 
     with kpi_col1:
@@ -1283,6 +1288,9 @@ def page_dashboard():
                 """,
                 unsafe_allow_html=True
             )
+
+    # Close the large container card
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ========================================
     # RECENT ACTIVITY SECTION
