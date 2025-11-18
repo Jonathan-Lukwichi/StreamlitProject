@@ -532,152 +532,405 @@ def page_dashboard():
     st.markdown("<div style='margin-top: 1.75rem;'></div>", unsafe_allow_html=True)
     st.markdown(f"<h2 class='section-header'>🔮 Patient Arrival Forecast</h2>", unsafe_allow_html=True)
 
-    # Enhanced Forecast CSS - Power BI Style
+    # Ultra-Premium Forecast Design - Professional Web Designer Style
     st.markdown("""
     <style>
+    /* ============================================
+       PREMIUM FORECAST DESIGN SYSTEM
+       Modern SaaS Dashboard Aesthetic
+       ============================================ */
+
+    /* --- ADVANCED ANIMATIONS --- */
+    @keyframes shimmer-flow {
+        0% { background-position: -200% center; }
+        100% { background-position: 200% center; }
+    }
+
+    @keyframes glow-pulse {
+        0%, 100% {
+            opacity: 0.5;
+            filter: blur(20px);
+        }
+        50% {
+            opacity: 0.8;
+            filter: blur(25px);
+        }
+    }
+
+    @keyframes float-up {
+        0% {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes scale-in {
+        0% {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes border-dance {
+        0%, 100% {
+            background-position: 0% 50%;
+        }
+        50% {
+            background-position: 100% 50%;
+        }
+    }
+
+    /* --- MAIN FORECAST CONTAINER --- */
     .forecast-card {
-        background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
-        border-radius: 16px;
-        padding: 2rem 1.75rem;
-        border: 1px solid rgba(59, 130, 246, 0.2);
+        background: linear-gradient(145deg,
+            rgba(30, 41, 59, 0.85),
+            rgba(15, 23, 42, 0.95)
+        );
+        border-radius: 20px;
+        padding: 2.5rem 2rem;
+        border: 1.5px solid rgba(59, 130, 246, 0.25);
         box-shadow:
-            0 8px 32px rgba(0, 0, 0, 0.35),
-            0 0 48px rgba(59, 130, 246, 0.12),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(16px);
+            0 20px 60px rgba(0, 0, 0, 0.5),
+            0 0 80px rgba(59, 130, 246, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(20px);
         position: relative;
-        overflow: hidden;
-        height: 100%;
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: visible;
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        animation: scale-in 0.6s ease-out;
     }
 
     .forecast-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(59, 130, 246, 0.3);
+        transform: translateY(-6px);
+        border-color: rgba(59, 130, 246, 0.45);
         box-shadow:
-            0 12px 40px rgba(0, 0, 0, 0.4),
-            0 0 60px rgba(59, 130, 246, 0.18),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            0 30px 80px rgba(0, 0, 0, 0.6),
+            0 0 120px rgba(59, 130, 246, 0.25),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
     }
 
+    /* --- ANIMATED TOP BORDER --- */
     .forecast-card::before {
         content: '';
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, transparent, #3b82f6, #22d3ee, #3b82f6, transparent);
-        background-size: 200% 100%;
-        animation: shimmer 4s linear infinite;
+        height: 4px;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            #3b82f6,
+            #8b5cf6,
+            #ec4899,
+            #3b82f6,
+            transparent
+        );
+        background-size: 300% 100%;
+        animation: shimmer-flow 6s linear infinite;
+        border-radius: 20px 20px 0 0;
     }
 
-    @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
+    /* --- AMBIENT GLOW EFFECT --- */
+    .forecast-card::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+            circle,
+            rgba(59, 130, 246, 0.15) 0%,
+            transparent 70%
+        );
+        pointer-events: none;
+        animation: glow-pulse 4s ease-in-out infinite;
+        z-index: -1;
     }
 
-    .forecast-main {
-        text-align: center;
-        padding: 1.25rem 1rem;
+    /* --- FORECAST MINI CARDS (Individual Day Cards) --- */
+    .forecast-mini-card {
+        position: relative;
+        background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.6),
+            rgba(15, 23, 42, 0.8)
+        );
+        border-radius: 16px;
+        padding: 1.5rem 1rem;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        box-shadow:
+            0 8px 32px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        overflow: hidden;
+        cursor: pointer;
+        animation: float-up 0.5s ease-out;
     }
 
-    .forecast-date {
-        font-size: 1.1875rem;
-        color: #94a3b8;
-        margin-bottom: 0.5rem;
-        font-weight: 600;
-        letter-spacing: 0.3px;
-    }
+    /* --- STAGGERED ANIMATION DELAYS --- */
+    .forecast-mini-card:nth-child(1) { animation-delay: 0.05s; }
+    .forecast-mini-card:nth-child(2) { animation-delay: 0.1s; }
+    .forecast-mini-card:nth-child(3) { animation-delay: 0.15s; }
+    .forecast-mini-card:nth-child(4) { animation-delay: 0.2s; }
+    .forecast-mini-card:nth-child(5) { animation-delay: 0.25s; }
+    .forecast-mini-card:nth-child(6) { animation-delay: 0.3s; }
+    .forecast-mini-card:nth-child(7) { animation-delay: 0.35s; }
 
-    .forecast-value {
-        font-size: 4rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #60a5fa, #a78bfa, #22d3ee);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin: 0.75rem 0;
-        line-height: 1;
-        letter-spacing: -1px;
-        filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.3));
-    }
-
-    .forecast-label {
-        font-size: 0.8125rem;
-        color: #cbd5e1;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        font-weight: 600;
-    }
-
-    .forecast-row {
-        display: flex;
-        align-items: center;
-        padding: 1rem 1.25rem;
-        margin: 0.375rem 0;
-        border-radius: 10px;
-        background: rgba(30, 41, 59, 0.3);
-        border: 1px solid rgba(59, 130, 246, 0.08);
-        transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .forecast-row:hover {
-        background: rgba(59, 130, 246, 0.08);
-        border-color: rgba(59, 130, 246, 0.2);
-        transform: translateX(6px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    }
-
-    .forecast-day {
-        flex: 0 0 75px;
-        font-weight: 700;
-        font-size: 0.9375rem;
-        color: #e2e8f0;
-        letter-spacing: 0.3px;
-    }
-
-    .forecast-date-small {
-        flex: 0 0 85px;
-        color: #94a3b8;
-        font-size: 0.875rem;
-        font-weight: 500;
-    }
-
-    .forecast-predicted {
-        flex: 1;
-        font-size: 1.25rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #3b82f6, #22d3ee);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        text-align: center;
-        letter-spacing: -0.3px;
-    }
-
-    .forecast-confidence {
-        flex: 0 0 120px;
-        text-align: right;
-    }
-
-    .forecast-accuracy-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.375rem 0.75rem;
-        background: rgba(16, 185, 129, 0.12);
-        border: 1px solid rgba(16, 185, 129, 0.25);
-        border-radius: 8px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #10b981;
-        letter-spacing: 0.3px;
+    /* --- CARD GLOW ON HOVER --- */
+    .forecast-mini-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 16px;
+        padding: 2px;
+        background: linear-gradient(
+            135deg,
+            rgba(59, 130, 246, 0),
+            rgba(139, 92, 246, 0.3),
+            rgba(236, 72, 153, 0)
+        );
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.4s ease;
     }
 
     .forecast-mini-card:hover {
-        transform: translateY(-4px) scale(1.02);
-        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);
-        border-color: rgba(59, 130, 246, 0.4) !important;
+        transform: translateY(-8px) scale(1.05);
+        border-color: rgba(59, 130, 246, 0.5);
+        box-shadow:
+            0 20px 60px rgba(0, 0, 0, 0.4),
+            0 0 40px rgba(59, 130, 246, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .forecast-mini-card:hover::before {
+        opacity: 1;
+    }
+
+    /* --- PRIMARY CARD (First Day) EMPHASIS --- */
+    .forecast-mini-card-primary {
+        background: linear-gradient(135deg,
+            rgba(59, 130, 246, 0.25),
+            rgba(139, 92, 246, 0.15)
+        );
+        border: 2px solid rgba(59, 130, 246, 0.4);
+        box-shadow:
+            0 12px 48px rgba(0, 0, 0, 0.4),
+            0 0 60px rgba(59, 130, 246, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .forecast-mini-card-primary:hover {
+        transform: translateY(-10px) scale(1.08);
+        box-shadow:
+            0 25px 70px rgba(0, 0, 0, 0.5),
+            0 0 80px rgba(59, 130, 246, 0.4);
+    }
+
+    /* --- TYPOGRAPHY ENHANCEMENTS --- */
+    .forecast-day-name {
+        font-size: 0.875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #94a3b8;
+        margin-bottom: 0.5rem;
+        transition: color 0.3s ease;
+    }
+
+    .forecast-mini-card:hover .forecast-day-name {
+        color: #cbd5e1;
+    }
+
+    .forecast-date-badge {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        background: rgba(100, 116, 139, 0.15);
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        border: 1px solid rgba(100, 116, 139, 0.2);
+        transition: all 0.3s ease;
+    }
+
+    .forecast-mini-card:hover .forecast-date-badge {
+        background: rgba(100, 116, 139, 0.25);
+        color: #94a3b8;
+    }
+
+    .forecast-number {
+        font-size: 2.75rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #60a5fa, #c084fc, #22d3ee);
+        background-size: 200% 200%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 1rem 0;
+        line-height: 1;
+        letter-spacing: -1.5px;
+        filter: drop-shadow(0 4px 12px rgba(96, 165, 250, 0.4));
+        animation: border-dance 3s ease infinite;
+        transition: transform 0.3s ease;
+    }
+
+    .forecast-mini-card-primary .forecast-number {
+        font-size: 3.25rem;
+    }
+
+    .forecast-mini-card:hover .forecast-number {
+        transform: scale(1.1);
+    }
+
+    .forecast-unit-label {
+        font-size: 0.6875rem;
+        color: #cbd5e1;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        opacity: 0.8;
+    }
+
+    /* --- ACCURACY BADGE WITH GRADIENT --- */
+    .forecast-accuracy-enhanced {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.5rem 0.875rem;
+        background: linear-gradient(135deg,
+            rgba(16, 185, 129, 0.15),
+            rgba(5, 150, 105, 0.1)
+        );
+        border: 1.5px solid rgba(16, 185, 129, 0.3);
+        border-radius: 10px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #10b981;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.75rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+    }
+
+    .forecast-mini-card:hover .forecast-accuracy-enhanced {
+        background: linear-gradient(135deg,
+            rgba(16, 185, 129, 0.25),
+            rgba(5, 150, 105, 0.15)
+        );
+        border-color: rgba(16, 185, 129, 0.5);
+        transform: scale(1.05);
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.25);
+    }
+
+    /* --- CONFIDENCE INTERVAL DISPLAY --- */
+    .forecast-range {
+        font-size: 0.6875rem;
+        color: #64748b;
+        background: rgba(30, 41, 59, 0.5);
+        padding: 0.375rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid rgba(100, 116, 139, 0.2);
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        transition: all 0.3s ease;
+    }
+
+    .forecast-mini-card:hover .forecast-range {
+        background: rgba(30, 41, 59, 0.7);
+        color: #94a3b8;
+        border-color: rgba(100, 116, 139, 0.3);
+    }
+
+    /* --- HEADER STYLING --- */
+    .forecast-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+    }
+
+    .forecast-title {
+        font-size: 1.375rem;
+        font-weight: 800;
+        color: #e2e8f0;
+        margin: 0;
+        letter-spacing: -0.5px;
+    }
+
+    .forecast-subtitle {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        margin-top: 0.375rem;
+    }
+
+    .forecast-subtitle span {
+        color: #22d3ee;
+        font-weight: 700;
+    }
+
+    /* --- INFO BADGE --- */
+    .forecast-info-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        background: linear-gradient(135deg,
+            rgba(139, 92, 246, 0.12),
+            rgba(59, 130, 246, 0.08)
+        );
+        border: 1px solid rgba(139, 92, 246, 0.25);
+        border-radius: 12px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #a78bfa;
+        letter-spacing: 0.3px;
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+        transition: all 0.3s ease;
+    }
+
+    .forecast-info-badge:hover {
+        background: linear-gradient(135deg,
+            rgba(139, 92, 246, 0.18),
+            rgba(59, 130, 246, 0.12)
+        );
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(139, 92, 246, 0.25);
+    }
+
+    /* --- RESPONSIVE ADJUSTMENTS --- */
+    @media (max-width: 768px) {
+        .forecast-card {
+            padding: 1.5rem 1rem;
+        }
+
+        .forecast-mini-card {
+            padding: 1rem 0.75rem;
+        }
+
+        .forecast-number {
+            font-size: 2rem;
+        }
+
+        .forecast-mini-card-primary .forecast-number {
+            font-size: 2.5rem;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -697,9 +950,36 @@ def page_dashboard():
         st.info("🎯 Train ARIMA or SARIMAX models to view patient arrival forecasts. Visit the Benchmarks or Modeling Hub pages to train models.")
         st.markdown("</div>", unsafe_allow_html=True)
     else:
-        # --- CONTROLS ---
-        st.markdown("""<div class='dashboard-kpi-card' style='padding: 1.5rem 1.75rem; margin-bottom: 1.5rem;'>
-            <span class='kpi-label' style='margin-bottom: 1rem;'>Forecast Configuration</span>
+        # --- ENHANCED CONTROLS PANEL ---
+        st.markdown("""
+        <div class='dashboard-kpi-card' style='
+            padding: 2rem 2.25rem;
+            margin-bottom: 2rem;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
+            border: 1.5px solid rgba(59, 130, 246, 0.25);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 0 60px rgba(59, 130, 246, 0.12);
+        '>
+            <div style='
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 1.5rem;
+                padding-bottom: 1rem;
+                border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+            '>
+                <div style='
+                    font-size: 1.5rem;
+                    filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.4));
+                '>⚙️</div>
+                <span class='kpi-label' style='
+                    font-size: 0.875rem;
+                    margin: 0;
+                    letter-spacing: 1.8px;
+                    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                '>Forecast Configuration</span>
+            </div>
         """, unsafe_allow_html=True)
         ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1.2, 1, 1.2, 1])
 
@@ -763,6 +1043,30 @@ def page_dashboard():
             )
 
         with ctrl_col4:
+            st.markdown("""
+            <style>
+            /* Enhanced Primary Button Styling */
+            button[kind="primary"] {
+                background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+                border: none !important;
+                box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3) !important;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                font-weight: 700 !important;
+                letter-spacing: 0.5px !important;
+            }
+
+            button[kind="primary"]:hover {
+                background: linear-gradient(135deg, #2563eb, #7c3aed) !important;
+                box-shadow: 0 12px 32px rgba(59, 130, 246, 0.4) !important;
+                transform: translateY(-2px) !important;
+            }
+
+            button[kind="primary"]:active {
+                transform: translateY(0px) !important;
+                box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3) !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
             run_forecast = st.button("🔮 Generate Forecast", type="primary", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -859,23 +1163,26 @@ def page_dashboard():
                 if forecast_idx != -1:
                     base_date = test_eval.index[forecast_idx]
 
-                    # --- Horizontal Forecast Timeline ---
+                    # --- Premium Horizontal Forecast Timeline ---
                     st.markdown(f"""
-                    <div class='forecast-card' style='padding: 1.5rem 2rem;'>
-                        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;'>
+                    <div class='forecast-card'>
+                        <div class='forecast-header'>
                             <div>
-                                <div style='font-size: 1.125rem; font-weight: 700; color: #e2e8f0; margin-bottom: 0.25rem;'>
+                                <div class='forecast-title'>
                                     {forecast_days}-Day Forecast Timeline
                                 </div>
-                                <div style='font-size: 0.8125rem; color: #94a3b8;'>
-                                    Model: <span style='color: #22d3ee; font-weight: 600;'>{cached_model}</span> |
-                                    From: <span style='color: #60a5fa; font-weight: 600;'>{base_date.strftime("%b %d, %Y")}</span>
+                                <div class='forecast-subtitle'>
+                                    Model: <span>{cached_model}</span> •
+                                    From: <span>{base_date.strftime("%b %d, %Y")}</span>
                                 </div>
+                            </div>
+                            <div class='forecast-info-badge'>
+                                ⚡ AI-Powered Prediction
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # Horizontal forecast cards
+                    # Horizontal forecast cards with enhanced design
                     max_h = F.shape[1]
                     forecast_cols = st.columns(min(forecast_days, max_h, 7))  # Max 7 columns to fit screen
 
@@ -894,40 +1201,46 @@ def page_dashboard():
 
                         accuracy_text = f"{horizon_accuracy:.0f}%" if pd.notna(horizon_accuracy) else "N/A"
 
+                        # Determine confidence level color
+                        if pd.notna(horizon_accuracy):
+                            if horizon_accuracy >= 75:
+                                acc_color = "#10b981"  # Green
+                                acc_bg = "rgba(16, 185, 129, 0.15)"
+                            elif horizon_accuracy >= 60:
+                                acc_color = "#f59e0b"  # Amber
+                                acc_bg = "rgba(245, 158, 11, 0.15)"
+                            else:
+                                acc_color = "#ef4444"  # Red
+                                acc_bg = "rgba(239, 68, 68, 0.15)"
+                        else:
+                            acc_color = "#64748b"
+                            acc_bg = "rgba(100, 116, 139, 0.15)"
+
                         # Use modulo to wrap if more than 7 days
                         col_idx = h % 7
                         with forecast_cols[col_idx]:
                             is_primary = (h == 0)
-                            bg_color = "rgba(59, 130, 246, 0.12)" if is_primary else "rgba(30, 41, 59, 0.4)"
-                            border_color = "rgba(59, 130, 246, 0.35)" if is_primary else "rgba(59, 130, 246, 0.15)"
+                            primary_class = " forecast-mini-card-primary" if is_primary else ""
 
                             st.markdown(f"""
-                            <div style='
-                                background: {bg_color};
-                                border: 1px solid {border_color};
-                                border-radius: 12px;
-                                padding: 1rem 0.75rem;
-                                text-align: center;
-                                transition: all 0.3s ease;
-                                margin-bottom: 0.5rem;
-                            ' class='forecast-mini-card'>
-                                <div style='font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;'>
-                                    {forecast_dt.strftime("%a")}
+                            <div class='forecast-mini-card{primary_class}' style='text-align: center; margin-bottom: 0.75rem;'>
+                                <div class='forecast-day-name'>
+                                    {forecast_dt.strftime("%a").upper()}
                                 </div>
-                                <div style='font-size: 0.6875rem; color: #94a3b8; margin-bottom: 0.75rem;'>
-                                    {forecast_dt.strftime("%m/%d")}
+                                <div class='forecast-date-badge'>
+                                    {forecast_dt.strftime("%b %d")}
                                 </div>
-                                <div style='font-size: {"2.25rem" if is_primary else "1.75rem"}; font-weight: 800; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0.5rem 0; line-height: 1;'>
+                                <div class='forecast-number'>
                                     {int(forecast_val)}
                                 </div>
-                                <div style='font-size: 0.625rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.75rem;'>
+                                <div class='forecast-unit-label'>
                                     Patients
                                 </div>
-                                <div style='font-size: 0.625rem; color: #10b981; background: rgba(16, 185, 129, 0.12); padding: 0.25rem 0.5rem; border-radius: 6px; display: inline-block; margin-bottom: 0.5rem;'>
-                                    {accuracy_text}
+                                <div class='forecast-accuracy-enhanced' style='background: {acc_bg}; border-color: {acc_color}40; color: {acc_color};'>
+                                    ✓ {accuracy_text}
                                 </div>
-                                <div style='font-size: 0.625rem; color: #94a3b8;'>
-                                    {int(lower_val)}-{int(upper_val)}
+                                <div class='forecast-range'>
+                                    {int(lower_val)} - {int(upper_val)}
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
