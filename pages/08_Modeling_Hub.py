@@ -1295,7 +1295,7 @@ def render_ml_results(results: dict):
 
 def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
     """
-    Render multi-horizon ML training results with comprehensive visualizations.
+    Render multi-horizon ML training results with enhanced visualizations and layout.
 
     Args:
         ml_mh_results: Multi-horizon results from run_ml_multihorizon()
@@ -1312,18 +1312,39 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
         st.error("❌ **Training Failed** - No successful horizons")
         return
 
-    # Success summary
-    st.success(f"✅ **Multi-Horizon {model_name} Training Completed!**")
+    # Enhanced success summary with gradient background
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.05));
+                    border-left: 4px solid {SUCCESS_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 8px;
+                    margin-bottom: 1.5rem;'>
+            <h3 style='margin: 0 0 0.5rem 0; color: {SUCCESS_COLOR}; font-size: 1.25rem; font-weight: 700;'>
+                ✅ Multi-Horizon {model_name} Training Completed Successfully!
+            </h3>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                All {len(successful)} forecast horizons trained and validated
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    col1, col2, col3 = st.columns(3)
+    # KPI Cards with enhanced styling
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Successful Horizons", f"{len(successful)}/{ml_mh_results.get('successful', []).__len__() if ml_mh_results else 0}")
-    with col2:
         avg_test_mae = results_df["Test_MAE"].mean()
-        st.metric("Avg Test MAE", f"{avg_test_mae:.4f}")
+        st.metric("📊 Avg Test MAE", f"{avg_test_mae:.4f}")
+    with col2:
+        avg_test_rmse = results_df["Test_RMSE"].mean()
+        st.metric("📈 Avg Test RMSE", f"{avg_test_rmse:.4f}")
     with col3:
+        avg_test_mape = results_df["Test_MAPE"].mean()
+        st.metric("📉 Avg Test MAPE", f"{avg_test_mape:.2f}%")
+    with col4:
         avg_test_acc = results_df["Test_Acc"].mean()
-        st.metric("Avg Test Accuracy", f"{avg_test_acc:.2f}%")
+        st.metric("🎯 Avg Test Accuracy", f"{avg_test_acc:.2f}%")
 
     st.divider()
 
@@ -1343,17 +1364,64 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
             horizons=horizons,
         )
 
-        # Display all dashboard figures
+        # Filter out residual diagnostics (not applicable for ML models)
+        # and organize visualizations into logical sections
         if figs:
-            for key, obj in figs.items():
-                # Handle different object types
-                if key == "metrics_styler":
-                    # Display pandas Styler as dataframe
-                    st.dataframe(obj, use_container_width=True)
-                elif hasattr(obj, 'savefig'):
-                    # Display matplotlib figures
-                    st.pyplot(obj)
-                # Skip other types silently
+            # ===== SECTION 1: Performance Metrics =====
+            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>📊 Performance Metrics</h3>", unsafe_allow_html=True)
+
+            if "metrics_styler" in figs:
+                st.dataframe(figs["metrics_styler"], use_container_width=True)
+
+            if "fig_metrics_dashboard" in figs and hasattr(figs["fig_metrics_dashboard"], 'savefig'):
+                st.pyplot(figs["fig_metrics_dashboard"])
+
+            st.divider()
+
+            # ===== SECTION 2: Forecast Analysis =====
+            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>📈 Forecast Analysis</h3>", unsafe_allow_html=True)
+
+            # Display forecast wall and fan chart side by side
+            col1, col2 = st.columns(2)
+            with col1:
+                if "fig_forecast_wall" in figs and hasattr(figs["fig_forecast_wall"], 'savefig'):
+                    st.markdown("**Multi-Horizon Forecasts**")
+                    st.pyplot(figs["fig_forecast_wall"])
+            with col2:
+                if "fig_fanchart" in figs and hasattr(figs["fig_fanchart"], 'savefig'):
+                    st.markdown("**Forecast Fan Chart**")
+                    st.pyplot(figs["fig_fanchart"])
+
+            # Temporal split (full width)
+            if "fig_temporal" in figs and hasattr(figs["fig_temporal"], 'savefig'):
+                st.markdown("**Training/Test Split Visualization**")
+                st.pyplot(figs["fig_temporal"])
+
+            st.divider()
+
+            # ===== SECTION 3: Prediction Quality =====
+            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>🎯 Prediction Quality</h3>", unsafe_allow_html=True)
+
+            if "fig_pred_vs_actual" in figs and hasattr(figs["fig_pred_vs_actual"], 'savefig'):
+                st.pyplot(figs["fig_pred_vs_actual"])
+
+            st.divider()
+
+            # ===== SECTION 4: Error Analysis =====
+            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>📉 Error Analysis</h3>", unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if "fig_err_box" in figs and hasattr(figs["fig_err_box"], 'savefig'):
+                    st.markdown("**Error Distribution (Box Plot)**")
+                    st.pyplot(figs["fig_err_box"])
+            with col2:
+                if "fig_err_kde" in figs and hasattr(figs["fig_err_kde"], 'savefig'):
+                    st.markdown("**Error Density (KDE)**")
+                    st.pyplot(figs["fig_err_kde"])
+
+            # Note: Skipping fig_residuals as it's not applicable for ML models
+
     except Exception as e:
         # Fallback to basic metrics table if dashboard fails
         st.warning(f"⚠️ Could not generate full dashboard visualization: {str(e)}")
@@ -1372,6 +1440,8 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
             }),
             use_container_width=True
         )
+
+    st.divider()
 
     # Detailed metrics table in expander
     with st.expander("📋 Detailed Metrics by Horizon", expanded=False):
