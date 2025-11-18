@@ -375,14 +375,6 @@ def page_dashboard():
                   </p>
               </div>
           </div>
-          <div style='
-              font-size: 0.75rem;
-              color: rgba(148, 163, 184, 0.7);
-              text-align: right;
-          '>
-              <div>Last Updated</div>
-              <div style='color: #22d3ee; font-weight: 600;'>Live</div>
-          </div>
         </div>
         """,
         unsafe_allow_html=True,
