@@ -1320,12 +1320,11 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
             train=train,
             res=res,
             horizons=horizons,
-            model_label=model_name,
         )
 
         # Display all dashboard figures
         if figs:
-            for fig_name, fig in figs.items():
+            for _, fig in figs.items():
                 st.pyplot(fig)
     except Exception as e:
         # Fallback to basic metrics table if dashboard fails
