@@ -1345,8 +1345,15 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
 
         # Display all dashboard figures
         if figs:
-            for _, fig in figs.items():
-                st.pyplot(fig)
+            for key, obj in figs.items():
+                # Handle different object types
+                if key == "metrics_styler":
+                    # Display pandas Styler as dataframe
+                    st.dataframe(obj, use_container_width=True)
+                elif hasattr(obj, 'savefig'):
+                    # Display matplotlib figures
+                    st.pyplot(obj)
+                # Skip other types silently
     except Exception as e:
         # Fallback to basic metrics table if dashboard fails
         st.warning(f"⚠️ Could not generate full dashboard visualization: {str(e)}")
