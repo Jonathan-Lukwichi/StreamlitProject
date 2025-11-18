@@ -572,11 +572,77 @@ def page_eda():
         st.plotly_chart(add_grid(fig_miss), use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Tabs
-    tab_over, tab_hist, tab_ts, tab_adv = st.tabs(["📋 Overview","📊 Distributions","📈 Time Series","🔬 Advanced Analytics"])
+    # Premium Tabs Design
+    st.markdown("""
+    <style>
+    /* Premium Tab Buttons */
+    div[data-testid="stHorizontalBlock"] button[kind="secondary"],
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
+        padding: 0.75rem 1.5rem !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        border: 1.5px solid rgba(59, 130, 246, 0.3) !important;
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8)) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(99, 102, 241, 0.25)) !important;
+        border: 1.5px solid rgba(59, 130, 246, 0.5) !important;
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.15) !important;
+    }
+
+    div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+        transform: translateY(-2px) !important;
+        border-color: rgba(59, 130, 246, 0.5) !important;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 0 30px rgba(59, 130, 246, 0.2) !important;
+    }
+
+    div[data-testid="stHorizontalBlock"] button[kind="primary"]:hover {
+        transform: translateY(-2px) scale(1.02) !important;
+        box-shadow: 0 12px 32px rgba(59, 130, 246, 0.4), 0 0 60px rgba(59, 130, 246, 0.25) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-bottom: 2rem;'></div>", unsafe_allow_html=True)
+
+    # Custom tab selection
+    if "eda_active_tab" not in st.session_state:
+        st.session_state["eda_active_tab"] = "overview"
+
+    tab_col1, tab_col2, tab_col3, tab_col4 = st.columns(4, gap="medium")
+
+    with tab_col1:
+        if st.button("📋 Overview", type="primary" if st.session_state["eda_active_tab"] == "overview" else "secondary",
+                     use_container_width=True, key="tab_overview"):
+            st.session_state["eda_active_tab"] = "overview"
+            st.rerun()
+
+    with tab_col2:
+        if st.button("📊 Distributions", type="primary" if st.session_state["eda_active_tab"] == "distributions" else "secondary",
+                     use_container_width=True, key="tab_distributions"):
+            st.session_state["eda_active_tab"] = "distributions"
+            st.rerun()
+
+    with tab_col3:
+        if st.button("📈 Time Series", type="primary" if st.session_state["eda_active_tab"] == "timeseries" else "secondary",
+                     use_container_width=True, key="tab_timeseries"):
+            st.session_state["eda_active_tab"] = "timeseries"
+            st.rerun()
+
+    with tab_col4:
+        if st.button("🔬 Advanced Analytics", type="primary" if st.session_state["eda_active_tab"] == "advanced" else "secondary",
+                     use_container_width=True, key="tab_advanced"):
+            st.session_state["eda_active_tab"] = "advanced"
+            st.rerun()
+
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
 
     # OVERVIEW TAB
-    with tab_over:
+    if st.session_state["eda_active_tab"] == "overview":
         st.markdown(
             f"""
             <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
@@ -640,7 +706,7 @@ def page_eda():
             st.markdown("</div>", unsafe_allow_html=True)
 
     # DISTRIBUTIONS TAB
-    with tab_hist:
+    if st.session_state["eda_active_tab"] == "distributions":
         st.markdown(
             f"""
             <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
@@ -759,7 +825,7 @@ def page_eda():
                 st.info("Total_precipitation not found.")
 
     # TIME SERIES TAB
-    with tab_ts:
+    if st.session_state["eda_active_tab"] == "timeseries":
         st.markdown(
             f"""
             <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
@@ -830,7 +896,7 @@ def page_eda():
             _render_decomposition(df)
 
     # ADVANCED ANALYTICS TAB
-    with tab_adv:
+    if st.session_state["eda_active_tab"] == "advanced":
         st.markdown(
             f"""
             <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
