@@ -813,6 +813,26 @@ def page_dashboard():
     else:
         # --- ENHANCED CONTROLS PANEL ---
         st.markdown("""
+        <style>
+        /* Control Input Card Styling */
+        .control-input-card {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+            border-radius: 12px;
+            padding: 1.25rem 1.125rem;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+
+        .control-input-card:hover {
+            border-color: rgba(59, 130, 246, 0.35);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 40px rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+        }
+        </style>
+
         <div class='dashboard-kpi-card' style='
             padding: 2rem 2.25rem;
             margin-bottom: 2rem;
@@ -842,17 +862,20 @@ def page_dashboard():
                 '>Forecast Configuration</span>
             </div>
         """, unsafe_allow_html=True)
-        ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1.2, 1, 1.2, 1])
+        ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1.2, 1, 1.2, 1.1])
 
         with ctrl_col1:
+            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             selected_model = st.selectbox(
                 "Select Model",
                 options=models_available,
                 key="forecast_model_selector",
                 help="Choose which model to use for forecasting"
             )
+            st.markdown("</div>", unsafe_allow_html=True)
 
         with ctrl_col2:
+            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             forecast_days = st.selectbox(
                 "Forecast Period",
                 options=[1, 3, 7],
@@ -860,6 +883,7 @@ def page_dashboard():
                 key="forecast_period_selector",
                 help="Select how many days ahead to forecast"
             )
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # Dynamically set date range based on available data
         min_date = datetime.date(2023, 1, 1)  # Default fallback
@@ -894,6 +918,7 @@ def page_dashboard():
                         pass  # Keep defaults if conversion fails
 
         with ctrl_col3:
+            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             selected_date = st.date_input(
                 "Forecast From",
                 value=default_date,
@@ -902,18 +927,15 @@ def page_dashboard():
                 key="forecast_date_selector",
                 help="Select a date from the available dataset to start the forecast from. The first prediction will be for the next day."
             )
+            st.markdown("</div>", unsafe_allow_html=True)
 
         with ctrl_col4:
+            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             st.markdown("""
             <style>
             /* ========================================
                PREMIUM FORECAST BUTTON DESIGN
                ======================================== */
-
-            /* Button Container Alignment */
-            div[data-testid="column"]:nth-child(4) div[data-testid="stVerticalBlock"] > div:last-child {
-                padding-top: 1.85rem;
-            }
 
             /* Ultra-Premium Button Styling */
             button[kind="primary"] {
@@ -933,6 +955,7 @@ def page_dashboard():
                 position: relative !important;
                 overflow: hidden !important;
                 animation: gradient-shift 3s ease infinite !important;
+                margin-top: 0.5rem !important;
             }
 
             @keyframes gradient-shift {
@@ -1001,8 +1024,10 @@ def page_dashboard():
             }
             </style>
             """, unsafe_allow_html=True)
+            st.markdown("<label style='font-size: 0.875rem; font-weight: 500; color: #e2e8f0; display: block; margin-bottom: 0.25rem;'>Action</label>", unsafe_allow_html=True)
             run_forecast = st.button("🔮 Generate Forecast", type="primary", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)  # Close control-input-card
+        st.markdown("</div>", unsafe_allow_html=True)  # Close dashboard-kpi-card
 
 
         # --- FORECAST LOGIC & DATA EXTRACTION ---
