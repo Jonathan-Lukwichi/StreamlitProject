@@ -985,9 +985,10 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
             if old_col in metrics_df.columns and new_col not in metrics_df.columns:
                 metrics_df[new_col] = metrics_df[old_col]
 
-        # Format Horizon column as "h=1", "h=2", etc.
-        if metrics_df["Horizon"].dtype in ['int64', 'int32']:
-            metrics_df["Horizon"] = metrics_df["Horizon"].apply(lambda x: f"h={x}")
+        # Keep Horizon as integer for dashboard compatibility
+        # Dashboard visualization expects numeric Horizon values, not strings like "h=1"
+        if metrics_df["Horizon"].dtype not in ['int64', 'int32']:
+            metrics_df["Horizon"] = pd.to_numeric(metrics_df["Horizon"], errors='coerce').astype('int64')
 
     return (metrics_df, F, L, U, test_eval_df, None, None, horizons)
 
