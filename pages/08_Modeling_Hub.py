@@ -979,6 +979,18 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
     if datetime_index is not None:
         test_eval_df.index = datetime_index
 
+    # Create dummy train series for visualization compatibility
+    # The dashboard expects train to have an index for plotting temporal split
+    if datetime_index is not None and len(datetime_index) > 0:
+        # Create empty train Series with datetime index
+        # Use a dummy index that represents the training period (before test period)
+        train_end = datetime_index[0] - pd.Timedelta(days=1)
+        train_start = train_end - pd.Timedelta(days=T)  # Same length as test
+        train_index = pd.date_range(start=train_start, end=train_end, periods=T)
+        train_series = pd.Series(np.nan, index=train_index, name="train")
+    else:
+        train_series = pd.Series([], name="train")
+
     # Format metrics_df for compatibility
     metrics_df = results_df.copy() if results_df is not None else pd.DataFrame()
     if not metrics_df.empty and "Horizon" in metrics_df.columns:
@@ -998,7 +1010,7 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
         if metrics_df["Horizon"].dtype not in ['int64', 'int32']:
             metrics_df["Horizon"] = pd.to_numeric(metrics_df["Horizon"], errors='coerce').astype('int64')
 
-    return (metrics_df, F, L, U, test_eval_df, None, None, horizons)
+    return (metrics_df, F, L, U, test_eval_df, train_series, None, horizons)
 
 # -----------------------------------------------------------------------------
 # ML Training Pipeline (Single Horizon)
