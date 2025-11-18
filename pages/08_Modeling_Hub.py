@@ -1295,7 +1295,7 @@ def render_ml_results(results: dict):
 
 def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
     """
-    Render multi-horizon ML training results with enhanced visualizations and layout.
+    Render multi-horizon ML training results with optimized fluorescent design.
 
     Args:
         ml_mh_results: Multi-horizon results from run_ml_multihorizon()
@@ -1312,41 +1312,74 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
         st.error("❌ **Training Failed** - No successful horizons")
         return
 
-    # Enhanced success summary with gradient background
+    # Premium success banner
     st.markdown(
         f"""
-        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.05));
-                    border-left: 4px solid {SUCCESS_COLOR};
-                    padding: 1.5rem;
-                    border-radius: 8px;
-                    margin-bottom: 1.5rem;'>
-            <h3 style='margin: 0 0 0.5rem 0; color: {SUCCESS_COLOR}; font-size: 1.25rem; font-weight: 700;'>
-                ✅ Multi-Horizon {model_name} Training Completed Successfully!
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
+                    border: 2px solid {SUCCESS_COLOR};
+                    padding: 2rem;
+                    border-radius: 16px;
+                    margin-bottom: 2rem;
+                    box-shadow: 0 0 30px rgba(34, 197, 94, 0.3), inset 0 0 20px rgba(34, 197, 94, 0.1);'>
+            <div style='text-align: center;'>
+                <div style='font-size: 3rem; margin-bottom: 0.5rem;'>✅</div>
+                <h2 style='margin: 0 0 0.5rem 0; color: {SUCCESS_COLOR}; font-size: 1.5rem; font-weight: 800; text-shadow: 0 0 20px rgba(34, 197, 94, 0.5);'>
+                    Multi-Horizon {model_name} Training Complete!
+                </h2>
+                <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.95; font-size: 1.1rem;'>
+                    🎯 All {len(successful)} forecast horizons successfully trained and validated
+                </p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Fluorescent KPI Cards - Similar to benchmarks page
+    st.markdown(
+        f"""
+        <div style='text-align: center; margin: 2rem 0 1rem 0;'>
+            <h3 style='font-size: 1.3rem; font-weight: 700; color: {PRIMARY_COLOR};
+                       text-shadow: 0 0 20px rgba(59, 130, 246, 0.6); margin: 0;'>
+                🏆 Average Performance Metrics
             </h3>
-            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
-                All {len(successful)} forecast horizons trained and validated
+            <p style='color: {SUBTLE_TEXT}; margin: 0.5rem 0 0 0; font-size: 0.95rem;'>
+                Averaged across all {len(successful)} forecast horizons
             </p>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # KPI Cards with enhanced styling
     col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        avg_test_mae = results_df["Test_MAE"].mean()
-        st.metric("📊 Avg Test MAE", f"{avg_test_mae:.4f}")
-    with col2:
-        avg_test_rmse = results_df["Test_RMSE"].mean()
-        st.metric("📈 Avg Test RMSE", f"{avg_test_rmse:.4f}")
-    with col3:
-        avg_test_mape = results_df["Test_MAPE"].mean()
-        st.metric("📉 Avg Test MAPE", f"{avg_test_mape:.2f}%")
-    with col4:
-        avg_test_acc = results_df["Test_Acc"].mean()
-        st.metric("🎯 Avg Test Accuracy", f"{avg_test_acc:.2f}%")
 
-    st.divider()
+    avg_test_mae = results_df["Test_MAE"].mean()
+    avg_test_rmse = results_df["Test_RMSE"].mean()
+    avg_test_mape = results_df["Test_MAPE"].mean()
+    avg_test_acc = results_df["Test_Acc"].mean()
+
+    with col1:
+        st.plotly_chart(
+            _create_kpi_indicator("MAE", avg_test_mae, "", PRIMARY_COLOR),
+            use_container_width=True
+        )
+    with col2:
+        st.plotly_chart(
+            _create_kpi_indicator("RMSE", avg_test_rmse, "", SECONDARY_COLOR),
+            use_container_width=True
+        )
+    with col3:
+        st.plotly_chart(
+            _create_kpi_indicator("MAPE", avg_test_mape, "%", WARNING_COLOR),
+            use_container_width=True
+        )
+    with col4:
+        st.plotly_chart(
+            _create_kpi_indicator("Accuracy", avg_test_acc, "%", SUCCESS_COLOR),
+            use_container_width=True
+        )
+
+    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
 
     # Convert to artifacts for visualization
     metrics_df, F, L, U, test_eval_df, train, res, horizons = ml_to_multihorizon_artifacts(ml_mh_results)
@@ -1364,63 +1397,137 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
             horizons=horizons,
         )
 
-        # Filter out residual diagnostics (not applicable for ML models)
-        # and organize visualizations into logical sections
+        # Optimized vertical layout with fluorescent sections
         if figs:
-            # ===== SECTION 1: Performance Metrics =====
-            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>📊 Performance Metrics</h3>", unsafe_allow_html=True)
+            # ===== SECTION 1: Performance Metrics Table (Compact) =====
+            st.markdown(
+                f"""
+                <div style='background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                            border-left: 4px solid {PRIMARY_COLOR};
+                            padding: 1rem;
+                            border-radius: 12px;
+                            margin-bottom: 1.5rem;
+                            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+                    <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.75rem 0; font-size: 1.2rem; font-weight: 700;
+                               text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                        📊 Per-Horizon Performance Breakdown
+                    </h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             if "metrics_styler" in figs:
-                st.dataframe(figs["metrics_styler"], use_container_width=True)
+                # Create compact view - only show key columns
+                compact_metrics = metrics_df[['Horizon', 'MAE', 'RMSE', 'MAPE_%', 'Accuracy_%']].copy()
+                compact_metrics.columns = ['Horizon', 'MAE', 'RMSE', 'MAPE (%)', 'Accuracy (%)']
 
+                st.dataframe(
+                    compact_metrics.style.format({
+                        'MAE': '{:.4f}',
+                        'RMSE': '{:.4f}',
+                        'MAPE (%)': '{:.2f}',
+                        'Accuracy (%)': '{:.2f}'
+                    }).background_gradient(cmap='viridis', subset=['MAE', 'RMSE'])
+                     .background_gradient(cmap='plasma', subset=['MAPE (%)', 'Accuracy (%)']),
+                    use_container_width=True,
+                    height=350
+                )
+
+            # Metrics Dashboard Visualization (Full Width)
             if "fig_metrics_dashboard" in figs and hasattr(figs["fig_metrics_dashboard"], 'savefig'):
                 st.pyplot(figs["fig_metrics_dashboard"])
 
-            st.divider()
+            st.markdown("<div style='margin: 2.5rem 0;'></div>", unsafe_allow_html=True)
 
-            # ===== SECTION 2: Forecast Analysis =====
-            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>📈 Forecast Analysis</h3>", unsafe_allow_html=True)
+            # ===== SECTION 2: Forecast Visualizations (Vertical Layout) =====
+            st.markdown(
+                f"""
+                <div style='background: linear-gradient(90deg, rgba(167, 139, 250, 0.15), rgba(139, 92, 246, 0.1));
+                            border-left: 4px solid {WARNING_COLOR};
+                            padding: 1rem;
+                            border-radius: 12px;
+                            margin-bottom: 1.5rem;
+                            box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);'>
+                    <h3 style='color: {WARNING_COLOR}; margin: 0 0 0.75rem 0; font-size: 1.2rem; font-weight: 700;
+                               text-shadow: 0 0 15px rgba(167, 139, 250, 0.5);'>
+                        📈 Forecast Analysis & Visualization
+                    </h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-            # Display forecast wall and fan chart side by side
-            col1, col2 = st.columns(2)
-            with col1:
-                if "fig_forecast_wall" in figs and hasattr(figs["fig_forecast_wall"], 'savefig'):
-                    st.markdown("**Multi-Horizon Forecasts**")
-                    st.pyplot(figs["fig_forecast_wall"])
-            with col2:
-                if "fig_fanchart" in figs and hasattr(figs["fig_fanchart"], 'savefig'):
-                    st.markdown("**Forecast Fan Chart**")
-                    st.pyplot(figs["fig_fanchart"])
+            # Multi-Horizon Forecasts (Full Width)
+            if "fig_forecast_wall" in figs and hasattr(figs["fig_forecast_wall"], 'savefig'):
+                st.markdown("**🌊 Multi-Horizon Forecasts Comparison**")
+                st.pyplot(figs["fig_forecast_wall"])
+                st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
 
-            # Temporal split (full width)
+            # Forecast Fan Chart (Full Width)
+            if "fig_fanchart" in figs and hasattr(figs["fig_fanchart"], 'savefig'):
+                st.markdown("**📊 Forecast Fan Chart - All Horizons**")
+                st.pyplot(figs["fig_fanchart"])
+                st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+
+            # Temporal Split (Full Width)
             if "fig_temporal" in figs and hasattr(figs["fig_temporal"], 'savefig'):
-                st.markdown("**Training/Test Split Visualization**")
+                st.markdown("**⏳ Training/Test Split Visualization**")
                 st.pyplot(figs["fig_temporal"])
 
-            st.divider()
+            st.markdown("<div style='margin: 2.5rem 0;'></div>", unsafe_allow_html=True)
 
             # ===== SECTION 3: Prediction Quality =====
-            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>🎯 Prediction Quality</h3>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style='background: linear-gradient(90deg, rgba(34, 211, 238, 0.15), rgba(6, 182, 212, 0.1));
+                            border-left: 4px solid {SECONDARY_COLOR};
+                            padding: 1rem;
+                            border-radius: 12px;
+                            margin-bottom: 1.5rem;
+                            box-shadow: 0 0 20px rgba(34, 211, 238, 0.2);'>
+                    <h3 style='color: {SECONDARY_COLOR}; margin: 0 0 0.75rem 0; font-size: 1.2rem; font-weight: 700;
+                               text-shadow: 0 0 15px rgba(34, 211, 238, 0.5);'>
+                        🎯 Prediction Quality Assessment
+                    </h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             if "fig_pred_vs_actual" in figs and hasattr(figs["fig_pred_vs_actual"], 'savefig'):
                 st.pyplot(figs["fig_pred_vs_actual"])
 
-            st.divider()
+            st.markdown("<div style='margin: 2.5rem 0;'></div>", unsafe_allow_html=True)
 
-            # ===== SECTION 4: Error Analysis =====
-            st.markdown(f"<h3 style='color: {PRIMARY_COLOR}; margin-bottom: 1rem;'>📉 Error Analysis</h3>", unsafe_allow_html=True)
+            # ===== SECTION 4: Error Analysis (Vertical Layout) =====
+            st.markdown(
+                f"""
+                <div style='background: linear-gradient(90deg, rgba(245, 158, 11, 0.15), rgba(251, 146, 60, 0.1));
+                            border-left: 4px solid {DANGER_COLOR};
+                            padding: 1rem;
+                            border-radius: 12px;
+                            margin-bottom: 1.5rem;
+                            box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);'>
+                    <h3 style='color: {DANGER_COLOR}; margin: 0 0 0.75rem 0; font-size: 1.2rem; font-weight: 700;
+                               text-shadow: 0 0 15px rgba(245, 158, 11, 0.5);'>
+                        📉 Error Distribution Analysis
+                    </h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if "fig_err_box" in figs and hasattr(figs["fig_err_box"], 'savefig'):
-                    st.markdown("**Error Distribution (Box Plot)**")
-                    st.pyplot(figs["fig_err_box"])
-            with col2:
-                if "fig_err_kde" in figs and hasattr(figs["fig_err_kde"], 'savefig'):
-                    st.markdown("**Error Density (KDE)**")
-                    st.pyplot(figs["fig_err_kde"])
+            # Error Box Plot (Full Width)
+            if "fig_err_box" in figs and hasattr(figs["fig_err_box"], 'savefig'):
+                st.markdown("**📦 Error Distribution (Box Plot)**")
+                st.pyplot(figs["fig_err_box"])
+                st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
 
-            # Note: Skipping fig_residuals as it's not applicable for ML models
+            # Error KDE (Full Width)
+            if "fig_err_kde" in figs and hasattr(figs["fig_err_kde"], 'savefig'):
+                st.markdown("**🌊 Error Density Distribution (KDE)**")
+                st.pyplot(figs["fig_err_kde"])
 
     except Exception as e:
         # Fallback to basic metrics table if dashboard fails
