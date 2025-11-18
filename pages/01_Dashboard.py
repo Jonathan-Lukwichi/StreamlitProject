@@ -906,29 +906,101 @@ def page_dashboard():
         with ctrl_col4:
             st.markdown("""
             <style>
-            /* Enhanced Primary Button Styling */
+            /* ========================================
+               PREMIUM FORECAST BUTTON DESIGN
+               ======================================== */
+
+            /* Button Container Alignment */
+            div[data-testid="column"]:nth-child(4) div[data-testid="stVerticalBlock"] > div:last-child {
+                padding-top: 1.85rem;
+            }
+
+            /* Ultra-Premium Button Styling */
             button[kind="primary"] {
-                background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+                background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%) !important;
+                background-size: 200% 200% !important;
                 border: none !important;
-                box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3) !important;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                font-weight: 700 !important;
-                letter-spacing: 0.5px !important;
+                border-radius: 12px !important;
+                box-shadow:
+                    0 8px 24px rgba(59, 130, 246, 0.35),
+                    0 4px 12px rgba(139, 92, 246, 0.25),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+                transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+                font-weight: 800 !important;
+                letter-spacing: 0.8px !important;
+                font-size: 0.9375rem !important;
+                padding: 0.625rem 1.5rem !important;
+                position: relative !important;
+                overflow: hidden !important;
+                animation: gradient-shift 3s ease infinite !important;
             }
 
+            @keyframes gradient-shift {
+                0%, 100% {
+                    background-position: 0% 50%;
+                }
+                50% {
+                    background-position: 100% 50%;
+                }
+            }
+
+            /* Animated Glow Effect */
+            button[kind="primary"]::before {
+                content: '' !important;
+                position: absolute !important;
+                top: 50% !important;
+                left: 50% !important;
+                width: 0% !important;
+                height: 0% !important;
+                border-radius: 50% !important;
+                background: radial-gradient(circle, rgba(255, 255, 255, 0.4), transparent 70%) !important;
+                transform: translate(-50%, -50%) !important;
+                transition: width 0.6s ease, height 0.6s ease !important;
+                z-index: 0 !important;
+            }
+
+            button[kind="primary"]:hover::before {
+                width: 300% !important;
+                height: 300% !important;
+            }
+
+            /* Button Text */
+            button[kind="primary"] p {
+                position: relative !important;
+                z-index: 1 !important;
+                margin: 0 !important;
+            }
+
+            /* Hover State */
             button[kind="primary"]:hover {
-                background: linear-gradient(135deg, #2563eb, #7c3aed) !important;
-                box-shadow: 0 12px 32px rgba(59, 130, 246, 0.4) !important;
-                transform: translateY(-2px) !important;
+                background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%) !important;
+                background-size: 200% 200% !important;
+                box-shadow:
+                    0 16px 40px rgba(59, 130, 246, 0.45),
+                    0 8px 20px rgba(139, 92, 246, 0.35),
+                    0 0 60px rgba(236, 72, 153, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+                transform: translateY(-3px) scale(1.02) !important;
             }
 
+            /* Active/Click State */
             button[kind="primary"]:active {
-                transform: translateY(0px) !important;
-                box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3) !important;
+                transform: translateY(-1px) scale(0.98) !important;
+                box-shadow:
+                    0 6px 16px rgba(59, 130, 246, 0.4),
+                    0 3px 8px rgba(139, 92, 246, 0.3),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+            }
+
+            /* Focus State */
+            button[kind="primary"]:focus:not(:active) {
+                border: 2px solid rgba(59, 130, 246, 0.6) !important;
+                box-shadow:
+                    0 8px 24px rgba(59, 130, 246, 0.4),
+                    0 0 0 4px rgba(59, 130, 246, 0.2) !important;
             }
             </style>
             """, unsafe_allow_html=True)
-            st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
             run_forecast = st.button("🔮 Generate Forecast", type="primary", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
