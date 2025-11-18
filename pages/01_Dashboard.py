@@ -720,10 +720,37 @@ def page_dashboard():
                 help="Select how many days ahead to forecast"
             )
 
-        # Set date range to full year 2023
-        min_date = datetime.date(2023, 1, 1)
+        # Dynamically set date range based on available data
+        min_date = datetime.date(2023, 1, 1)  # Default fallback
         max_date = datetime.date(2023, 12, 31)
         default_date = datetime.date(2023, 12, 31)
+
+        # Try to get dates from cached forecast test data first
+        forecast_cache = st.session_state.get("forecast_data_cache")
+        if forecast_cache and "test_eval" in forecast_cache:
+            test_eval_index = forecast_cache["test_eval"].index
+            if hasattr(test_eval_index, '__len__') and len(test_eval_index) > 0:
+                try:
+                    min_date = test_eval_index.min().date()
+                    max_date = test_eval_index.max().date()
+                    default_date = max_date
+                except (AttributeError, TypeError):
+                    pass  # Keep defaults if index doesn't have date methods
+
+        # Fallback: try to extract from patient_data if forecast cache isn't available
+        if min_date == datetime.date(2023, 1, 1):  # Still using defaults
+            df_p = st.session_state.get("patient_data")
+            if isinstance(df_p, pd.DataFrame) and not df_p.empty:
+                date_col = _pick_date_col(df_p)
+                if date_col:
+                    try:
+                        dates = _to_datetime_safe(df_p[date_col]).dropna()
+                        if not dates.empty:
+                            min_date = dates.min().date()
+                            max_date = dates.max().date()
+                            default_date = max_date
+                    except (AttributeError, TypeError, ValueError):
+                        pass  # Keep defaults if conversion fails
 
         with ctrl_col3:
             selected_date = st.date_input(
@@ -732,7 +759,7 @@ def page_dashboard():
                 min_value=min_date,
                 max_value=max_date,
                 key="forecast_date_selector",
-                help="Select a date from the test set to start the forecast from. The first prediction will be for the next day."
+                help="Select a date from the available dataset to start the forecast from. The first prediction will be for the next day."
             )
 
         with ctrl_col4:
