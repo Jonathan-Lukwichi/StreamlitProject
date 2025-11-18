@@ -151,6 +151,75 @@ def page_dashboard():
     .sparkle-3 { top: 40%; left: 12%; animation-delay: 2.6s; }
     .sparkle-4 { top: 85%; left: 40%; animation-delay: 3.9s; }
 
+    /* --- SYSTEM OVERVIEW WRAPPER --- */
+    .system-overview-wrapper {
+        background: linear-gradient(145deg,
+            rgba(30, 41, 59, 0.85),
+            rgba(15, 23, 42, 0.95)
+        );
+        border-radius: 20px;
+        padding: 2rem 1.75rem;
+        border: 1.5px solid rgba(59, 130, 246, 0.25);
+        box-shadow:
+            0 20px 60px rgba(0, 0, 0, 0.5),
+            0 0 80px rgba(59, 130, 246, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(20px);
+        position: relative;
+        overflow: visible;
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        animation: scale-in 0.6s ease-out;
+        margin-bottom: 0.5rem;
+    }
+
+    .system-overview-wrapper:hover {
+        transform: translateY(-6px);
+        border-color: rgba(59, 130, 246, 0.45);
+        box-shadow:
+            0 30px 80px rgba(0, 0, 0, 0.6),
+            0 0 120px rgba(59, 130, 246, 0.25),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    .system-overview-wrapper::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            #3b82f6,
+            #8b5cf6,
+            #ec4899,
+            #3b82f6,
+            transparent
+        );
+        background-size: 300% 100%;
+        animation: shimmer-flow 6s linear infinite;
+        border-radius: 20px 20px 0 0;
+    }
+
+    .system-overview-wrapper::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+            circle,
+            rgba(59, 130, 246, 0.15) 0%,
+            transparent 70%
+        );
+        pointer-events: none;
+        animation: glow-pulse 4s ease-in-out infinite;
+        z-index: -1;
+    }
+
     /* --- ENHANCED KPI CARDS --- */
     .dashboard-kpi-card {
         position: relative;
@@ -1148,116 +1217,127 @@ def page_dashboard():
     st.markdown(f"<h2 class='section-header' style='margin-bottom: 1rem;'>📋 System Overview</h2>", unsafe_allow_html=True)
 
     # Large container card wrapping all 4 KPI cards
-    st.markdown("""
-    <div class='forecast-card' style='padding: 2rem 1.75rem;'>
-    """, unsafe_allow_html=True)
+    # Use Streamlit container with custom CSS styling
+    st.markdown('<div class="system-overview-wrapper">', unsafe_allow_html=True)
+    system_overview_container = st.container()
 
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4, gap="medium")
+    with system_overview_container:
+        kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4, gap="medium")
 
-    with kpi_col1:
-        status = "Active" if system_active else "Offline"
-        status_icon = "🟢" if system_active else "🔴"
-        rgb = "16,185,129" if system_active else "239,68,68"
-        color = SUCCESS_COLOR if system_active else DANGER_COLOR
-        st.markdown(
-            f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
-              <span class='kpi-label' style='margin-bottom: 0.5rem;'>System Status</span>
-              <div style='margin: 0.75rem 0;'>
-                <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
-                  {status_icon} {status}
-                </span>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with kpi_col1:
+            status = "Active" if system_active else "Offline"
+            status_icon = "🟢" if system_active else "🔴"
+            rgb = "16,185,129" if system_active else "239,68,68"
+            color = SUCCESS_COLOR if system_active else DANGER_COLOR
+            st.markdown(
+                f"""
+                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
+                  <span class='kpi-label' style='margin-bottom: 0.5rem;'>System Status</span>
+                  <div style='margin: 0.75rem 0;'>
+                    <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
+                      {status_icon} {status}
+                    </span>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    with kpi_col2:
-        st.markdown(
-            f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
-              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Datasets Loaded</span>
-              <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/3</div>
-              <div style='
-                  width: 100%;
-                  height: 5px;
-                  background: rgba(59, 130, 246, 0.15);
-                  border-radius: 3px;
-                  overflow: hidden;
-                  margin-top: 0.25rem;
-              '>
-                <div style='
-                    width: {(datasets_loaded/3)*100}%;
-                    height: 100%;
-                    background: linear-gradient(90deg, #3b82f6, #22d3ee);
-                    transition: width 0.5s ease;
-                '></div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with kpi_col2:
+            st.markdown(
+                f"""
+                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
+                  <span class='kpi-label' style='margin-bottom: 0.5rem;'>Datasets Loaded</span>
+                  <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/3</div>
+                  <div style='
+                      width: 100%;
+                      height: 5px;
+                      background: rgba(59, 130, 246, 0.15);
+                      border-radius: 3px;
+                      overflow: hidden;
+                      margin-top: 0.25rem;
+                  '>
+                    <div style='
+                        width: {(datasets_loaded/3)*100}%;
+                        height: 100%;
+                        background: linear-gradient(90deg, #3b82f6, #22d3ee);
+                        transition: width 0.5s ease;
+                    '></div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    with kpi_col3:
-        pipeline_complete = st.session_state.get("merged_data") is not None
-        status_icon = "🟢" if pipeline_complete else "🟡"
-        rgb = "16,185,129" if pipeline_complete else "245,158,11"
-        color = SUCCESS_COLOR if pipeline_complete else WARNING_COLOR
-        label = "Complete" if pipeline_complete else "Pending"
-        st.markdown(
-            f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
-              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Data Pipeline</span>
-              <div style='margin: 0.75rem 0;'>
-                <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
-                  {status_icon} {label}
-                </span>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with kpi_col3:
+            pipeline_complete = st.session_state.get("merged_data") is not None
+            status_icon = "🟢" if pipeline_complete else "🟡"
+            rgb = "16,185,129" if pipeline_complete else "245,158,11"
+            color = SUCCESS_COLOR if pipeline_complete else WARNING_COLOR
+            label = "Complete" if pipeline_complete else "Pending"
+            st.markdown(
+                f"""
+                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
+                  <span class='kpi-label' style='margin-bottom: 0.5rem;'>Data Pipeline</span>
+                  <div style='margin: 0.75rem 0;'>
+                    <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
+                      {status_icon} {label}
+                    </span>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    # Quick Insights in the 4th column
-    with kpi_col4:
-        df_p = st.session_state.get("patient_data")
-        if isinstance(df_p, pd.DataFrame) and not df_p.empty:
-            y_col = _pick_count_col(df_p)
-            date_col = _pick_date_col(df_p)
-            if y_col and date_col:
-                dfq = pd.DataFrame({
-                    "dt": _to_datetime_safe(df_p[date_col]),
-                    "y": pd.to_numeric(df_p[y_col], errors="coerce")
-                }).dropna().sort_values("dt")
-                if not dfq.empty:
-                    mean_v = float(dfq["y"].mean())
-                    std_v = float(dfq["y"].std(ddof=0))
-                    ratio = std_v / mean_v if mean_v > 0 else np.nan
-                    st.markdown(
-                        f"""
-                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
-                          <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
-                          <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{mean_v:,.0f}</div>
-                          <div style='font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;'>Mean Patient Count</div>
-                          <div style='
-                              display: inline-flex;
-                              align-items: center;
-                              gap: 0.375rem;
-                              padding: 0.5rem 0.875rem;
-                              background: rgba(167, 139, 250, 0.15);
-                              border: 1px solid rgba(167, 139, 250, 0.3);
-                              border-radius: 10px;
-                              font-size: 0.8125rem;
-                              font-weight: 600;
-                              color: #a78bfa;
-                          '>
-                              📊 Volatility: {ratio:.2f}
-                          </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+        # Quick Insights in the 4th column
+        with kpi_col4:
+            df_p = st.session_state.get("patient_data")
+            if isinstance(df_p, pd.DataFrame) and not df_p.empty:
+                y_col = _pick_count_col(df_p)
+                date_col = _pick_date_col(df_p)
+                if y_col and date_col:
+                    dfq = pd.DataFrame({
+                        "dt": _to_datetime_safe(df_p[date_col]),
+                        "y": pd.to_numeric(df_p[y_col], errors="coerce")
+                    }).dropna().sort_values("dt")
+                    if not dfq.empty:
+                        mean_v = float(dfq["y"].mean())
+                        std_v = float(dfq["y"].std(ddof=0))
+                        ratio = std_v / mean_v if mean_v > 0 else np.nan
+                        st.markdown(
+                            f"""
+                            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
+                              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
+                              <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{mean_v:,.0f}</div>
+                              <div style='font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;'>Mean Patient Count</div>
+                              <div style='
+                                  display: inline-flex;
+                                  align-items: center;
+                                  gap: 0.375rem;
+                                  padding: 0.5rem 0.875rem;
+                                  background: rgba(167, 139, 250, 0.15);
+                                  border: 1px solid rgba(167, 139, 250, 0.3);
+                                  border-radius: 10px;
+                                  font-size: 0.8125rem;
+                                  font-weight: 600;
+                                  color: #a78bfa;
+                              '>
+                                  📊 Volatility: {ratio:.2f}
+                              </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown(
+                            """
+                            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
+                              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
+                              <div style='margin: 0.75rem 0; color: #94a3b8;'>No data</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
                 else:
                     st.markdown(
                         """
@@ -1273,24 +1353,13 @@ def page_dashboard():
                     """
                     <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
                       <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
-                      <div style='margin: 0.75rem 0; color: #94a3b8;'>No data</div>
+                      <div style='margin: 0.75rem 0; color: #94a3b8;'>Load data</div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-        else:
-            st.markdown(
-                """
-                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
-                  <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
-                  <div style='margin: 0.75rem 0; color: #94a3b8;'>Load data</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
 
-    # Close the large container card
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ========================================
     # RECENT ACTIVITY SECTION
