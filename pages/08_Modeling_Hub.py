@@ -1612,37 +1612,110 @@ def page_ml():
         st.warning("⚠️ No feature selection results found. Please run **Automated Feature Selection** (Page 07) first.")
         data_source_placeholder()
 
-    # 3. Manual Configuration
-    st.subheader("Model Configuration")
-    st.caption("Configure hyperparameters manually. For automated optimization, use the **Hyperparameter Tuning** tab.")
+    # 3. Manual Configuration - Redesigned with vertical layout
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 2rem 0 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+            <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                ⚙️ Model Configuration
+            </h3>
+            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
+                Configure hyperparameters manually. For automated optimization, use the <strong>Hyperparameter Tuning</strong> tab.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     # Manual params (model-specific, but rendered generically)
     manual_params = MLUIComponents.render_manual_params(selected_model, cfg)
     cfg.update(manual_params)
 
-    # Train/test split ratio
+    st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+
+    # Train/test split ratio - Full width with better styling
+    st.markdown(
+        f"""
+        <div style='background: rgba(30, 41, 59, 0.5); padding: 1rem; border-radius: 10px; margin-bottom: 1rem;
+                    border: 1px solid rgba(59, 130, 246, 0.2);'>
+            <p style='color: {TEXT_COLOR}; font-weight: 600; margin: 0 0 0.5rem 0; font-size: 0.95rem;'>
+                📊 Train/Validation Split Ratio
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     cfg["split_ratio"] = st.slider(
-        "Train/Validation split ratio",
+        "Split ratio",
         0.50, 0.95,
         float(cfg.get("split_ratio", 0.80)),
         0.01,
         key="ml_split_ratio",
-        help="Proportion of data to use for training"
+        help="Proportion of data to use for training",
+        label_visibility="collapsed"
     )
+    st.caption(f"🎯 Training: {int(cfg['split_ratio']*100)}% | Validation: {int((1-cfg['split_ratio'])*100)}%")
 
-    # 5. Forecast Horizons Selection
-    st.subheader("⏰ Forecast Horizons")
+    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
+
+    # 5. Forecast Horizons Selection - Vertical card design
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(139, 92, 246, 0.1));
+                    border-left: 4px solid {WARNING_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);'>
+            <h3 style='color: {WARNING_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(167, 139, 250, 0.5);'>
+                ⏰ Forecast Horizons
+            </h3>
+            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
+                Train separate models for each forecast horizon (Target_1 through Target_N)
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     cfg["ml_horizons"] = st.slider(
         "Number of forecast horizons",
         min_value=1,
         max_value=7,
         value=cfg.get("ml_horizons", 7),
-        help="Train separate models for Target_1 through Target_N (multi-horizon forecasting)"
+        help="Train separate models for Target_1 through Target_N (multi-horizon forecasting)",
+        label_visibility="collapsed"
     )
+    st.caption(f"🔮 Training {cfg.get('ml_horizons', 7)} independent models (1-day to {cfg.get('ml_horizons', 7)}-day ahead)")
 
-    # 6. Features Selection (based on selected dataset)
-    # Note: No target selection needed for multi-horizon - we train for all Target_1...Target_H
-    st.subheader("🎯 Features Selection")
+    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
+
+    # 6. Features Selection - Vertical card design
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
+                    border-left: 4px solid {SUCCESS_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);'>
+            <h3 style='color: {SUCCESS_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);'>
+                🎯 Features Selection
+            </h3>
+            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
+                Select which features to use for training the models
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     if selected_df is not None and not selected_df.empty:
         # Feature columns are all non-target columns
