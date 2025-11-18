@@ -1147,7 +1147,7 @@ def page_dashboard():
     st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
     st.markdown(f"<h2 class='section-header' style='margin-bottom: 1rem;'>📋 System Overview</h2>", unsafe_allow_html=True)
 
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns([1.2, 1.2, 1.2, 1.5])
+    kpi_col1, kpi_col2, kpi_col3 = st.columns([1, 1, 1])
 
     with kpi_col1:
         status = "Active" if system_active else "Offline"
@@ -1214,9 +1214,12 @@ def page_dashboard():
             unsafe_allow_html=True,
         )
 
-    # Quick Insights in the 4th column
-    with kpi_col4:
-        st.markdown("<div class='dashboard-kpi-card' style='padding: 1.25rem 1rem;'>", unsafe_allow_html=True)
+    # Quick Insights - Separate Row
+    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+
+    insight_col1, insight_col2, insight_col3 = st.columns([1, 1, 1])
+    with insight_col2:
+        st.markdown("<div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>", unsafe_allow_html=True)
         st.markdown("<span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>", unsafe_allow_html=True)
         df_p = st.session_state.get("patient_data")
         if isinstance(df_p, pd.DataFrame) and not df_p.empty:
