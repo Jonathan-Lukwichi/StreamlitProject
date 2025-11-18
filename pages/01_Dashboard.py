@@ -388,148 +388,9 @@ def page_dashboard():
         unsafe_allow_html=True,
     )
 
-    # --- OPTIMIZED COMPACT LAYOUT ---
-    # System Overview - All in one row
-    st.markdown(f"<h2 class='section-header' style='margin-bottom: 1rem;'>📋 System Overview</h2>", unsafe_allow_html=True)
-
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns([1.2, 1.2, 1.2, 1.5])
-
-    with kpi_col1:
-        status = "Active" if system_active else "Offline"
-        status_icon = "🟢" if system_active else "🔴"
-        rgb = "16,185,129" if system_active else "239,68,68"
-        color = SUCCESS_COLOR if system_active else DANGER_COLOR
-        st.markdown(
-            f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
-              <span class='kpi-label' style='margin-bottom: 0.5rem;'>System Status</span>
-              <div style='margin: 0.75rem 0;'>
-                <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
-                  {status_icon} {status}
-                </span>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with kpi_col2:
-        st.markdown(
-            f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
-              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Datasets Loaded</span>
-              <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/3</div>
-              <div style='
-                  width: 100%;
-                  height: 5px;
-                  background: rgba(59, 130, 246, 0.15);
-                  border-radius: 3px;
-                  overflow: hidden;
-                  margin-top: 0.25rem;
-              '>
-                <div style='
-                    width: {(datasets_loaded/3)*100}%;
-                    height: 100%;
-                    background: linear-gradient(90deg, #3b82f6, #22d3ee);
-                    transition: width 0.5s ease;
-                '></div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with kpi_col3:
-        pipeline_complete = st.session_state.get("merged_data") is not None
-        status_icon = "🟢" if pipeline_complete else "🟡"
-        rgb = "16,185,129" if pipeline_complete else "245,158,11"
-        color = SUCCESS_COLOR if pipeline_complete else WARNING_COLOR
-        label = "Complete" if pipeline_complete else "Pending"
-        st.markdown(
-            f"""
-            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
-              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Data Pipeline</span>
-              <div style='margin: 0.75rem 0;'>
-                <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
-                  {status_icon} {label}
-                </span>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Quick Insights in the 4th column
-    with kpi_col4:
-        st.markdown("<div class='dashboard-kpi-card' style='padding: 1.25rem 1rem;'>", unsafe_allow_html=True)
-        st.markdown("<span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>", unsafe_allow_html=True)
-        df_p = st.session_state.get("patient_data")
-        if isinstance(df_p, pd.DataFrame) and not df_p.empty:
-            y_col = _pick_count_col(df_p)
-            date_col = _pick_date_col(df_p)
-            if y_col and date_col:
-                dfq = pd.DataFrame({
-                    "dt": _to_datetime_safe(df_p[date_col]),
-                    "y": pd.to_numeric(df_p[y_col], errors="coerce")
-                }).dropna().sort_values("dt")
-                if not dfq.empty:
-                    mean_v = float(dfq["y"].mean())
-                    std_v = float(dfq["y"].std(ddof=0))
-                    ratio = std_v / mean_v if mean_v > 0 else np.nan
-                    st.markdown(
-                        f"""<div style='font-size: 0.8125rem; line-height: 1.6;'>
-                            <div style='margin-bottom: 0.5rem;'>
-                                <span style='color: #94a3b8;'>Mean:</span>
-                                <strong style='color: #3b82f6;'>{mean_v:,.0f}</strong>
-                            </div>
-                            <div>
-                                <span style='color: #94a3b8;'>Volatility:</span>
-                                <strong style='color: #a78bfa;'>{ratio:,.2f}</strong>
-                            </div>
-                        </div>""",
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.caption("No data", unsafe_allow_html=True)
-            else:
-                st.caption("No data", unsafe_allow_html=True)
-        else:
-            st.caption("Load data", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # Recent Activity Chart - Full Width Below
-    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-    st.markdown(f"<h2 class='section-header'>📈 Recent Activity</h2>", unsafe_allow_html=True)
-    st.markdown("""<div class='dashboard-kpi-card' style='padding: 1.25rem 1.5rem;'>
-        <span class='kpi-label' style='margin-bottom: 1rem;'>Last 30 Days Trend</span>
-    """, unsafe_allow_html=True)
-    try:
-        if isinstance(df_p, pd.DataFrame) and not df_p.empty:
-            date_col = _pick_date_col(df_p)
-            y_col = _pick_count_col(df_p)
-            if date_col and y_col:
-                dt = _to_datetime_safe(df_p[date_col])
-                s = pd.to_numeric(df_p[y_col], errors="coerce")
-                recent = pd.DataFrame({"dt": dt, "y": s}).dropna().sort_values("dt")
-                if not recent.empty:
-                    cutoff = recent["dt"].max() - pd.Timedelta(days=30)
-                    recent = recent[recent["dt"] >= cutoff]
-                    st.line_chart(recent.set_index("dt")[["y"]], use_container_width=True, height=200)
-                else:
-                    st.caption("No valid time series points detected yet.")
-            else:
-                st.caption("Waiting for a valid date/count column to render a sparkline.")
-        else:
-            st.caption("Data not loaded.")
-    except Exception as e:
-        st.caption(f"Unable to draw sparkline: {e}")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
     # ========================================
     # PATIENT ARRIVAL FORECAST SECTION (Horizontal Design)
     # ========================================
-    st.markdown("<div style='margin-top: 1.75rem;'></div>", unsafe_allow_html=True)
     st.markdown(f"<h2 class='section-header'>🔮 Patient Arrival Forecast</h2>", unsafe_allow_html=True)
 
     # Ultra-Premium Forecast Design - Professional Web Designer Style
@@ -1247,6 +1108,147 @@ def page_dashboard():
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
+
+    # ========================================
+    # SYSTEM OVERVIEW SECTION
+    # ========================================
+    st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='section-header' style='margin-bottom: 1rem;'>📋 System Overview</h2>", unsafe_allow_html=True)
+
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns([1.2, 1.2, 1.2, 1.5])
+
+    with kpi_col1:
+        status = "Active" if system_active else "Offline"
+        status_icon = "🟢" if system_active else "🔴"
+        rgb = "16,185,129" if system_active else "239,68,68"
+        color = SUCCESS_COLOR if system_active else DANGER_COLOR
+        st.markdown(
+            f"""
+            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+              <span class='kpi-label' style='margin-bottom: 0.5rem;'>System Status</span>
+              <div style='margin: 0.75rem 0;'>
+                <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
+                  {status_icon} {status}
+                </span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with kpi_col2:
+        st.markdown(
+            f"""
+            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Datasets Loaded</span>
+              <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/3</div>
+              <div style='
+                  width: 100%;
+                  height: 5px;
+                  background: rgba(59, 130, 246, 0.15);
+                  border-radius: 3px;
+                  overflow: hidden;
+                  margin-top: 0.25rem;
+              '>
+                <div style='
+                    width: {(datasets_loaded/3)*100}%;
+                    height: 100%;
+                    background: linear-gradient(90deg, #3b82f6, #22d3ee);
+                    transition: width 0.5s ease;
+                '></div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with kpi_col3:
+        pipeline_complete = st.session_state.get("merged_data") is not None
+        status_icon = "🟢" if pipeline_complete else "🟡"
+        rgb = "16,185,129" if pipeline_complete else "245,158,11"
+        color = SUCCESS_COLOR if pipeline_complete else WARNING_COLOR
+        label = "Complete" if pipeline_complete else "Pending"
+        st.markdown(
+            f"""
+            <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+              <span class='kpi-label' style='margin-bottom: 0.5rem;'>Data Pipeline</span>
+              <div style='margin: 0.75rem 0;'>
+                <span class='status-badge-enhanced' style='background:rgba({rgb},.18);color:{color};border:1px solid rgba({rgb},.35);'>
+                  {status_icon} {label}
+                </span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Quick Insights in the 4th column
+    with kpi_col4:
+        st.markdown("<div class='dashboard-kpi-card' style='padding: 1.25rem 1rem;'>", unsafe_allow_html=True)
+        st.markdown("<span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>", unsafe_allow_html=True)
+        df_p = st.session_state.get("patient_data")
+        if isinstance(df_p, pd.DataFrame) and not df_p.empty:
+            y_col = _pick_count_col(df_p)
+            date_col = _pick_date_col(df_p)
+            if y_col and date_col:
+                dfq = pd.DataFrame({
+                    "dt": _to_datetime_safe(df_p[date_col]),
+                    "y": pd.to_numeric(df_p[y_col], errors="coerce")
+                }).dropna().sort_values("dt")
+                if not dfq.empty:
+                    mean_v = float(dfq["y"].mean())
+                    std_v = float(dfq["y"].std(ddof=0))
+                    ratio = std_v / mean_v if mean_v > 0 else np.nan
+                    st.markdown(
+                        f"""<div style='font-size: 0.8125rem; line-height: 1.6;'>
+                            <div style='margin-bottom: 0.5rem;'>
+                                <span style='color: #94a3b8;'>Mean:</span>
+                                <strong style='color: #3b82f6;'>{mean_v:,.0f}</strong>
+                            </div>
+                            <div>
+                                <span style='color: #94a3b8;'>Volatility:</span>
+                                <strong style='color: #a78bfa;'>{ratio:,.2f}</strong>
+                            </div>
+                        </div>""",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.caption("No data", unsafe_allow_html=True)
+            else:
+                st.caption("No data", unsafe_allow_html=True)
+        else:
+            st.caption("Load data", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # ========================================
+    # RECENT ACTIVITY SECTION
+    # ========================================
+    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='section-header'>📈 Recent Activity</h2>", unsafe_allow_html=True)
+    st.markdown("""<div class='dashboard-kpi-card' style='padding: 1.25rem 1.5rem;'>
+        <span class='kpi-label' style='margin-bottom: 1rem;'>Last 30 Days Trend</span>
+    """, unsafe_allow_html=True)
+    try:
+        if isinstance(df_p, pd.DataFrame) and not df_p.empty:
+            date_col = _pick_date_col(df_p)
+            y_col = _pick_count_col(df_p)
+            if date_col and y_col:
+                dt = _to_datetime_safe(df_p[date_col])
+                s = pd.to_numeric(df_p[y_col], errors="coerce")
+                recent = pd.DataFrame({"dt": dt, "y": s}).dropna().sort_values("dt")
+                if not recent.empty:
+                    cutoff = recent["dt"].max() - pd.Timedelta(days=30)
+                    recent = recent[recent["dt"] >= cutoff]
+                    st.line_chart(recent.set_index("dt")[["y"]], use_container_width=True, height=200)
+                else:
+                    st.caption("No valid time series points detected yet.")
+            else:
+                st.caption("Waiting for a valid date/count column to render a sparkline.")
+        else:
+            st.caption("Data not loaded.")
+    except Exception as e:
+        st.caption(f"Unable to draw sparkline: {e}")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 init_state()
