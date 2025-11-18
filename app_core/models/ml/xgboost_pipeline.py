@@ -33,6 +33,136 @@ class XGBoostPipeline(BaseMLPipeline):
                     - colsample_bytree: Subsample ratio of columns
         """
         super().__init__(config)
+        self.preprocessing_report = None
+
+    def detect_preprocessing_state(self, X, y=None):
+        """
+        Check EACH variable individually for preprocessing state.
+
+        Args:
+            X: Feature matrix (n_samples, n_features)
+            y: Target vector (n_samples,) - optional
+
+        Returns:
+            Comprehensive analysis of each feature's preprocessing state
+        """
+        n_features = X.shape[1]
+        feature_analysis = []
+
+        # Check each feature column separately
+        for i in range(n_features):
+            feature_col = X[:, i]
+
+            col_min, col_max = feature_col.min(), feature_col.max()
+            col_mean, col_std = feature_col.mean(), feature_col.std()
+            col_range = col_max - col_min
+
+            # Detect scaling type for THIS specific feature
+            if -0.05 <= col_min <= 0.05 and 0.95 <= col_max <= 1.05:
+                scaling_type = 'MinMaxScaler[0,1]'
+                is_scaled = True
+                confidence = 'HIGH'
+
+            elif -1.05 <= col_min <= -0.95 and 0.95 <= col_max <= 1.05:
+                scaling_type = 'MinMaxScaler[-1,1]'
+                is_scaled = True
+                confidence = 'HIGH'
+
+            elif abs(col_mean) < 0.3 and 0.7 < col_std < 1.3:
+                scaling_type = 'StandardScaler'
+                is_scaled = True
+                confidence = 'MEDIUM'
+
+            elif col_range < 5 and abs(col_mean) < 2:
+                scaling_type = 'Custom/Unknown'
+                is_scaled = True
+                confidence = 'LOW'
+
+            else:
+                scaling_type = 'Unscaled'
+                is_scaled = False
+                confidence = 'HIGH'
+
+            feature_analysis.append({
+                'feature_idx': i,
+                'is_scaled': is_scaled,
+                'scaling_type': scaling_type,
+                'confidence': confidence,
+                'min': float(col_min),
+                'max': float(col_max),
+                'mean': float(col_mean),
+                'std': float(col_std),
+                'range': float(col_range)
+            })
+
+        # Check target variable separately
+        target_analysis = None
+        if y is not None:
+            y_min, y_max = y.min(), y.max()
+            y_mean, y_std = y.mean(), y.std()
+            y_range = y_max - y_min
+
+            if -0.05 <= y_min <= 0.05 and 0.95 <= y_max <= 1.05:
+                target_scaling = 'MinMaxScaler[0,1]'
+                target_scaled = True
+                target_confidence = 'HIGH'
+            elif -1.05 <= y_min <= -0.95 and 0.95 <= y_max <= 1.05:
+                target_scaling = 'MinMaxScaler[-1,1]'
+                target_scaled = True
+                target_confidence = 'HIGH'
+            elif abs(y_mean) < 0.3 and 0.7 < y_std < 1.3:
+                target_scaling = 'StandardScaler'
+                target_scaled = True
+                target_confidence = 'MEDIUM'
+            else:
+                target_scaling = 'Unscaled'
+                target_scaled = False
+                target_confidence = 'HIGH'
+
+            target_analysis = {
+                'is_scaled': target_scaled,
+                'scaling_type': target_scaling,
+                'confidence': target_confidence,
+                'min': float(y_min),
+                'max': float(y_max),
+                'mean': float(y_mean),
+                'std': float(y_std),
+                'range': float(y_range)
+            }
+
+        # Aggregate analysis
+        scaled_count = sum(1 for f in feature_analysis if f['is_scaled'])
+        high_confidence_count = sum(1 for f in feature_analysis
+                                    if f['is_scaled'] and f['confidence'] == 'HIGH')
+
+        # Determine overall state
+        if scaled_count == n_features and high_confidence_count >= n_features * 0.8:
+            overall_state = 'FULLY_SCALED'
+            needs_scaling = False
+            recommendation = 'All features appear scaled - SKIP scaling (XGBoost handles scaling well)'
+        elif scaled_count == 0:
+            overall_state = 'UNSCALED'
+            needs_scaling = False  # XGBoost doesn't require scaling
+            recommendation = 'No features scaled - OK for XGBoost (tree-based)'
+        elif scaled_count < n_features * 0.5:
+            overall_state = 'MOSTLY_UNSCALED'
+            needs_scaling = False  # XGBoost handles this
+            recommendation = 'Majority unscaled - OK for XGBoost'
+        else:
+            overall_state = 'PARTIALLY_SCALED'
+            needs_scaling = False  # Keep as-is for XGBoost
+            recommendation = 'Mixed scaling - OK for XGBoost (tree-based model)'
+
+        return {
+            'feature_analysis': feature_analysis,
+            'target_analysis': target_analysis,
+            'scaled_features': scaled_count,
+            'total_features': n_features,
+            'high_confidence_scaled': high_confidence_count,
+            'overall_state': overall_state,
+            'needs_scaling': needs_scaling,
+            'recommendation': recommendation
+        }
 
     def build_model(self, input_shape: Tuple = None) -> Any:
         """
@@ -71,7 +201,7 @@ class XGBoostPipeline(BaseMLPipeline):
               X_val: Optional[np.ndarray] = None,
               y_val: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """
-        Train XGBoost model.
+        Train XGBoost model with intelligent preprocessing detection.
 
         Args:
             X_train: Training features
@@ -82,6 +212,21 @@ class XGBoostPipeline(BaseMLPipeline):
         Returns:
             Training history with train and validation metrics
         """
+        # Detect preprocessing state
+        detection = self.detect_preprocessing_state(X_train, y_train)
+        self.preprocessing_report = detection
+
+        print("=" * 70)
+        print("🔍 XGBOOST PREPROCESSING DETECTION REPORT")
+        print("=" * 70)
+        print(f"Overall State: {detection['overall_state']}")
+        print(f"Recommendation: {detection['recommendation']}")
+        print(f"Scaled Features: {detection['scaled_features']}/{detection['total_features']}")
+        print("-" * 70)
+        print("ℹ️  XGBoost is tree-based and doesn't require feature scaling")
+        print("   Using data as-is for optimal performance")
+        print("=" * 70)
+
         # Build model if not already built
         if self.model is None:
             self.build_model()

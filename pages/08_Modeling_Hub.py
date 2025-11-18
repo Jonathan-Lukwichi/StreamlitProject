@@ -200,10 +200,12 @@ st.markdown(f"""
 # -----------------------------------------------------------------------------
 st.markdown(
     f"""
-    <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
-      <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🧠</div>
-      <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Modeling Hub</h1>
-      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 auto;'>
+    <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
+      <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+        <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🧠</div>
+        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Modeling Hub</h1>
+      </div>
+      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
         Unified platform for configuring and training time series forecasting models
       </p>
     </div>
@@ -240,7 +242,8 @@ DEFAULTS = {
     "ml_choice": "XGBoost",                  # << default as requested
     # LSTM
     "ml_lstm_param_mode": "Automatic",
-    "lstm_layers": 1, "lstm_hidden_units": 64, "lstm_epochs": 20, "lstm_lr": 1e-3,
+    "lstm_layers": 2, "lstm_hidden_units": 64, "lstm_epochs": 100, "lstm_lr": 1e-3,
+    "lookback_window": 14, "dropout": 0.2, "batch_size": 32,
     "lstm_search_method": "Grid (bounded)",
     "lstm_max_layers": 3, "lstm_max_units": 256, "lstm_max_epochs": 50,
     "lstm_lr_min": 1e-5, "lstm_lr_max": 1e-2,
@@ -628,10 +631,12 @@ def page_benchmarks():
 
     st.markdown(
         f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 0.5rem auto; font-size: 1.8rem;'>📏</div>
-          <h1 class='hf-feature-title' style='font-size: 1.5rem; margin-bottom: 0.5rem;'>Benchmarks Dashboard</h1>
-          <p class='hf-feature-description' style='font-size: 0.9rem; max-width: 600px; margin: 0 auto;'>
+        <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1rem;'>
+          <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+            <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 1.8rem;'>📏</div>
+            <h1 class='hf-feature-title' style='font-size: 1.5rem; margin: 0;'>Benchmarks Dashboard</h1>
+          </div>
+          <p class='hf-feature-description' style='font-size: 0.9rem; max-width: 600px; margin: 0 0 0 3.5rem;'>
             Performance metrics for ARIMA and SARIMAX models trained in the Benchmarks page
           </p>
         </div>
@@ -835,6 +840,7 @@ def run_ml_multihorizon(
     rows = []
     per_h = {}
     successful = []
+    errors = {}  # Store errors for each horizon
 
     # Parameter sharing: find optimal parameters once for h=1, reuse for h>1 (if using auto mode)
     shared_params = None
@@ -857,6 +863,10 @@ def run_ml_multihorizon(
             )
 
             if not result.get("success", False):
+                # Store the error message from result
+                error_msg = result.get("error", "Unknown error")
+                errors[h] = error_msg
+                print(f"❌ Horizon {h} failed: {error_msg}")
                 continue
 
             # Extract metrics
@@ -893,15 +903,29 @@ def run_ml_multihorizon(
             successful.append(h)
 
         except Exception as e:
-            # Skip failed horizons
+            # Skip failed horizons and store error
+            error_msg = str(e)
+            errors[h] = error_msg
+            print(f"❌ Horizon {h} failed: {error_msg}")
+            import traceback
+            traceback.print_exc()  # Print full traceback to console
             continue
 
-    results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
+    # Create results DataFrame (handle empty case)
+    if rows:
+        results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
+    else:
+        # No successful horizons - create empty DataFrame with correct schema
+        results_df = pd.DataFrame(columns=[
+            "Horizon", "Model", "Train_MAE", "Train_RMSE", "Train_MAPE", "Train_Acc",
+            "Test_MAE", "Test_RMSE", "Test_MAPE", "Test_Acc", "Train_N", "Test_N"
+        ])
 
     return {
         "results_df": results_df,
         "per_h": per_h,
         "successful": successful,
+        "errors": errors,  # Include errors in return
     }
 
 def ml_to_multihorizon_artifacts(ml_out: dict):
@@ -1098,18 +1122,32 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             pipeline = XGBoostPipeline(model_config)
 
         elif model_type == "LSTM":
-            # TODO: Implement LSTM pipeline
-            return {
-                "success": False,
-                "error": "LSTM pipeline not yet implemented. Coming soon!"
+            from app_core.models.ml.lstm_pipeline import LSTMPipeline
+
+            # Extract LSTM params from config
+            model_config = {
+                "lookback_window": config.get("lookback_window", 14),
+                "lstm_hidden_units": config.get("lstm_hidden_units", 64),
+                "lstm_layers": config.get("lstm_layers", 2),
+                "dropout": config.get("dropout", 0.2),
+                "lstm_epochs": config.get("lstm_epochs", 100),
+                "lstm_lr": config.get("lstm_lr", 0.001),
+                "batch_size": config.get("batch_size", 32),
             }
+            pipeline = LSTMPipeline(model_config)
 
         elif model_type == "ANN":
-            # TODO: Implement ANN pipeline
-            return {
-                "success": False,
-                "error": "ANN pipeline not yet implemented. Coming soon!"
+            from app_core.models.ml.ann_pipeline import ANNPipeline
+
+            # Extract ANN params from config
+            model_config = {
+                "ann_hidden_layers": config.get("ann_hidden_layers", 2),
+                "ann_neurons": config.get("ann_neurons", 64),
+                "ann_activation": config.get("ann_activation", "relu"),
+                "dropout": config.get("dropout", 0.2),
+                "ann_epochs": config.get("ann_epochs", 30),
             }
+            pipeline = ANNPipeline(model_config)
         else:
             return {
                 "success": False,
@@ -1118,7 +1156,8 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
 
         # Train model
         start_time = time.time()
-        pipeline.build_model()
+        n_features = X_train.shape[1]  # Get number of features
+        pipeline.build_model(n_features)  # Pass n_features to build_model
         pipeline.train(X_train, y_train, X_val, y_val)
         training_time = time.time() - start_time
 
@@ -1307,43 +1346,64 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
 
     results_df = ml_mh_results.get("results_df")
     successful = ml_mh_results.get("successful", [])
+    errors = ml_mh_results.get("errors", {})
+    per_h = ml_mh_results.get("per_h", {})  # For fallback error plots
 
     if results_df is None or results_df.empty or not successful:
-        st.error("❌ **Training Failed** - No successful horizons")
+        st.error(
+            f"❌ **{model_name} Training Failed - No Successful Horizons**\n\n"
+            "**Possible causes:**\n"
+            "- Data format issues (check feature types)\n"
+            "- Insufficient data (LSTM needs at least 15+ rows)\n"
+            "- Missing or invalid features\n\n"
+            "**Detailed errors below:**"
+        )
+
+        # Display errors for each horizon
+        if errors:
+            st.markdown("### 🔍 Error Details by Horizon")
+            for horizon, error_msg in sorted(errors.items()):
+                with st.expander(f"❌ Horizon {horizon} - Click to view error"):
+                    st.code(error_msg, language="python")
+        else:
+            st.info("No detailed error information available. Check the terminal/console output.")
+
         return
 
-    # Premium success banner
+    # Premium success banner - Left aligned and compact
     st.markdown(
         f"""
         <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
                     border: 2px solid {SUCCESS_COLOR};
-                    padding: 2rem;
-                    border-radius: 16px;
-                    margin-bottom: 2rem;
+                    padding: 1.25rem 1.5rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
                     box-shadow: 0 0 30px rgba(34, 197, 94, 0.3), inset 0 0 20px rgba(34, 197, 94, 0.1);'>
-            <div style='text-align: center;'>
-                <div style='font-size: 3rem; margin-bottom: 0.5rem;'>✅</div>
-                <h2 style='margin: 0 0 0.5rem 0; color: {SUCCESS_COLOR}; font-size: 1.5rem; font-weight: 800; text-shadow: 0 0 20px rgba(34, 197, 94, 0.5);'>
-                    Multi-Horizon {model_name} Training Complete!
-                </h2>
-                <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.95; font-size: 1.1rem;'>
-                    🎯 All {len(successful)} forecast horizons successfully trained and validated
-                </p>
+            <div style='display: flex; align-items: center;'>
+                <div style='font-size: 2.5rem; margin-right: 1rem;'>✅</div>
+                <div>
+                    <h2 style='margin: 0 0 0.25rem 0; color: {SUCCESS_COLOR}; font-size: 1.3rem; font-weight: 800; text-shadow: 0 0 20px rgba(34, 197, 94, 0.5);'>
+                        Multi-Horizon {model_name} Training Complete!
+                    </h2>
+                    <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9; font-size: 0.95rem;'>
+                        🎯 All {len(successful)} forecast horizons successfully trained and validated
+                    </p>
+                </div>
             </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # Fluorescent KPI Cards - Similar to benchmarks page
+    # Fluorescent KPI Cards - Left aligned and compact
     st.markdown(
         f"""
-        <div style='text-align: center; margin: 2rem 0 1rem 0;'>
-            <h3 style='font-size: 1.3rem; font-weight: 700; color: {PRIMARY_COLOR};
-                       text-shadow: 0 0 20px rgba(59, 130, 246, 0.6); margin: 0;'>
+        <div style='text-align: left; margin: 1.5rem 0 1rem 0;'>
+            <h3 style='font-size: 1.2rem; font-weight: 700; color: {PRIMARY_COLOR};
+                       text-shadow: 0 0 20px rgba(59, 130, 246, 0.6); margin: 0 0 0.25rem 0;'>
                 🏆 Average Performance Metrics
             </h3>
-            <p style='color: {SUBTLE_TEXT}; margin: 0.5rem 0 0 0; font-size: 0.95rem;'>
+            <p style='color: {SUBTLE_TEXT}; margin: 0; font-size: 0.9rem;'>
                 Averaged across all {len(successful)} forecast horizons
             </p>
         </div>
@@ -1523,15 +1583,93 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
             )
 
             # Error Box Plot (Full Width)
-            if "fig_err_box" in figs and hasattr(figs["fig_err_box"], 'savefig'):
+            if "fig_err_box" in figs and hasattr(figs.get("fig_err_box"), 'savefig'):
                 st.markdown("**📦 Error Distribution (Box Plot)**")
                 st.pyplot(figs["fig_err_box"])
                 st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+            else:
+                # Fallback: Create error plot manually if not available
+                try:
+                    import matplotlib.pyplot as plt
+                    import seaborn as sns
+
+                    # Calculate errors for each horizon
+                    errors_by_horizon = {}
+                    for h in successful:
+                        if h in per_h:
+                            y_test = per_h[h].get("y_test")
+                            forecast = per_h[h].get("forecast")
+                            if y_test is not None and forecast is not None:
+                                errors_by_horizon[f"H{h}"] = y_test - forecast
+
+                    if errors_by_horizon:
+                        st.markdown("**📦 Error Distribution (Box Plot)**")
+                        fig, ax = plt.subplots(figsize=(12, 6))
+
+                        # Create box plot
+                        data_to_plot = [errors for errors in errors_by_horizon.values()]
+                        labels = list(errors_by_horizon.keys())
+
+                        bp = ax.boxplot(data_to_plot, labels=labels, patch_artist=True)
+
+                        # Style the plot
+                        for patch in bp['boxes']:
+                            patch.set_facecolor('#3b82f6')
+                            patch.set_alpha(0.6)
+
+                        ax.axhline(y=0, color='red', linestyle='--', alpha=0.5, label='Zero Error')
+                        ax.set_xlabel('Horizon', fontsize=12, fontweight='bold')
+                        ax.set_ylabel('Prediction Error', fontsize=12, fontweight='bold')
+                        ax.set_title('Error Distribution by Horizon', fontsize=14, fontweight='bold')
+                        ax.grid(True, alpha=0.3)
+                        ax.legend()
+
+                        st.pyplot(fig)
+                        plt.close(fig)
+                        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+                except Exception as plot_error:
+                    st.info(f"Error distribution plot not available: {str(plot_error)}")
 
             # Error KDE (Full Width)
-            if "fig_err_kde" in figs and hasattr(figs["fig_err_kde"], 'savefig'):
+            if "fig_err_kde" in figs and hasattr(figs.get("fig_err_kde"), 'savefig'):
                 st.markdown("**🌊 Error Density Distribution (KDE)**")
                 st.pyplot(figs["fig_err_kde"])
+            else:
+                # Fallback: Create KDE plot manually if not available
+                try:
+                    import matplotlib.pyplot as plt
+                    import seaborn as sns
+
+                    # Calculate errors for each horizon
+                    errors_by_horizon = {}
+                    for h in successful:
+                        if h in per_h:
+                            y_test = per_h[h].get("y_test")
+                            forecast = per_h[h].get("forecast")
+                            if y_test is not None and forecast is not None:
+                                errors_by_horizon[f"Horizon {h}"] = y_test - forecast
+
+                    if errors_by_horizon:
+                        st.markdown("**🌊 Error Density Distribution (KDE)**")
+                        fig, ax = plt.subplots(figsize=(12, 6))
+
+                        # Create KDE plot for each horizon
+                        colors = plt.cm.viridis(np.linspace(0, 1, len(errors_by_horizon)))
+
+                        for (label, errors), color in zip(errors_by_horizon.items(), colors):
+                            sns.kdeplot(data=errors, label=label, ax=ax, color=color, linewidth=2, alpha=0.7)
+
+                        ax.axvline(x=0, color='red', linestyle='--', alpha=0.5, label='Zero Error')
+                        ax.set_xlabel('Prediction Error', fontsize=12, fontweight='bold')
+                        ax.set_ylabel('Density', fontsize=12, fontweight='bold')
+                        ax.set_title('Error Density Distribution (KDE)', fontsize=14, fontweight='bold')
+                        ax.grid(True, alpha=0.3)
+                        ax.legend(loc='best')
+
+                        st.pyplot(fig)
+                        plt.close(fig)
+                except Exception as plot_error:
+                    st.info(f"Error KDE plot not available: {str(plot_error)}")
 
     except Exception as e:
         # Fallback to basic metrics table if dashboard fails
@@ -1559,13 +1697,15 @@ def page_ml():
     # Import ML UI components
     from app_core.ui.ml_components import MLUIComponents
 
-    # Header (preserved design - exact same styling)
+    # Header (left-aligned like Dashboard)
     st.markdown(
         f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🧮</div>
-          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Machine Learning</h1>
-          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
+        <div class='hf-feature-card' style='text-align: left; margin-bottom: 2rem;'>
+          <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+            <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🧮</div>
+            <h1 class='hf-feature-title' style='font-size: 2.5rem; margin: 0;'>Machine Learning</h1>
+          </div>
+          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 0 0 4.5rem;'>
             Configure and train advanced machine learning models including LSTM, ANN, and XGBoost for sophisticated forecasting
           </p>
         </div>
@@ -1574,7 +1714,22 @@ def page_ml():
     )
 
     # 1. Model Selection (Generic - replaces 15 lines with 3)
-    st.subheader("Model selection")
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
+                    border-left: 4px solid rgba(168, 85, 247, 0.8);
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 2rem 0 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
+            <h3 style='color: rgba(168, 85, 247, 1); margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
+                🤖 Model Selection
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     selected_model = MLUIComponents.render_model_selector(cfg.get("ml_choice", "XGBoost"))
     cfg["ml_choice"] = selected_model
 
@@ -1583,7 +1738,22 @@ def page_ml():
     selected_df = None  # Initialize for later use in target/feature selection
 
     if datasets:
-        st.subheader("📊 Dataset Selection")
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(6, 182, 212, 0.1));
+                        border-left: 4px solid rgba(34, 211, 238, 0.8);
+                        padding: 1.5rem;
+                        border-radius: 12px;
+                        margin: 2rem 0 1.5rem 0;
+                        box-shadow: 0 0 20px rgba(34, 211, 238, 0.2);'>
+                <h3 style='color: rgba(34, 211, 238, 1); margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                           text-shadow: 0 0 15px rgba(34, 211, 238, 0.5);'>
+                    📊 Dataset Selection
+                </h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         dataset_options = list(datasets.keys())
         selected_dataset_name = st.selectbox(
             "Select feature-selected dataset",
@@ -1592,14 +1762,47 @@ def page_ml():
         )
         selected_df = datasets[selected_dataset_name]
 
-        # Show dataset info
+        # Show dataset info in fluorescent KPI cards
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Features", len(selected_df.columns) - 7)  # Exclude Target_1..7
+            st.plotly_chart(
+                _create_kpi_indicator("Features", len(selected_df.columns) - 7, "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="dataset_kpi_features"
+            )
         with col2:
-            st.metric("Samples", len(selected_df))
+            st.plotly_chart(
+                _create_kpi_indicator("Samples", len(selected_df), "", SUCCESS_COLOR),
+                use_container_width=True,
+                key="dataset_kpi_samples"
+            )
         with col3:
-            st.metric("Variant", metadata.get("variant", "Unknown"))
+            # For variant, we'll create a special styled card for text value
+            variant_name = metadata.get("variant", "Unknown")
+            st.markdown(
+                f"""
+                <div style='background: rgba(15, 23, 42, 0.8);
+                            border-radius: 12px;
+                            padding: 1.25rem;
+                            text-align: center;
+                            box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
+                            border: 1px solid rgba(245, 158, 11, 0.2);
+                            height: 120px;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;'>
+                    <div style='color: {TEXT_COLOR}; font-size: 12px; font-weight: 700;
+                                letter-spacing: 0.5px; margin-bottom: 0.5rem;'>
+                        VARIANT
+                    </div>
+                    <div style='color: {WARNING_COLOR}; font-size: 20px; font-weight: 800;
+                                text-shadow: 0 0 15px rgba(245, 158, 11, 0.6);'>
+                        {variant_name}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         # Preview
         with st.expander("📋 Dataset Preview", expanded=False):
@@ -1662,87 +1865,16 @@ def page_ml():
     )
     st.caption(f"🎯 Training: {int(cfg['split_ratio']*100)}% | Validation: {int((1-cfg['split_ratio'])*100)}%")
 
-    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
+    # Auto-configure horizons (default to 7)
+    cfg["ml_horizons"] = 7
 
-    # 5. Forecast Horizons Selection - Vertical card design
-    st.markdown(
-        f"""
-        <div style='background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(139, 92, 246, 0.1));
-                    border-left: 4px solid {WARNING_COLOR};
-                    padding: 1.5rem;
-                    border-radius: 12px;
-                    margin-bottom: 1.5rem;
-                    box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);'>
-            <h3 style='color: {WARNING_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
-                       text-shadow: 0 0 15px rgba(167, 139, 250, 0.5);'>
-                ⏰ Forecast Horizons
-            </h3>
-            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
-                Train separate models for each forecast horizon (Target_1 through Target_N)
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    cfg["ml_horizons"] = st.slider(
-        "Number of forecast horizons",
-        min_value=1,
-        max_value=7,
-        value=cfg.get("ml_horizons", 7),
-        help="Train separate models for Target_1 through Target_N (multi-horizon forecasting)",
-        label_visibility="collapsed"
-    )
-    st.caption(f"🔮 Training {cfg.get('ml_horizons', 7)} independent models (1-day to {cfg.get('ml_horizons', 7)}-day ahead)")
-
-    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
-
-    # 6. Features Selection - Vertical card design
-    st.markdown(
-        f"""
-        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
-                    border-left: 4px solid {SUCCESS_COLOR};
-                    padding: 1.5rem;
-                    border-radius: 12px;
-                    margin-bottom: 1.5rem;
-                    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);'>
-            <h3 style='color: {SUCCESS_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
-                       text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);'>
-                🎯 Features Selection
-            </h3>
-            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
-                Select which features to use for training the models
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
+    # Auto-select all feature columns
     if selected_df is not None and not selected_df.empty:
-        # Feature columns are all non-target columns
         all_columns = selected_df.columns.tolist()
         feature_columns = [col for col in all_columns if not col.startswith("Target_")]
-
-        if feature_columns:
-            current_features = cfg.get("ml_feature_cols", feature_columns)
-            current_features = [f for f in current_features if f in feature_columns]
-            if not current_features:
-                current_features = feature_columns
-
-            selected_features = st.multiselect(
-                "Feature columns",
-                options=feature_columns,
-                default=current_features,
-                help="Select features to use for training (all selected by default)",
-                key="ml_tf_feats"
-            )
-            cfg["ml_feature_cols"] = selected_features
-
-            st.caption(f"✓ {len(selected_features)} features selected | Training {cfg.get('ml_horizons', 7)} horizons (Target_1...Target_{cfg.get('ml_horizons', 7)})")
-        else:
-            st.warning("⚠️ No feature columns found in dataset")
-            cfg["ml_feature_cols"] = []
+        cfg["ml_feature_cols"] = feature_columns
     else:
-        st.caption("Select a dataset above to configure features")
+        cfg["ml_feature_cols"] = []
 
     # 7. Run Model Button
     st.divider()
@@ -1765,17 +1897,22 @@ def page_ml():
 
         if run_button:
             with st.spinner(f"Training {cfg['ml_choice']} for {cfg.get('ml_horizons', 7)} horizons..."):
-                results = run_ml_multihorizon(
-                    model_type=cfg['ml_choice'],
-                    config=cfg,
-                    df=selected_df,
-                    feature_cols=cfg['ml_feature_cols'],
-                    split_ratio=cfg.get('split_ratio', 0.8),
-                    horizons=cfg.get('ml_horizons', 7),
-                )
+                try:
+                    results = run_ml_multihorizon(
+                        model_type=cfg['ml_choice'],
+                        config=cfg,
+                        df=selected_df,
+                        feature_cols=cfg['ml_feature_cols'],
+                        split_ratio=cfg.get('split_ratio', 0.8),
+                        horizons=cfg.get('ml_horizons', 7),
+                    )
 
-                # Store results in session state
-                st.session_state["ml_mh_results"] = results
+                    # Store results in session state
+                    st.session_state["ml_mh_results"] = results
+                except Exception as e:
+                    st.error(f"❌ **Training failed with error:**\n\n```\n{str(e)}\n```")
+                    import traceback
+                    st.code(traceback.format_exc())
 
         # Display results if available
         if "ml_mh_results" in st.session_state:
@@ -1802,10 +1939,12 @@ def page_hyperparameter_tuning():
     # Header
     st.markdown(
         f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🔬</div>
-          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Hyperparameter Tuning</h1>
-          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
+        <div class='hf-feature-card' style='text-align: left; margin-bottom: 2rem;'>
+          <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+            <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🔬</div>
+            <h1 class='hf-feature-title' style='font-size: 2.5rem; margin: 0;'>Hyperparameter Tuning</h1>
+          </div>
+          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 0 0 4.5rem;'>
             Automated hyperparameter optimization using Grid Search, Random Search, or Bayesian Optimization
           </p>
         </div>
@@ -1975,10 +2114,12 @@ def page_hyperparameter_tuning():
 def page_hybrid():
     st.markdown(
         f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🧬</div>
-          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Hybrid Models</h1>
-          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
+        <div class='hf-feature-card' style='text-align: left; margin-bottom: 2rem;'>
+          <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+            <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🧬</div>
+            <h1 class='hf-feature-title' style='font-size: 2.5rem; margin: 0;'>Hybrid Models</h1>
+          </div>
+          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 0 0 4.5rem;'>
             Explore and configure powerful hybrid forecasting architectures that combine multiple modeling approaches
           </p>
         </div>

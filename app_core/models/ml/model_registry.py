@@ -21,6 +21,7 @@ MODEL_REGISTRY = {
 
         # Manual mode defaults (for direct configuration)
         "manual_params": {
+            "lookback": {"min": 1, "max": 60, "default": 14, "step": 1, "label": "Lookback days"},
             "layers": {"min": 1, "max": 5, "default": 1, "step": 1, "label": "LSTM layers"},
             "hidden_units": {"min": 8, "max": 512, "default": 64, "step": 8, "label": "Hidden units"},
             "epochs": {"min": 1, "max": 500, "default": 20, "step": 1, "label": "Epochs"},

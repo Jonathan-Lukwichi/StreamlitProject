@@ -283,28 +283,34 @@ class MLUIComponents:
         st.caption("Manual hyperparameters (placeholders).")
 
         if model_key == "LSTM":
-            # LSTM layout: 3 columns + learning rate (preserves existing design)
-            c1, c2, c3 = st.columns(3)
+            # LSTM layout: 4 columns (lookback, layers, hidden units, epochs) + learning rate below
+            c1, c2, c3, c4 = st.columns(4)
 
             with c1:
+                spec = manual_params["lookback"]
+                param_values["lookback_window"] = int(st.number_input(
+                    spec["label"], spec["min"], spec["max"], spec["default"], spec["step"]
+                ))
+
+            with c2:
                 spec = manual_params["layers"]
                 param_values["lstm_layers"] = int(st.number_input(
                     spec["label"], spec["min"], spec["max"], spec["default"], spec["step"]
                 ))
 
-            with c2:
+            with c3:
                 spec = manual_params["hidden_units"]
                 param_values["lstm_hidden_units"] = int(st.number_input(
                     spec["label"], spec["min"], spec["max"], spec["default"], spec["step"]
                 ))
 
-            with c3:
+            with c4:
                 spec = manual_params["epochs"]
                 param_values["lstm_epochs"] = int(st.number_input(
                     spec["label"], spec["min"], spec["max"], spec["default"], spec["step"]
                 ))
 
-            # Learning rate below
+            # Learning rate below (full width)
             spec = manual_params["lr"]
             param_values["lstm_lr"] = float(st.number_input(
                 spec["label"], spec["min"], spec["max"], spec["default"], format=spec["format"]
