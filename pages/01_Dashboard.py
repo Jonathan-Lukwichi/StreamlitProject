@@ -1216,8 +1216,6 @@ def page_dashboard():
 
     # Quick Insights in the 4th column
     with kpi_col4:
-        st.markdown("<div class='dashboard-kpi-card' style='padding: 1.25rem 1rem;'>", unsafe_allow_html=True)
-        st.markdown("<span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>", unsafe_allow_html=True)
         df_p = st.session_state.get("patient_data")
         if isinstance(df_p, pd.DataFrame) and not df_p.empty:
             y_col = _pick_count_col(df_p)
@@ -1232,25 +1230,59 @@ def page_dashboard():
                     std_v = float(dfq["y"].std(ddof=0))
                     ratio = std_v / mean_v if mean_v > 0 else np.nan
                     st.markdown(
-                        f"""<div style='font-size: 0.8125rem; line-height: 1.6;'>
-                            <div style='margin-bottom: 0.5rem;'>
-                                <span style='color: #94a3b8;'>Mean:</span>
-                                <strong style='color: #3b82f6;'>{mean_v:,.0f}</strong>
-                            </div>
-                            <div>
-                                <span style='color: #94a3b8;'>Volatility:</span>
-                                <strong style='color: #a78bfa;'>{ratio:,.2f}</strong>
-                            </div>
-                        </div>""",
+                        f"""
+                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                          <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
+                          <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{mean_v:,.0f}</div>
+                          <div style='font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;'>Mean Patient Count</div>
+                          <div style='
+                              display: inline-flex;
+                              align-items: center;
+                              gap: 0.375rem;
+                              padding: 0.5rem 0.875rem;
+                              background: rgba(167, 139, 250, 0.15);
+                              border: 1px solid rgba(167, 139, 250, 0.3);
+                              border-radius: 10px;
+                              font-size: 0.8125rem;
+                              font-weight: 600;
+                              color: #a78bfa;
+                          '>
+                              📊 Volatility: {ratio:.2f}
+                          </div>
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
                 else:
-                    st.caption("No data", unsafe_allow_html=True)
+                    st.markdown(
+                        """
+                        <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                          <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
+                          <div style='margin: 0.75rem 0; color: #94a3b8;'>No data</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
             else:
-                st.caption("No data", unsafe_allow_html=True)
+                st.markdown(
+                    """
+                    <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                      <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
+                      <div style='margin: 0.75rem 0; color: #94a3b8;'>No data</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
         else:
-            st.caption("Load data", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem;'>
+                  <span class='kpi-label' style='margin-bottom: 0.5rem;'>Quick Insights</span>
+                  <div style='margin: 0.75rem 0; color: #94a3b8;'>Load data</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
     # ========================================
     # RECENT ACTIVITY SECTION
