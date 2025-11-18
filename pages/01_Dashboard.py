@@ -1059,7 +1059,12 @@ def page_dashboard():
                                         F[:, idx] = h_data.get("forecast", [np.nan]*T)
                                         L[:, idx] = h_data.get("ci_lo", [np.nan]*T)
                                         U[:, idx] = h_data.get("ci_hi", [np.nan]*T)
-                                    test_eval = pd.DataFrame(index=y_test_ref.index) # Preserve the date index
+                                        # Store actual values for each target
+                                        y_test_h = h_data.get("y_test")
+                                        if y_test_h is not None:
+                                            test_eval_dict[f"Target_{h}"] = y_test_h.values if hasattr(y_test_h, 'values') else y_test_h
+                                    # Create test_eval DataFrame with actual values and date index
+                                    test_eval = pd.DataFrame(test_eval_dict, index=y_test_ref.index)
                                     metrics_df = results_df
                         else:
                             st.error("ARIMA model results are not in the expected format. Please re-train the model.")
@@ -1264,16 +1269,17 @@ def page_dashboard():
                             forecast_date = base_date + pd.Timedelta(days=h+1)
                             if forecast_date in dates_window:
                                 forecast_value = F[forecast_idx, h]
-                                lower_value = L[forecast_idx, h]
-                                upper_value = U[forecast_idx, h]
+                                lower_value = L[forecast_idx, h] if L is not None else np.nan
+                                upper_value = U[forecast_idx, h] if U is not None else np.nan
 
-                                # Plot forecast point
-                                ax.plot([forecast_date], [forecast_value],
-                                       marker='s', markersize=8, color='#a78bfa',
-                                       markeredgecolor='#fff', markeredgewidth=1.5,
-                                       zorder=10)
+                                # Plot forecast point if valid
+                                if pd.notna(forecast_value):
+                                    ax.plot([forecast_date], [forecast_value],
+                                           marker='s', markersize=8, color='#a78bfa',
+                                           markeredgecolor='#fff', markeredgewidth=1.5,
+                                           zorder=10)
 
-                                # Plot confidence interval
+                                # Plot confidence interval if available
                                 if pd.notna(lower_value) and pd.notna(upper_value):
                                     ax.fill_between([forecast_date, forecast_date],
                                                    [lower_value], [upper_value],

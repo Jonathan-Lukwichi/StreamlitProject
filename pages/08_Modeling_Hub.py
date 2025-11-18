@@ -950,8 +950,8 @@ def ml_to_multihorizon_artifacts(ml_out: dict):
 
     # Initialize matrices
     F = np.full((T, H), np.nan)
-    L = None  # ML models don't have confidence intervals
-    U = None
+    L = np.full((T, H), np.nan)  # ML models don't have confidence intervals, fill with NaN
+    U = np.full((T, H), np.nan)
     test_eval = {}
     datetime_index = None
 
