@@ -1147,7 +1147,7 @@ def page_dashboard():
     st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
     st.markdown(f"<h2 class='section-header' style='margin-bottom: 1rem;'>📋 System Overview</h2>", unsafe_allow_html=True)
 
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns([1.2, 1.2, 1.2, 1.5])
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns([1, 1, 1, 1])
 
     with kpi_col1:
         status = "Active" if system_active else "Offline"
