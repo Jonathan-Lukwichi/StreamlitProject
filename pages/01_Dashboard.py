@@ -813,69 +813,30 @@ def page_dashboard():
     else:
         # --- ENHANCED CONTROLS PANEL ---
         st.markdown("""
-        <style>
-        /* Control Input Card Styling */
-        .control-input-card {
-            background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
-            border-radius: 12px;
-            padding: 1.25rem 1.125rem;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
-            height: 100%;
-        }
-
-        .control-input-card:hover {
-            border-color: rgba(59, 130, 246, 0.35);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 40px rgba(59, 130, 246, 0.1);
-            transform: translateY(-2px);
-        }
-        </style>
-
-        <div class='dashboard-kpi-card' style='
-            padding: 2rem 2.25rem;
-            margin-bottom: 2rem;
-            background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
-            border: 1.5px solid rgba(59, 130, 246, 0.25);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 0 60px rgba(59, 130, 246, 0.12);
-        '>
-            <div style='
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-                margin-bottom: 1.5rem;
-                padding-bottom: 1rem;
-                border-bottom: 1px solid rgba(59, 130, 246, 0.15);
-            '>
-                <div style='
-                    font-size: 1.5rem;
-                    filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.4));
-                '>⚙️</div>
-                <span class='kpi-label' style='
-                    font-size: 0.875rem;
-                    margin: 0;
-                    letter-spacing: 1.8px;
-                    background: linear-gradient(135deg, #60a5fa, #a78bfa);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                '>Forecast Configuration</span>
+        <div class='forecast-card' style='margin-bottom: 2rem;'>
+            <div class='forecast-header' style='margin-bottom: 2rem;'>
+                <div>
+                    <div class='forecast-title'>
+                        ⚙️ Forecast Configuration
+                    </div>
+                    <div class='forecast-subtitle'>
+                        Configure your prediction parameters
+                    </div>
+                </div>
             </div>
         """, unsafe_allow_html=True)
+
         ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1.2, 1, 1.2, 1.1])
 
         with ctrl_col1:
-            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             selected_model = st.selectbox(
                 "Select Model",
                 options=models_available,
                 key="forecast_model_selector",
                 help="Choose which model to use for forecasting"
             )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         with ctrl_col2:
-            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             forecast_days = st.selectbox(
                 "Forecast Period",
                 options=[1, 3, 7],
@@ -883,7 +844,6 @@ def page_dashboard():
                 key="forecast_period_selector",
                 help="Select how many days ahead to forecast"
             )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         # Dynamically set date range based on available data
         min_date = datetime.date(2023, 1, 1)  # Default fallback
@@ -918,7 +878,6 @@ def page_dashboard():
                         pass  # Keep defaults if conversion fails
 
         with ctrl_col3:
-            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             selected_date = st.date_input(
                 "Forecast From",
                 value=default_date,
@@ -927,16 +886,10 @@ def page_dashboard():
                 key="forecast_date_selector",
                 help="Select a date from the available dataset to start the forecast from. The first prediction will be for the next day."
             )
-            st.markdown("</div>", unsafe_allow_html=True)
 
         with ctrl_col4:
-            st.markdown("<div class='control-input-card'>", unsafe_allow_html=True)
             st.markdown("""
             <style>
-            /* ========================================
-               PREMIUM FORECAST BUTTON DESIGN
-               ======================================== */
-
             /* Ultra-Premium Button Styling */
             button[kind="primary"] {
                 background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%) !important;
@@ -959,15 +912,10 @@ def page_dashboard():
             }
 
             @keyframes gradient-shift {
-                0%, 100% {
-                    background-position: 0% 50%;
-                }
-                50% {
-                    background-position: 100% 50%;
-                }
+                0%, 100% { background-position: 0% 50%; }
+                50% { background-position: 100% 50%; }
             }
 
-            /* Animated Glow Effect */
             button[kind="primary"]::before {
                 content: '' !important;
                 position: absolute !important;
@@ -987,14 +935,12 @@ def page_dashboard():
                 height: 300% !important;
             }
 
-            /* Button Text */
             button[kind="primary"] p {
                 position: relative !important;
                 z-index: 1 !important;
                 margin: 0 !important;
             }
 
-            /* Hover State */
             button[kind="primary"]:hover {
                 background: linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #db2777 100%) !important;
                 background-size: 200% 200% !important;
@@ -1006,7 +952,6 @@ def page_dashboard():
                 transform: translateY(-3px) scale(1.02) !important;
             }
 
-            /* Active/Click State */
             button[kind="primary"]:active {
                 transform: translateY(-1px) scale(0.98) !important;
                 box-shadow:
@@ -1015,7 +960,6 @@ def page_dashboard():
                     inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
             }
 
-            /* Focus State */
             button[kind="primary"]:focus:not(:active) {
                 border: 2px solid rgba(59, 130, 246, 0.6) !important;
                 box-shadow:
@@ -1024,10 +968,9 @@ def page_dashboard():
             }
             </style>
             """, unsafe_allow_html=True)
-            st.markdown("<label style='font-size: 0.875rem; font-weight: 500; color: #e2e8f0; display: block; margin-bottom: 0.25rem;'>Action</label>", unsafe_allow_html=True)
             run_forecast = st.button("🔮 Generate Forecast", type="primary", use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)  # Close control-input-card
-        st.markdown("</div>", unsafe_allow_html=True)  # Close dashboard-kpi-card
+
+        st.markdown("</div>", unsafe_allow_html=True)  # Close forecast-card
 
 
         # --- FORECAST LOGIC & DATA EXTRACTION ---
