@@ -285,6 +285,793 @@ def _render_kpi_row(metrics: dict):
     with c3: st.plotly_chart(_indicator("MAPE", mape, "%", WARNING_COLOR), use_container_width=True)
     with c4: st.plotly_chart(_indicator("Accuracy", acc, "%", SUCCESS_COLOR), use_container_width=True)
 
+# ---------------------------- Statistical Analysis Helpers ----------------------------
+
+def _calculate_mase(y_true, y_pred, y_train, seasonality=1):
+    """
+    Mean Absolute Scaled Error - Scale-independent forecast accuracy metric.
+
+    MASE < 1.0: Better than naive seasonal forecast (Good)
+    MASE = 1.0: Equal to naive forecast (Baseline)
+    MASE > 1.0: Worse than naive forecast (Poor)
+
+    Args:
+        y_true: Actual test values
+        y_pred: Predicted test values
+        y_train: Training data for naive baseline calculation
+        seasonality: Seasonal period (1 for non-seasonal, 7 for weekly, etc.)
+
+    Returns:
+        float: MASE score
+    """
+    try:
+        y_true = np.asarray(y_true).flatten()
+        y_pred = np.asarray(y_pred).flatten()
+        y_train = np.asarray(y_train).flatten()
+
+        # Forecast errors
+        forecast_errors = np.abs(y_true - y_pred)
+        mae_forecast = np.mean(forecast_errors)
+
+        # Naive forecast errors (in-sample)
+        if len(y_train) <= seasonality:
+            return np.nan
+
+        naive_errors = np.abs(np.diff(y_train, n=seasonality))
+        mae_naive = np.mean(naive_errors)
+
+        # Avoid division by zero
+        if mae_naive == 0 or not np.isfinite(mae_naive):
+            return np.nan
+
+        mase = mae_forecast / mae_naive
+        return float(mase) if np.isfinite(mase) else np.nan
+
+    except Exception:
+        return np.nan
+
+def _calculate_baseline_metrics(y_train, y_test):
+    """
+    Calculate performance of naive baseline forecasts for comparison.
+
+    Returns:
+        dict: Baseline metrics for Naive, Seasonal Naive, and Moving Average
+    """
+    try:
+        y_train = np.asarray(y_train).flatten()
+        y_test = np.asarray(y_test).flatten()
+
+        if len(y_train) < 7 or len(y_test) == 0:
+            return {}
+
+        baselines = {}
+
+        # 1. Naive forecast (last value repeated)
+        naive_pred = np.full(len(y_test), y_train[-1])
+        baselines['Naive'] = {
+            'MAE': float(np.mean(np.abs(y_test - naive_pred))),
+            'RMSE': float(np.sqrt(np.mean((y_test - naive_pred)**2)))
+        }
+
+        # 2. Seasonal Naive (7-day seasonal)
+        if len(y_train) >= 7:
+            seasonal_naive_pred = np.array([y_train[-(7 - (i % 7))] for i in range(len(y_test))])
+            baselines['Seasonal Naive'] = {
+                'MAE': float(np.mean(np.abs(y_test - seasonal_naive_pred))),
+                'RMSE': float(np.sqrt(np.mean((y_test - seasonal_naive_pred)**2)))
+            }
+
+        # 3. Moving Average (7-day)
+        if len(y_train) >= 7:
+            ma_value = np.mean(y_train[-7:])
+            ma_pred = np.full(len(y_test), ma_value)
+            baselines['Moving Avg (7d)'] = {
+                'MAE': float(np.mean(np.abs(y_test - ma_pred))),
+                'RMSE': float(np.sqrt(np.mean((y_test - ma_pred)**2)))
+            }
+
+        return baselines
+
+    except Exception:
+        return {}
+
+def _build_horizon_performance_chart(metrics_df: pd.DataFrame, title: str = "Forecast Accuracy by Horizon"):
+    """
+    Create professional horizon-specific performance degradation chart.
+    Shows how accuracy changes across forecast horizons.
+    """
+    df_work = _sanitize_metrics_df(metrics_df)
+    if df_work is None or df_work.empty or "Horizon" not in df_work.columns:
+        return None
+
+    # Find accuracy column
+    acc_col = None
+    for col in ["Test_Acc", "Accuracy_%", "Accuracy"]:
+        if col in df_work.columns and df_work[col].notna().any():
+            acc_col = col
+            break
+
+    # Find error columns
+    mae_col = "Test_MAE" if "Test_MAE" in df_work.columns else "MAE"
+    rmse_col = "Test_RMSE" if "Test_RMSE" in df_work.columns else "RMSE"
+
+    if acc_col is None:
+        return None
+
+    # Create figure with secondary y-axis
+    fig = go.Figure()
+
+    # Accuracy line (primary y-axis)
+    fig.add_trace(go.Scatter(
+        x=df_work["Horizon"],
+        y=df_work[acc_col],
+        mode='lines+markers',
+        name='Accuracy',
+        line=dict(width=4, color=SUCCESS_COLOR),
+        marker=dict(size=12, symbol='circle', line=dict(width=2, color='white')),
+        text=[f"{v:.1f}%" for v in df_work[acc_col]],
+        textposition='top center',
+        textfont=dict(size=11, color='white', family='Arial Black'),
+        hovertemplate='<b>Horizon %{x}</b><br>Accuracy: %{y:.2f}%<extra></extra>',
+        yaxis='y'
+    ))
+
+    # MAE line (secondary y-axis)
+    if mae_col in df_work.columns and df_work[mae_col].notna().any():
+        fig.add_trace(go.Scatter(
+            x=df_work["Horizon"],
+            y=df_work[mae_col],
+            mode='lines+markers',
+            name='MAE',
+            line=dict(width=3, color=PRIMARY_COLOR, dash='dot'),
+            marker=dict(size=8, symbol='diamond'),
+            hovertemplate='<b>Horizon %{x}</b><br>MAE: %{y:.2f}<extra></extra>',
+            yaxis='y2',
+            visible='legendonly'
+        ))
+
+    # Add reference lines
+    if acc_col and df_work[acc_col].notna().any():
+        h1_acc = df_work[df_work["Horizon"] == 1][acc_col].values
+        if len(h1_acc) > 0:
+            fig.add_hline(
+                y=float(h1_acc[0]),
+                line_dash="dash",
+                line_color="rgba(144,238,144,0.4)",
+                annotation_text=f"h=1 baseline: {h1_acc[0]:.1f}%",
+                annotation_position="right",
+                annotation_font_size=10,
+                annotation_font_color=TEXT_COLOR
+            )
+
+    # Add performance zones
+    fig.add_hrect(y0=95, y1=100, fillcolor="rgba(144,238,144,0.1)",
+                  layer="below", line_width=0, annotation_text="Excellent",
+                  annotation_position="top left", annotation_font_size=9)
+    fig.add_hrect(y0=90, y1=95, fillcolor="rgba(135,206,250,0.1)",
+                  layer="below", line_width=0, annotation_text="Good",
+                  annotation_position="top left", annotation_font_size=9)
+    fig.add_hrect(y0=85, y1=90, fillcolor="rgba(255,255,0,0.05)",
+                  layer="below", line_width=0)
+
+    fig.update_layout(
+        title=dict(
+            text=f"<b>{title}</b>",
+            x=0.5,
+            xanchor='center',
+            font=dict(size=18, color=TEXT_COLOR, family='Arial Black')
+        ),
+        xaxis=dict(
+            title="<b>Forecast Horizon (days ahead)</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            tickmode='linear',
+            tick0=1,
+            dtick=1,
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.1)',
+            color=TEXT_COLOR
+        ),
+        yaxis=dict(
+            title="<b>Accuracy (%)</b>",
+            title_font=dict(size=14, color=SUCCESS_COLOR),
+            side='left',
+            range=[max(75, df_work[acc_col].min() - 5) if acc_col else 75, 100],
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.15)',
+            color=TEXT_COLOR
+        ),
+        yaxis2=dict(
+            title="<b>MAE</b>",
+            title_font=dict(size=14, color=PRIMARY_COLOR),
+            overlaying='y',
+            side='right',
+            showgrid=False,
+            color=TEXT_COLOR
+        ),
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
+        height=450,
+        margin=dict(t=80, b=70, l=80, r=80),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            bgcolor='rgba(0,0,0,0.7)',
+            bordercolor='rgba(255,255,255,0.3)',
+            borderwidth=1,
+            font=dict(color=TEXT_COLOR, size=11)
+        ),
+        hovermode='x unified',
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig
+
+def _build_baseline_comparison_chart(model_metrics: dict, baseline_metrics: dict, mase: float):
+    """
+    Create professional baseline comparison chart showing model vs naive forecasts.
+    """
+    if not baseline_metrics:
+        return None
+
+    # Prepare data
+    methods = ['Your Model'] + list(baseline_metrics.keys())
+    mae_values = [model_metrics.get('MAE', np.nan)] + [baseline_metrics[k]['MAE'] for k in baseline_metrics.keys()]
+    rmse_values = [model_metrics.get('RMSE', np.nan)] + [baseline_metrics[k]['RMSE'] for k in baseline_metrics.keys()]
+
+    # Create grouped bar chart
+    fig = go.Figure()
+
+    # MAE bars
+    fig.add_trace(go.Bar(
+        name='MAE',
+        x=methods,
+        y=mae_values,
+        marker_color=[SUCCESS_COLOR if i == 0 else SECONDARY_COLOR for i in range(len(methods))],
+        text=[f"{v:.2f}" for v in mae_values],
+        textposition='outside',
+        textfont=dict(size=12, color='white', family='Arial Black'),
+        hovertemplate='<b>%{x}</b><br>MAE: %{y:.3f}<extra></extra>',
+        offsetgroup=0
+    ))
+
+    # RMSE bars
+    fig.add_trace(go.Bar(
+        name='RMSE',
+        x=methods,
+        y=rmse_values,
+        marker_color=[PRIMARY_COLOR if i == 0 else WARNING_COLOR for i in range(len(methods))],
+        text=[f"{v:.2f}" for v in rmse_values],
+        textposition='outside',
+        textfont=dict(size=12, color='white', family='Arial Black'),
+        hovertemplate='<b>%{x}</b><br>RMSE: %{y:.3f}<extra></extra>',
+        offsetgroup=1
+    ))
+
+    # Calculate y-axis range with padding
+    all_values = mae_values + rmse_values
+    max_val = max([v for v in all_values if np.isfinite(v)])
+
+    fig.update_layout(
+        title=dict(
+            text="<b>📊 Model vs Baseline Forecasts</b>",
+            x=0.5,
+            xanchor='center',
+            font=dict(size=18, color=TEXT_COLOR, family='Arial Black')
+        ),
+        xaxis=dict(
+            title="<b>Forecast Method</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            tickangle=-30,
+            showgrid=False,
+            color=TEXT_COLOR
+        ),
+        yaxis=dict(
+            title="<b>Error (Lower is Better)</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            range=[0, max_val * 1.3],
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.1)',
+            color=TEXT_COLOR
+        ),
+        barmode='group',
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
+        height=450,
+        margin=dict(t=80, b=100, l=70, r=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            bgcolor='rgba(0,0,0,0.7)',
+            bordercolor='rgba(255,255,255,0.3)',
+            borderwidth=1,
+            font=dict(color=TEXT_COLOR, size=11)
+        ),
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig
+
+def _build_pairwise_delta_chart(comp_df: pd.DataFrame):
+    """
+    Create pairwise difference analysis showing how much better the winner is.
+    For 2-model comparison (ARIMA vs SARIMAX).
+    """
+    if comp_df is None or len(comp_df) != 2:
+        return None
+
+    df = comp_df.copy()
+
+    # Ensure numeric columns
+    for c in ["MAE", "RMSE", "Accuracy_%", "Runtime_s"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # Sort by accuracy (best first)
+    if "Accuracy_%" in df.columns and df["Accuracy_%"].notna().any():
+        df = df.sort_values("Accuracy_%", ascending=False)
+
+    model1, model2 = df.iloc[0], df.iloc[1]
+
+    # Calculate deltas (positive = model1 better)
+    deltas = []
+    metrics_info = []
+
+    if "Accuracy_%" in df.columns:
+        delta = model1["Accuracy_%"] - model2["Accuracy_%"]
+        deltas.append(delta)
+        metrics_info.append(("Accuracy", delta, "%", True))  # True = higher is better
+
+    if "MAE" in df.columns:
+        delta = model2["MAE"] - model1["MAE"]  # Inverted: lower MAE is better
+        deltas.append(delta)
+        metrics_info.append(("MAE", delta, "", False))  # False = lower is better
+
+    if "RMSE" in df.columns:
+        delta = model2["RMSE"] - model1["RMSE"]  # Inverted: lower RMSE is better
+        deltas.append(delta)
+        metrics_info.append(("RMSE", delta, "", False))
+
+    if "Runtime_s" in df.columns:
+        delta = model2["Runtime_s"] - model1["Runtime_s"]  # Inverted: faster is better
+        deltas.append(delta)
+        metrics_info.append(("Runtime", delta, "s", False))
+
+    if not metrics_info:
+        return None
+
+    # Create bar chart
+    fig = go.Figure()
+
+    for metric_name, delta_val, suffix, higher_better in metrics_info:
+        color = SUCCESS_COLOR if delta_val > 0 else DANGER_COLOR
+
+        fig.add_trace(go.Bar(
+            name=metric_name,
+            x=[metric_name],
+            y=[abs(delta_val)],
+            marker_color=color,
+            text=[f"{delta_val:+.2f}{suffix}"],
+            textposition='outside',
+            textfont=dict(size=14, color='white', family='Arial Black'),
+            hovertemplate=f'<b>{metric_name}</b><br>Δ: {delta_val:+.3f}{suffix}<extra></extra>',
+            showlegend=False
+        ))
+
+    fig.update_layout(
+        title=dict(
+            text=f"<b>📊 {model1['Model']} vs {model2['Model']}</b><br><sub>Positive = {model1['Model']} Better</sub>",
+            x=0.5,
+            xanchor='center',
+            font=dict(size=16, color=TEXT_COLOR, family='Arial Black')
+        ),
+        xaxis=dict(
+            title="<b>Metric</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            showgrid=False,
+            color=TEXT_COLOR
+        ),
+        yaxis=dict(
+            title="<b>Absolute Difference</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.1)',
+            color=TEXT_COLOR
+        ),
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
+        height=400,
+        margin=dict(t=100, b=60, l=70, r=40),
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig
+
+def _build_accuracy_gauge_card(model_row: pd.Series, is_winner: bool = False):
+    """
+    Create a single accuracy gauge card for a model.
+
+    Args:
+        model_row: Series containing model metrics (Model, Accuracy_%, MAE, RMSE, Runtime_s)
+        is_winner: Whether this model is the best performer
+
+    Returns:
+        Plotly figure with gauge chart
+    """
+    model_name = model_row.get("Model", "Unknown")
+    accuracy = _safe_float(model_row.get("Accuracy_%", 0))
+    mae = _safe_float(model_row.get("MAE", 0))
+    rmse = _safe_float(model_row.get("RMSE", 0))
+    runtime = _safe_float(model_row.get("Runtime_s", 0))
+
+    # Determine gauge color based on accuracy
+    if accuracy >= 90:
+        gauge_color = SUCCESS_COLOR  # Green
+    elif accuracy >= 80:
+        gauge_color = PRIMARY_COLOR  # Blue
+    elif accuracy >= 70:
+        gauge_color = WARNING_COLOR  # Orange
+    else:
+        gauge_color = DANGER_COLOR  # Red
+
+    # Winner gets gold accent
+    border_color = "#FFD700" if is_winner else "rgba(255,255,255,0.2)"
+    title_prefix = "🏆 " if is_winner else ""
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=accuracy,
+        number={"suffix": "%", "font": {"size": 32, "color": "white"}},
+        title={
+            "text": f"<b>{title_prefix}{model_name}</b>",
+            "font": {"size": 15, "color": "white", "family": "Arial Black"}
+        },
+        gauge={
+            "axis": {
+                "range": [0, 100],
+                "tickwidth": 1,
+                "tickcolor": TEXT_COLOR,
+                "tickfont": {"size": 8, "color": TEXT_COLOR}
+            },
+            "bar": {"color": gauge_color, "thickness": 0.7},
+            "bgcolor": "rgba(255,255,255,0.1)",
+            "borderwidth": 3,
+            "bordercolor": border_color,
+            "steps": [
+                {"range": [0, 70], "color": "rgba(220, 38, 38, 0.2)"},
+                {"range": [70, 80], "color": "rgba(251, 146, 60, 0.2)"},
+                {"range": [80, 90], "color": "rgba(59, 130, 246, 0.2)"},
+                {"range": [90, 100], "color": "rgba(34, 197, 94, 0.2)"}
+            ],
+            "threshold": {
+                "line": {"color": "white", "width": 2},
+                "thickness": 0.75,
+                "value": accuracy
+            }
+        }
+    ))
+
+    # Add supporting metrics as annotations
+    metrics_text = (
+        f"<b>MAE:</b> {mae:.2f}  |  "
+        f"<b>RMSE:</b> {rmse:.2f}  |  "
+        f"<b>Runtime:</b> {runtime:.1f}s"
+    )
+
+    fig.add_annotation(
+        text=metrics_text,
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=-0.12,
+        showarrow=False,
+        font=dict(size=10, color="rgba(255,255,255,0.8)"),
+        xanchor="center"
+    )
+
+    fig.update_layout(
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
+        height=400,
+        margin=dict(t=60, b=70, l=30, r=30),
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig
+
+def _extract_horizon_comparison_data():
+    """
+    Extract horizon-specific metrics from both ARIMA and SARIMAX results.
+    Returns dict with model names as keys and horizon DataFrames as values.
+    """
+    horizon_data = {}
+
+    # Extract ARIMA data
+    arima_mh = st.session_state.get("arima_mh_results")
+    if arima_mh:
+        try:
+            # ARIMA results are already in the correct dict format with metrics_df key
+            if isinstance(arima_mh, dict) and "metrics_df" in arima_mh:
+                mdf = arima_mh["metrics_df"]
+                mdf = _sanitize_metrics_df(mdf)
+                if mdf is not None and not mdf.empty and "Horizon" in mdf.columns:
+                    horizon_data["ARIMA"] = mdf
+        except Exception as e:
+            # Fallback: try results_df key (legacy compatibility)
+            if isinstance(arima_mh, dict) and "results_df" in arima_mh:
+                try:
+                    mdf = arima_mh["results_df"]
+                    mdf = _sanitize_metrics_df(mdf)
+                    if mdf is not None and not mdf.empty and "Horizon" in mdf.columns:
+                        horizon_data["ARIMA"] = mdf
+                except Exception:
+                    pass
+
+    # Extract SARIMAX data
+    sar_out = st.session_state.get("sarimax_results")
+    if sar_out:
+        try:
+            from app_core.models.sarimax_pipeline import to_multihorizon_artifacts
+            metrics_df, _, _, _, _, _, _, _ = to_multihorizon_artifacts(sar_out)
+            metrics_df = _sanitize_metrics_df(metrics_df)
+            if metrics_df is not None and not metrics_df.empty:
+                horizon_data["SARIMAX"] = metrics_df
+        except Exception:
+            # If that fails, try direct access
+            if isinstance(sar_out, dict) and "results_df" in sar_out:
+                try:
+                    metrics_df = sar_out["results_df"]
+                    metrics_df = _sanitize_metrics_df(metrics_df)
+                    if metrics_df is not None and not metrics_df.empty and "Horizon" in metrics_df.columns:
+                        horizon_data["SARIMAX"] = metrics_df
+                except Exception:
+                    pass
+
+    return horizon_data
+
+def _build_horizon_comparison_line_chart(horizon_data: dict):
+    """
+    Build horizon-specific comparison line chart for multiple models.
+    """
+    if not horizon_data or len(horizon_data) < 2:
+        return None
+
+    fig = go.Figure()
+
+    colors = [SUCCESS_COLOR, PRIMARY_COLOR, SECONDARY_COLOR, WARNING_COLOR]
+
+    for idx, (model_name, mdf) in enumerate(horizon_data.items()):
+        # Find accuracy column
+        acc_col = None
+        for col in ["Test_Acc", "Accuracy_%", "Accuracy"]:
+            if col in mdf.columns and mdf[col].notna().any():
+                acc_col = col
+                break
+
+        if acc_col and "Horizon" in mdf.columns:
+            fig.add_trace(go.Scatter(
+                x=mdf["Horizon"],
+                y=mdf[acc_col],
+                mode='lines+markers',
+                name=model_name,
+                line=dict(width=4, color=colors[idx % len(colors)]),
+                marker=dict(size=10, symbol='circle', line=dict(width=2, color='white')),
+                hovertemplate=f'<b>{model_name}</b><br>Horizon: %{{x}}<br>Accuracy: %{{y:.2f}}%<extra></extra>'
+            ))
+
+    if not fig.data:
+        return None
+
+    # Add performance zones
+    fig.add_hrect(y0=95, y1=100, fillcolor="rgba(144,238,144,0.1)",
+                  layer="below", line_width=0, annotation_text="Excellent",
+                  annotation_position="top left", annotation_font_size=9)
+    fig.add_hrect(y0=90, y1=95, fillcolor="rgba(135,206,250,0.1)",
+                  layer="below", line_width=0, annotation_text="Good",
+                  annotation_position="top left", annotation_font_size=9)
+
+    fig.update_layout(
+        title=dict(
+            text="<b>📈 Accuracy Across Forecast Horizons</b>",
+            x=0.5,
+            xanchor='center',
+            font=dict(size=18, color=TEXT_COLOR, family='Arial Black')
+        ),
+        xaxis=dict(
+            title="<b>Forecast Horizon (days ahead)</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            tickmode='linear',
+            tick0=1,
+            dtick=1,
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.1)',
+            color=TEXT_COLOR
+        ),
+        yaxis=dict(
+            title="<b>Accuracy (%)</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            range=[75, 100],
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.15)',
+            color=TEXT_COLOR
+        ),
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
+        height=450,
+        margin=dict(t=80, b=70, l=80, r=80),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            bgcolor='rgba(0,0,0,0.7)',
+            bordercolor='rgba(255,255,255,0.3)',
+            borderwidth=1,
+            font=dict(color=TEXT_COLOR, size=12)
+        ),
+        hovermode='x unified',
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig
+
+def _build_metrics_over_horizon_chart(horizon_data: dict, selected_metric: str = "Accuracy"):
+    """
+    Build interactive line chart showing selected metric across horizons for both models.
+
+    Args:
+        horizon_data: Dict with model names as keys and metrics DataFrames as values
+        selected_metric: One of ["Accuracy", "MAE", "RMSE", "MAPE"]
+
+    Returns:
+        Plotly figure or None
+    """
+    if not horizon_data or len(horizon_data) < 2:
+        return None
+
+    # Define metric configurations
+    metric_configs = {
+        "Accuracy": {
+            "column_names": ["Test_Acc", "Accuracy_%", "Accuracy"],
+            "title": "Accuracy Across Forecast Horizons",
+            "y_title": "Accuracy (%)",
+            "is_percentage": True,
+            "format": ".2f",
+            "suffix": "%",
+            "color_primary": SUCCESS_COLOR,
+            "color_secondary": PRIMARY_COLOR,
+        },
+        "MAE": {
+            "column_names": ["MAE", "Test_MAE"],
+            "title": "MAE (Mean Absolute Error) Across Horizons",
+            "y_title": "MAE",
+            "is_percentage": False,
+            "format": ".2f",
+            "suffix": "",
+            "color_primary": WARNING_COLOR,
+            "color_secondary": DANGER_COLOR,
+        },
+        "RMSE": {
+            "column_names": ["RMSE", "Test_RMSE"],
+            "title": "RMSE (Root Mean Squared Error) Across Horizons",
+            "y_title": "RMSE",
+            "is_percentage": False,
+            "format": ".2f",
+            "suffix": "",
+            "color_primary": SECONDARY_COLOR,
+            "color_secondary": "#9333ea",
+        },
+        "MAPE": {
+            "column_names": ["MAPE_%", "MAPE", "Test_MAPE"],
+            "title": "MAPE (Mean Absolute Percentage Error) Across Horizons",
+            "y_title": "MAPE (%)",
+            "is_percentage": True,
+            "format": ".2f",
+            "suffix": "%",
+            "color_primary": "#f59e0b",
+            "color_secondary": "#ef4444",
+        },
+    }
+
+    if selected_metric not in metric_configs:
+        return None
+
+    config = metric_configs[selected_metric]
+
+    fig = go.Figure()
+
+    colors = [config["color_primary"], config["color_secondary"]]
+
+    for idx, (model_name, mdf) in enumerate(horizon_data.items()):
+        # Find the metric column
+        metric_col = None
+        for col in config["column_names"]:
+            if col in mdf.columns and mdf[col].notna().any():
+                metric_col = col
+                break
+
+        if metric_col and "Horizon" in mdf.columns:
+            # Extract horizons (convert from "h=1" format if needed)
+            if mdf["Horizon"].dtype == 'object':
+                horizons = mdf["Horizon"].str.replace("h=", "").astype(int)
+            else:
+                horizons = mdf["Horizon"]
+
+            metric_values = mdf[metric_col]
+
+            fig.add_trace(go.Scatter(
+                x=horizons,
+                y=metric_values,
+                mode='lines+markers',
+                name=model_name,
+                line=dict(width=4, color=colors[idx % len(colors)]),
+                marker=dict(size=10, symbol='circle', line=dict(width=2, color='white')),
+                hovertemplate=f'<b>{model_name}</b><br>Horizon: %{{x}}<br>{selected_metric}: %{{y:{config["format"]}}}{config["suffix"]}<extra></extra>'
+            ))
+
+    if not fig.data:
+        return None
+
+    # Add visual zones for percentage metrics
+    if config["is_percentage"] and selected_metric == "Accuracy":
+        fig.add_hrect(y0=95, y1=100, fillcolor="rgba(144,238,144,0.1)",
+                      layer="below", line_width=0, annotation_text="Excellent",
+                      annotation_position="top left", annotation_font_size=9)
+        fig.add_hrect(y0=90, y1=95, fillcolor="rgba(135,206,250,0.1)",
+                      layer="below", line_width=0, annotation_text="Good",
+                      annotation_position="top left", annotation_font_size=9)
+
+    fig.update_layout(
+        title=dict(
+            text=f"<b>📊 {config['title']}</b>",
+            x=0.5,
+            xanchor='center',
+            font=dict(size=18, color=TEXT_COLOR, family='Arial Black')
+        ),
+        xaxis=dict(
+            title="<b>Forecast Horizon (days ahead)</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            tickmode='linear',
+            tick0=1,
+            dtick=1,
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.1)',
+            color=TEXT_COLOR
+        ),
+        yaxis=dict(
+            title=f"<b>{config['y_title']}</b>",
+            title_font=dict(size=14, color=TEXT_COLOR),
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.15)',
+            color=TEXT_COLOR
+        ),
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
+        height=450,
+        margin=dict(t=80, b=70, l=80, r=80),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            bgcolor='rgba(0,0,0,0.7)',
+            bordercolor='rgba(255,255,255,0.3)',
+            borderwidth=1,
+            font=dict(color=TEXT_COLOR, size=12)
+        ),
+        hovermode='x unified',
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig
+
 # ---------------------------- Comparison logging ----------------------------
 
 def _init_comparison_table():
@@ -325,6 +1112,7 @@ def run_arima_multihorizon(
     order: tuple[int,int,int] | None = None,
     auto_select: bool = True,
     cv_strategy: str = "expanding",
+    search_mode: str = "hybrid",  # "aic_only", "hybrid", or "pmdarima_oos"
 ) -> dict:
     """Train independent univariate ARIMA models for Target_1..Target_H."""
     rows, per_h, ok = [], {}, []
@@ -333,18 +1121,45 @@ def run_arima_multihorizon(
     frame[date_col] = pd.to_datetime(frame[date_col], errors="coerce")
     frame = frame.dropna(subset=[date_col]).sort_values(date_col)
 
+    # Parameter sharing: find optimal parameters once for h=1, reuse for h>1 (automatic mode only)
+    shared_order = None
+
     for h in range(1, int(horizons) + 1):
         tc = f"Target_{h}"
         if tc not in frame.columns:
             continue
         try:
-            out = run_arima_pipeline(
-                df=frame[[date_col, tc]],
-                order=order,
-                train_ratio=train_ratio,
-                auto_select=auto_select,
-                target_col=tc,
-            )
+            # For automatic mode: find parameters for h=1, reuse for h>1
+            if auto_select and h == 1:
+                # Full auto search for first horizon
+                out = run_arima_pipeline(
+                    df=frame[[date_col, tc]],
+                    order=order,
+                    train_ratio=train_ratio,
+                    auto_select=True,
+                    target_col=tc,
+                    search_mode=search_mode,
+                )
+                # Save the optimal parameters found
+                shared_order = out.get("model_info", {}).get("order")
+            elif auto_select and h > 1 and shared_order is not None:
+                # Reuse parameters from h=1 for subsequent horizons
+                out = run_arima_pipeline(
+                    df=frame[[date_col, tc]],
+                    order=shared_order,
+                    train_ratio=train_ratio,
+                    auto_select=False,  # Skip auto search, use shared_order
+                    target_col=tc,
+                )
+            else:
+                # Manual mode: use user-specified order (unchanged)
+                out = run_arima_pipeline(
+                    df=frame[[date_col, tc]],
+                    order=order,
+                    train_ratio=train_ratio,
+                    auto_select=auto_select,
+                    target_col=tc,
+                )
         except Exception:
             continue
 
@@ -386,8 +1201,104 @@ def run_arima_multihorizon(
     return {"results_df": results_df, "per_h": per_h, "successful": ok}
 
 def arima_to_multihorizon_artifacts(arima_out: dict):
-    # use SARIMAX artifact shaper; it already matches the dashboard’s expectations
-    return to_multihorizon_artifacts(arima_out)
+    """
+    Convert ARIMA multi-horizon results from per_h format to unified F, L, U matrices.
+
+    ARIMA results structure:
+    {
+        "results_df": DataFrame with metrics per horizon,
+        "per_h": {h: {"y_test": Series, "forecast": Series, "ci_lo": Series, "ci_hi": Series}},
+        "successful": [list of successful horizons]
+    }
+
+    Returns tuple: (metrics_df, F, L, U, test_eval, train, res, horizons)
+    """
+    per_h = arima_out.get("per_h", {})
+    results_df = arima_out.get("results_df")
+    successful = arima_out.get("successful", [])
+
+    if not per_h or not successful:
+        # Return empty structure
+        import pandas as pd
+        import numpy as np
+        empty_df = pd.DataFrame()
+        empty_array = np.array([])
+        return (results_df if results_df is not None else empty_df,
+                empty_array, empty_array, empty_array, empty_df,
+                None, None, [])
+
+    # Get dimensions
+    horizons = sorted(successful)
+    H = len(horizons)
+
+    # Get test set length from first horizon
+    first_h = horizons[0]
+    y_test_first = per_h[first_h].get("y_test")
+    T = len(y_test_first) if y_test_first is not None else 0
+
+    if T == 0:
+        # No test data
+        import pandas as pd
+        import numpy as np
+        return (results_df, np.array([]), np.array([]), np.array([]),
+                pd.DataFrame(), None, None, horizons)
+
+    # Initialize matrices
+    import numpy as np
+    import pandas as pd
+    F = np.full((T, H), np.nan)
+    L = np.full((T, H), np.nan)
+    U = np.full((T, H), np.nan)
+    test_eval = {}
+
+    # Fill matrices from per_h data
+    for idx, h in enumerate(horizons):
+        h_data = per_h[h]
+
+        # Get forecast and confidence intervals
+        fc = h_data.get("forecast")
+        lo = h_data.get("ci_lo")
+        hi = h_data.get("ci_hi")
+        yt = h_data.get("y_test")
+
+        if fc is not None and len(fc) == T:
+            F[:, idx] = fc.values if hasattr(fc, 'values') else fc
+
+        if lo is not None and len(lo) == T:
+            L[:, idx] = lo.values if hasattr(lo, 'values') else lo
+
+        if hi is not None and len(hi) == T:
+            U[:, idx] = hi.values if hasattr(hi, 'values') else hi
+
+        if yt is not None and len(yt) == T:
+            test_eval[f"Target_{h}"] = yt.values if hasattr(yt, 'values') else yt
+
+    # Create test_eval DataFrame
+    test_eval_df = pd.DataFrame(test_eval)
+
+    # Get train data and res from first horizon
+    train = per_h[first_h].get("y_train")
+    res = per_h[first_h].get("res")
+
+    # Convert results_df to have proper column names for compatibility
+    metrics_df = results_df.copy() if results_df is not None else pd.DataFrame()
+    if not metrics_df.empty and "Horizon" in metrics_df.columns:
+        # Rename columns to match expected format
+        rename_map = {
+            "Test_MAE": "MAE",
+            "Test_RMSE": "RMSE",
+            "Test_MAPE": "MAPE_%",
+            "Test_Acc": "Accuracy_%"
+        }
+        for old_col, new_col in rename_map.items():
+            if old_col in metrics_df.columns and new_col not in metrics_df.columns:
+                metrics_df[new_col] = metrics_df[old_col]
+
+        # Format Horizon column as "h=1", "h=2", etc.
+        if metrics_df["Horizon"].dtype in ['int64', 'int32']:
+            metrics_df["Horizon"] = metrics_df["Horizon"].apply(lambda x: f"h={x}")
+
+    return (metrics_df, F, L, U, test_eval_df, train, res, horizons)
 
 # ---------------------------- Enhanced visualization helpers ----------------------------
 
@@ -474,8 +1385,10 @@ def _build_performance_heatmap(df: pd.DataFrame, title: str):
     fig.update_layout(
         margin=dict(l=60, r=40, t=70, b=60),
         title=dict(x=0.5, xanchor='center', font=dict(size=16, color=TEXT_COLOR)),
-        xaxis=dict(title_font=dict(size=13)),
-        yaxis=dict(title_font=dict(size=13)),
+        xaxis=dict(title_font=dict(size=13), gridcolor='rgba(255,255,255,0.1)'),
+        yaxis=dict(title_font=dict(size=13), gridcolor='rgba(255,255,255,0.1)'),
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
         coloraxis_colorbar=dict(title="Value", len=0.7)
     )
 
@@ -514,8 +1427,8 @@ def _build_error_evolution(per_h: dict, title: str):
 
     fig.update_traces(
         mode='lines+markers',
-        line=dict(width=2),
-        marker=dict(size=4)
+        line=dict(width=3),
+        marker=dict(size=5)
     )
 
     fig.update_layout(
@@ -525,16 +1438,18 @@ def _build_error_evolution(per_h: dict, title: str):
             title="Date",
             title_font=dict(size=13),
             showgrid=True,
-            gridcolor='rgba(200,200,200,0.2)'
+            gridcolor='rgba(255,255,255,0.15)',
+            color=TEXT_COLOR
         ),
         yaxis=dict(
             title="Absolute Error (Patient Arrivals)",
             title_font=dict(size=13),
             showgrid=True,
-            gridcolor='rgba(200,200,200,0.2)'
+            gridcolor='rgba(255,255,255,0.15)',
+            color=TEXT_COLOR
         ),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
+        plot_bgcolor=BG_BLACK,
+        paper_bgcolor=BG_BLACK,
         hovermode='x unified',
         legend=dict(
             title="Forecast Horizon",
@@ -543,9 +1458,10 @@ def _build_error_evolution(per_h: dict, title: str):
             y=0.99,
             xanchor="right",
             x=0.99,
-            bgcolor='rgba(255,255,255,0.8)',
-            bordercolor='rgba(0,0,0,0.2)',
-            borderwidth=1
+            bgcolor='rgba(0,0,0,0.7)',
+            bordercolor='rgba(255,255,255,0.2)',
+            borderwidth=1,
+            font=dict(color=TEXT_COLOR)
         )
     )
 
@@ -986,81 +1902,44 @@ def page_benchmarks():
             use_auto = order is None
             arima_h = int(st.session_state.get("arima_h", 7))
 
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("🚀 Start Training (ARIMA — h=1)", use_container_width=True, type="primary", key="train_arima_btn"):
-                    with st.spinner("Training ARIMA (single horizon h=1)..."):
-                        t0 = time.time()
-                        try:
-                            results = run_arima_pipeline(
-                                df=data,
-                                order=order,
-                                train_ratio=train_ratio,
-                                auto_select=use_auto,
-                                target_col="Target_1",
-                            )
-                            runtime_s = time.time() - t0
-                            st.session_state["arima_results"] = results
-                            st.session_state["model_results"] = results
-                            st.success(f"✅ ARIMA (h=1) training completed in {runtime_s:.2f}s!")
+            if st.button("🚀 Train ARIMA (multi-horizon)", use_container_width=True, type="primary", key="train_arima_btn"):
+                with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
+                    t0 = time.time()
+                    try:
+                        arima_mh_out = run_arima_multihorizon(
+                            df=data,
+                            date_col="Date",
+                            horizons=int(arima_h),
+                            train_ratio=train_ratio,
+                            order=order,
+                            auto_select=use_auto,
+                            cv_strategy=st.session_state.get("cv_strategy", "expanding"),
+                        )
+                        runtime_s = time.time() - t0
+                        st.session_state["arima_mh_results"] = arima_mh_out
+                        st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
 
-                            order_str = str(results.get("model_info", {}).get("order", order if order else "auto"))
-                            model_params = f"order={order_str}"
-
-                            test_m = results.get("test_metrics", {}) or {}
+                        res_df = arima_mh_out.get("results_df")
+                        if res_df is not None and not res_df.empty:
+                            res_df = _sanitize_metrics_df(res_df)
+                            best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                            best_row = res_df.loc[best_idx]
+                            kpis = {
+                                "MAE": _safe_float(best_row.get("Test_MAE")),
+                                "RMSE": _safe_float(best_row.get("Test_RMSE")),
+                                "MAPE": _safe_float(best_row.get("Test_MAPE")),
+                                "Accuracy": _safe_float(best_row.get("Test_Acc")),
+                            }
+                            model_params = f"order={order if order else 'auto'}; H={arima_h}"
                             _append_to_comparison(
-                                model_name="ARIMA (h=1)",
+                                model_name=f"ARIMA (best h={int(best_row.get('Horizon', 1))})",
                                 train_ratio=train_ratio,
-                                kpis={
-                                    "MAE": test_m.get("MAE"),
-                                    "RMSE": test_m.get("RMSE"),
-                                    "MAPE": test_m.get("MAPE"),
-                                    "Accuracy": test_m.get("Accuracy"),
-                                },
+                                kpis=kpis,
                                 model_params=model_params,
                                 runtime_s=runtime_s
                             )
-                        except Exception as e:
-                            st.error(f"❌ ARIMA training failed: {e}")
-            with c2:
-                if st.button("🚀 Train ARIMA (Multi-horizon)", use_container_width=True, type="secondary", key="train_arima_mh_btn"):
-                    with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
-                        t0 = time.time()
-                        try:
-                            arima_mh_out = run_arima_multihorizon(
-                                df=data,
-                                date_col="Date",
-                                horizons=int(arima_h),
-                                train_ratio=train_ratio,
-                                order=order,
-                                auto_select=use_auto,
-                                cv_strategy=st.session_state.get("cv_strategy", "expanding"),
-                            )
-                            runtime_s = time.time() - t0
-                            st.session_state["arima_mh_results"] = arima_mh_out
-                            st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
-
-                            res_df = arima_mh_out.get("results_df")
-                            if res_df is not None and not res_df.empty:
-                                res_df = _sanitize_metrics_df(res_df)
-                                best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
-                                best_row = res_df.loc[best_idx]
-                                kpis = {
-                                    "MAE": _safe_float(best_row.get("Test_MAE")),
-                                    "RMSE": _safe_float(best_row.get("Test_RMSE")),
-                                    "MAPE": _safe_float(best_row.get("Test_MAPE")),
-                                    "Accuracy": _safe_float(best_row.get("Test_Acc")),
-                                }
-                                model_params = f"order={order if order else 'auto'}; H={arima_h}"
-                                _append_to_comparison(
-                                    model_name=f"ARIMA (best h={int(best_row.get('Horizon', 1))})",
-                                    train_ratio=train_ratio,
-                                    kpis=kpis,
-                                    model_params=model_params,
-                                    runtime_s=runtime_s
-                                )
-                        except Exception as e:
-                            st.error(f"❌ ARIMA multi-horizon training failed: {e}")
+                    except Exception as e:
+                        st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
         elif current_model == "SARIMAX":
             exog_vars      = st.session_state.get("sarimax_features", [])
@@ -1144,29 +2023,10 @@ def page_benchmarks():
 
         # ---------- ARIMA ----------
         if current_model == "ARIMA":
-            arima_results = st.session_state.get("arima_results")
-            if arima_results is not None:
-                st.markdown("#### 🎯 Performance Metrics (h=1)")
-                test_m = arima_results.get("test_metrics", {}) or {}
-                _render_kpi_row(test_m)
-
-                st.markdown("---")
-                st.markdown("#### 📈 Forecast vs Actual (h=1)")
-                if _plt_import_ok:
-                    fig_forecast = plot_arima_forecast(arima_results, title="ARIMA Forecast: Training and Test Period")
-                    try:
-                        fig_forecast.update_layout(xaxis_title="Date", yaxis_title="Number of Patient Arrivals")
-                    except Exception:
-                        pass
-                else:
-                    fig_forecast = _plot_arima_forecast_local(arima_results, title="ARIMA Forecast: Training and Test Period")
-                st.plotly_chart(fig_forecast, use_container_width=True)
-
-            st.markdown("---")
             st.markdown("### 🧪 Comprehensive Multi-Horizon Results — ARIMA")
             arima_mh = st.session_state.get("arima_mh_results")
             if arima_mh is None:
-                st.info("Train ARIMA with the **Multi-horizon** button to see full dashboard.")
+                st.info("📊 Train ARIMA first to see results in this tab.")
             else:
                 try:
                     mdf, F, L, U, test_eval, train, res, horizons = arima_to_multihorizon_artifacts(arima_mh)
@@ -1390,134 +2250,156 @@ def page_benchmarks():
 
             st.markdown("---")
 
-            # Create comparison visualizations
+            # ========== NEW: Statistical Comparison Section ==========
             if len(show) >= 2:
-                st.markdown("#### 📊 Visual Performance Analysis")
+                st.markdown(
+                    """
+                    <div style='text-align: center; margin: 1.5rem 0; padding: 1.5rem; background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1)); border: 2px solid rgba(99, 102, 241, 0.3); border-radius: 12px; box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);'>
+                      <h3 style='margin: 0; font-size: 1.5rem; color: #818cf8;'>📊 Statistical Comparison</h3>
+                      <p style='margin: 0.5rem 0 0 0; font-size: 0.95rem; color: rgba(255,255,255,0.7);'>In-depth analysis of model performance across all dimensions</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-                charts = _build_model_comparison_charts(show)
+                # 1. Interactive metrics over horizon chart
+                horizon_data = _extract_horizon_comparison_data()
 
-                if charts:
-                    # Multi-metric comparison
-                    if charts["multi_metric"]:
-                        st.plotly_chart(charts["multi_metric"], use_container_width=True)
+                if horizon_data and len(horizon_data) >= 2:
+                    st.markdown("##### 📊 Metrics Across Forecast Horizons")
 
-                    # Runtime vs Accuracy + Error metrics side by side
-                    col_chart1, col_chart2 = st.columns(2)
+                    # Radio buttons for metric selection
+                    selected_metric = st.radio(
+                        "Choose metric to visualize across forecast horizons",
+                        options=["MAE", "RMSE", "MAPE"],
+                        index=0,
+                        horizontal=True,
+                        key="horizon_metric_selector",
+                        label_visibility="collapsed",
+                        help="Switch between different metrics to see how they change across horizons"
+                    )
 
-                    with col_chart1:
-                        if charts["scatter"]:
-                            st.plotly_chart(charts["scatter"], use_container_width=True)
-                        else:
-                            st.info("Runtime vs Accuracy chart requires both metrics to be available.")
+                    metrics_horizon_fig = _build_metrics_over_horizon_chart(horizon_data, selected_metric)
+                    if metrics_horizon_fig:
+                        st.plotly_chart(metrics_horizon_fig, use_container_width=True)
+                    else:
+                        st.warning(f"📭 Chart could not be generated for {selected_metric}. Check if this metric exists in both models.")
 
-                    with col_chart2:
-                        if charts["errors"]:
-                            st.plotly_chart(charts["errors"], use_container_width=True)
-                        else:
-                            st.info("Error metrics chart requires MAE or RMSE data.")
+                    st.markdown("---")
+                else:
+                    if horizon_data:
+                        st.info(f"📭 Only found data for {len(horizon_data)} model(s). Need both ARIMA and SARIMAX with multi-horizon results.")
+                    else:
+                        st.info("📭 No horizon data found. Train both ARIMA and SARIMAX models with multi-horizon forecasting.")
+
+                    st.markdown("---")
+
+                # 2. Interactive error metrics comparison with radio buttons
+                st.markdown("##### 📈 Average Performance Comparison")
+                view_mode = st.radio(
+                    "Choose metrics to compare",
+                    options=["Errors Only", "Percentages Only"],
+                    index=0,
+                    horizontal=True,
+                    key="error_metrics_view_mode",
+                    label_visibility="collapsed",
+                    help="Switch between different metric comparison views"
+                )
+
+                # Dynamic interpretation above the chart
+                interpretation = _generate_error_metrics_interpretation(show, view_mode)
+                if interpretation:
+                    st.markdown(interpretation, unsafe_allow_html=True)
+
+                interactive_fig = _build_interactive_error_metrics_chart(show, view_mode)
+                if interactive_fig:
+                    st.plotly_chart(interactive_fig, use_container_width=True)
+
+                st.markdown("---")
+
+                # 3. Accuracy Gauge Cards (side-by-side)
+                st.markdown("##### 🎯 Model Performance Summary")
+
+                # Dynamic interpretation above the gauges
+                radar_interpretation = _generate_radar_interpretation(show)
+                if radar_interpretation:
+                    st.markdown(radar_interpretation, unsafe_allow_html=True)
+
+                # Determine winner and display gauges side-by-side
+                if "Accuracy_%" in show.columns and show["Accuracy_%"].notna().any():
+                    show_sorted = show.sort_values("Accuracy_%", ascending=False)
+                    best_model_name = show_sorted.iloc[0]["Model"]
+
+                    # Create two columns for side-by-side display
+                    gauge_col1, gauge_col2 = st.columns(2)
+
+                    # Get all rows as a list
+                    rows_list = list(show.iterrows())
+
+                    # Display first model in left column
+                    if len(rows_list) >= 1:
+                        _, row1 = rows_list[0]
+                        is_winner1 = (row1["Model"] == best_model_name)
+                        gauge_fig1 = _build_accuracy_gauge_card(row1, is_winner=is_winner1)
+                        with gauge_col1:
+                            st.plotly_chart(gauge_fig1, use_container_width=True)
+
+                    # Display second model in right column
+                    if len(rows_list) >= 2:
+                        _, row2 = rows_list[1]
+                        is_winner2 = (row2["Model"] == best_model_name)
+                        gauge_fig2 = _build_accuracy_gauge_card(row2, is_winner=is_winner2)
+                        with gauge_col2:
+                            st.plotly_chart(gauge_fig2, use_container_width=True)
+
+                # 4. Pairwise delta analysis (if 2 models)
+                if len(show) == 2:
+                    delta_fig = _build_pairwise_delta_chart(show)
+                    if delta_fig:
+                        st.plotly_chart(delta_fig, use_container_width=True)
 
             st.markdown("---")
 
-            # Best model identification
-            st.markdown("#### 🏆 Best Model Recommendation")
+            # Best model recommendation (simplified)
+            st.markdown("#### 🏆 Final Recommendation")
             try:
                 best_model = None
                 if "Accuracy_%" in show.columns and show["Accuracy_%"].notna().any():
-                    best_model = show.sort_values("Accuracy_%", ascending=False).iloc[0]
-                elif "RMSE" in show.columns and show["RMSE"].notna().any():
-                    best_model = show.sort_values("RMSE", ascending=True).iloc[0]
+                    show_sorted = show.sort_values("Accuracy_%", ascending=False)
+                    best_model = show_sorted.iloc[0]
 
-                if best_model is not None:
-                    col_best1, col_best2 = st.columns([2, 1])
+                    if len(show) == 2:
+                        second_model = show_sorted.iloc[1]
 
-                    with col_best1:
-                        accuracy = _safe_float(best_model.get("Accuracy_%"))
-                        mae = _safe_float(best_model.get("MAE"))
-                        rmse = _safe_float(best_model.get("RMSE"))
-                        runtime = _safe_float(best_model.get("Runtime_s"))
-                        train_ratio = best_model.get("TrainRatio", "N/A")
-                        params = best_model.get("ModelParams", "N/A")
+                        # Calculate improvements
+                        acc_delta = best_model["Accuracy_%"] - second_model["Accuracy_%"]
+                        mae_delta = second_model["MAE"] - best_model["MAE"] if "MAE" in show.columns else 0
+                        rmse_delta = second_model["RMSE"] - best_model["RMSE"] if "RMSE" in show.columns else 0
+                        runtime_delta = second_model["Runtime_s"] - best_model["Runtime_s"] if "Runtime_s" in show.columns else 0
 
-                        acc_txt = _fmt_pct(accuracy)
-                        mae_txt = _fmt_num(mae)
-                        rmse_txt = _fmt_num(rmse)
-                        rt_txt = f"{runtime:.2f}s" if np.isfinite(runtime) else "N/A"
-
-                        fast_flag = " (Fast!)" if np.isfinite(runtime) and runtime < 5 else ""
-                        excellent_flag = " (Excellent!)" if np.isfinite(accuracy) and accuracy >= 95 else ""
-
+                        # Build recommendation message
                         st.success(
                             f"**🥇 Recommended Model: {best_model['Model']}**\n\n"
-                            f"**Performance Metrics:**\n"
-                            f"- ✅ Accuracy: {acc_txt}{excellent_flag}\n"
-                            f"- 📊 MAE: {mae_txt}\n"
-                            f"- 📈 RMSE: {rmse_txt}\n"
-                            f"- ⚡ Runtime: {rt_txt}{fast_flag}\n\n"
-                            f"**Configuration:**\n"
-                            f"- Train/Test Split: {train_ratio}\n"
-                            f"- Parameters: {params}"
+                            f"**Performance Edge:**\n"
+                            f"• {acc_delta:+.2f}% higher accuracy ({best_model['Accuracy_%']:.2f}% vs {second_model['Accuracy_%']:.2f}%)\n"
+                            f"• {mae_delta:+.2f} lower MAE ({best_model.get('MAE', 0):.2f} vs {second_model.get('MAE', 0):.2f})\n"
+                            f"• {rmse_delta:+.2f} lower RMSE ({best_model.get('RMSE', 0):.2f} vs {second_model.get('RMSE', 0):.2f})\n"
+                            f"• {runtime_delta:+.1f}s runtime difference ({'faster' if runtime_delta < 0 else 'slower'})\n\n"
+                            f"**Decision:** Choose **{best_model['Model']}** for {acc_delta:.1f}% accuracy improvement."
+                        )
+                    else:
+                        # Multiple models - simple recommendation
+                        st.success(
+                            f"**🥇 Recommended Model: {best_model['Model']}**\n\n"
+                            f"• Accuracy: {best_model['Accuracy_%']:.2f}%\n"
+                            f"• MAE: {best_model.get('MAE', 0):.2f}\n"
+                            f"• RMSE: {best_model.get('RMSE', 0):.2f}\n"
+                            f"• Runtime: {best_model.get('Runtime_s', 0):.1f}s"
                         )
 
-                    with col_best2:
-                        if np.isfinite(_safe_float(best_model.get("Accuracy_%"))):
-                            fig_mini = go.Figure(go.Indicator(
-                                mode="gauge+number",
-                                value=_safe_float(best_model.get("Accuracy_%")),
-                                title={'text': "Model Accuracy"},
-                                gauge={
-                                    'axis': {'range': [None, 100]},
-                                    'bar': {'color': SUCCESS_COLOR},
-                                    'steps': [
-                                        {'range': [0, 70], 'color': "rgba(255,0,0,0.1)"},
-                                        {'range': [70, 85], 'color': "rgba(255,165,0,0.1)"},
-                                        {'range': [85, 95], 'color': "rgba(135,206,250,0.1)"},
-                                        {'range': [95, 100], 'color': "rgba(144,238,144,0.1)"}
-                                    ],
-                                    'threshold': {
-                                        'line': {'color': "red", 'width': 4},
-                                        'thickness': 0.75,
-                                        'value': 95
-                                    }
-                                }
-                            ))
-                            fig_mini.update_layout(
-                                height=250,
-                                margin=dict(l=20, r=20, t=50, b=20),
-                                paper_bgcolor=BG_BLACK,
-                                font=dict(color=TEXT_COLOR)
-                            )
-                            st.plotly_chart(fig_mini, use_container_width=True)
-
-                # Show top 3 models if available
-                if len(show) >= 3:
-                    st.markdown("---")
-                    st.markdown("#### 🥇🥈🥉 Top 3 Models")
-
-                    top3 = show.head(3)
-                    col1, col2, col3 = st.columns(3)
-
-                    medal_list = ["🥇", "🥈", "🥉"]
-                    color_list = [SUCCESS_COLOR, SECONDARY_COLOR, WARNING_COLOR]
-
-                    for idx, (col, (_, row)) in enumerate(zip([col1, col2, col3], top3.iterrows())):
-                        with col:
-                            medal = medal_list[idx]
-                            rank_color = color_list[idx]
-                            acc_txt = _fmt_pct(row.get("Accuracy_%"))
-                            mae_txt = _fmt_num(row.get("MAE"))
-                            rmse_txt = _fmt_num(row.get("RMSE"))
-                            st.markdown(f"""
-                            <div style="border: 2px solid {rank_color}; border-radius: 10px; padding: 15px; background: {BG_BLACK};">
-                                <div style="text-align: center; font-size: 2rem;">{medal}</div>
-                                <h5 style="text-align: center; color: {TEXT_COLOR}; margin: 10px 0; word-wrap: break-word;">{row['Model']}</h5>
-                                <div style="text-align: center; color: {rank_color}; font-size: 1.5rem; font-weight: 600; margin: 10px 0;">
-                                    {acc_txt}
-                                </div>
-                                <div style="font-size: 0.8rem; color: {SUBTLE_TEXT}; text-align: center;">
-                                    MAE: {mae_txt} | RMSE: {rmse_txt}
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                    # Parameters in expander
+                    with st.expander("📋 View Model Parameters", expanded=False):
+                        st.code(best_model.get("ModelParams", "N/A"), language=None)
 
             except Exception as e:
                 st.error(f"Could not determine best model: {e}")
@@ -1529,6 +2411,395 @@ def page_benchmarks():
                 summaries = _create_model_performance_summary(show)
                 for summary_html in summaries:
                     st.markdown(summary_html, unsafe_allow_html=True)
+
+def _generate_error_metrics_interpretation(comp_df: pd.DataFrame, view_mode: str) -> str:
+    """
+    Generate dynamic interpretation for error metrics comparison based on actual results.
+
+    Args:
+        comp_df: DataFrame with model comparison data
+        view_mode: Current view mode selection
+
+    Returns:
+        HTML string with interpretation
+    """
+    if comp_df is None or comp_df.empty or len(comp_df) < 2:
+        return ""
+
+    df = comp_df.copy()
+
+    # Get best model by accuracy
+    if "Accuracy_%" in df.columns and df["Accuracy_%"].notna().any():
+        df_sorted = df.sort_values("Accuracy_%", ascending=False)
+        best_model = df_sorted.iloc[0]
+        worst_model = df_sorted.iloc[-1]
+
+        best_name = best_model["Model"]
+        best_acc = best_model["Accuracy_%"]
+
+        # Calculate performance gaps
+        acc_gap = best_acc - worst_model["Accuracy_%"]
+
+        # Build interpretation
+        if len(df) == 2:
+            # Two-model comparison
+            other_model = df_sorted.iloc[1]
+            other_name = other_model["Model"]
+
+            # Determine significance
+            if acc_gap > 5:
+                significance = "significantly outperforms"
+                icon = "🏆"
+            elif acc_gap > 2:
+                significance = "outperforms"
+                icon = "✅"
+            else:
+                significance = "marginally outperforms"
+                icon = "📊"
+
+            interpretation = f"{icon} **{best_name}** {significance} **{other_name}** with **{best_acc:.2f}% accuracy** (Δ = {acc_gap:+.2f}%)"
+
+            # Add error comparison if available
+            if "MAE" in df.columns and "RMSE" in df.columns:
+                mae_diff = best_model["MAE"] - other_model["MAE"]
+                rmse_diff = best_model["RMSE"] - other_model["RMSE"]
+
+                if mae_diff < 0 and rmse_diff < 0:
+                    interpretation += f", with **{abs(mae_diff):.2f} lower MAE** and **{abs(rmse_diff):.2f} lower RMSE**"
+                elif mae_diff < 0:
+                    interpretation += f", with **{abs(mae_diff):.2f} lower MAE**"
+                elif rmse_diff < 0:
+                    interpretation += f", with **{abs(rmse_diff):.2f} lower RMSE**"
+
+            interpretation += "."
+        else:
+            # Multiple models
+            interpretation = f"🏆 **{best_name}** leads with **{best_acc:.2f}% accuracy**, followed by "
+            second = df_sorted.iloc[1]
+            interpretation += f"**{second['Model']}** ({second['Accuracy_%']:.2f}%)."
+
+        return f"""
+        <div style='padding: 0.8rem; margin-bottom: 1rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1)); border-left: 4px solid #3b82f6; border-radius: 8px;'>
+            <p style='margin: 0; font-size: 0.95rem; color: rgba(255,255,255,0.9);'>{interpretation}</p>
+        </div>
+        """
+
+    return ""
+
+
+def _generate_radar_interpretation(comp_df: pd.DataFrame) -> str:
+    """
+    Generate dynamic interpretation for radar chart based on actual results.
+
+    Args:
+        comp_df: DataFrame with model comparison data
+
+    Returns:
+        HTML string with interpretation
+    """
+    if comp_df is None or comp_df.empty or len(comp_df) < 2:
+        return ""
+
+    df = comp_df.copy()
+
+    # Analyze strengths and weaknesses
+    if "Accuracy_%" in df.columns and "Runtime_s" in df.columns:
+        df_sorted_acc = df.sort_values("Accuracy_%", ascending=False)
+        df_sorted_speed = df.sort_values("Runtime_s", ascending=True)
+
+        most_accurate = df_sorted_acc.iloc[0]
+        fastest = df_sorted_speed.iloc[0]
+
+        if most_accurate["Model"] == fastest["Model"]:
+            # Same model is best in both
+            interpretation = f"💎 **{most_accurate['Model']}** dominates across all dimensions: highest accuracy ({most_accurate['Accuracy_%']:.2f}%) and fastest runtime ({most_accurate['Runtime_s']:.1f}s)."
+        else:
+            # Trade-off between accuracy and speed
+            runtime_diff = fastest["Runtime_s"] - most_accurate["Runtime_s"]
+            acc_diff = most_accurate["Accuracy_%"] - fastest["Accuracy_%"]
+
+            interpretation = f"⚖️ Performance trade-off: **{most_accurate['Model']}** offers **{acc_diff:.2f}% better accuracy** but is **{abs(runtime_diff):.1f}s slower** than **{fastest['Model']}**."
+
+        return f"""
+        <div style='padding: 0.8rem; margin-bottom: 1rem; background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.1)); border-left: 4px solid #8b5cf6; border-radius: 8px;'>
+            <p style='margin: 0; font-size: 0.95rem; color: rgba(255,255,255,0.9);'>{interpretation}</p>
+        </div>
+        """
+
+    return ""
+
+
+def _build_interactive_error_metrics_chart(comp_df: pd.DataFrame, view_mode: str = "All Metrics"):
+    """
+    Create interactive error metrics chart with dual y-axis support.
+
+    Args:
+        comp_df: DataFrame with model comparison data
+        view_mode: One of ["All Metrics", "Errors Only", "Percentages Only", "Accuracy vs Errors"]
+
+    Returns:
+        Plotly figure with dual y-axis or None
+    """
+    if comp_df is None or comp_df.empty or len(comp_df) < 2:
+        return None
+
+    from plotly.subplots import make_subplots
+
+    # Prepare data
+    df_work = comp_df.copy()
+    for c in ["MAE", "RMSE", "MAPE_%", "Accuracy_%"]:
+        if c in df_work.columns:
+            df_work[c] = pd.to_numeric(df_work[c], errors="coerce")
+
+    # Determine which metrics to show based on view mode
+    show_percentages = view_mode in ["All Metrics", "Percentages Only", "Accuracy vs Errors"]
+    show_errors = view_mode in ["All Metrics", "Errors Only", "Accuracy vs Errors"]
+
+    # Create figure with or without secondary y-axis
+    use_dual_axis = view_mode in ["All Metrics", "Accuracy vs Errors"]
+
+    if use_dual_axis:
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+    else:
+        fig = go.Figure()
+
+    # Count total number of bars to adjust width
+    n_bars = 0
+    if show_percentages:
+        if "MAPE_%" in df_work.columns and df_work["MAPE_%"].notna().any():
+            n_bars += 1
+        if "Accuracy_%" in df_work.columns and df_work["Accuracy_%"].notna().any():
+            n_bars += 1
+    if show_errors:
+        if "MAE" in df_work.columns and df_work["MAE"].notna().any():
+            n_bars += 1
+        if "RMSE" in df_work.columns and df_work["RMSE"].notna().any():
+            n_bars += 1
+
+    # Adjust bar width (smaller for more bars)
+    bar_width = 0.15 if n_bars >= 4 else 0.2
+
+    # Add percentage metrics (left y-axis)
+    if show_percentages:
+        if "MAPE_%" in df_work.columns and df_work["MAPE_%"].notna().any():
+            trace = go.Bar(
+                name="MAPE %",
+                x=df_work["Model"],
+                y=df_work["MAPE_%"],
+                marker_color='#f59e0b',  # Amber
+                text=df_work["MAPE_%"].round(1),
+                textposition='outside',
+                texttemplate='%{text}%',
+                textfont=dict(size=10, color='#f59e0b'),
+                hovertemplate='<b>%{x}</b><br>MAPE: %{y:.2f}%<extra></extra>',
+                width=bar_width,
+                offsetgroup=1 if not use_dual_axis else None
+            )
+            if use_dual_axis:
+                fig.add_trace(trace, secondary_y=False)
+            else:
+                fig.add_trace(trace)
+
+        if "Accuracy_%" in df_work.columns and df_work["Accuracy_%"].notna().any():
+            trace = go.Bar(
+                name="Accuracy %",
+                x=df_work["Model"],
+                y=df_work["Accuracy_%"],
+                marker_color=SUCCESS_COLOR,
+                text=df_work["Accuracy_%"].round(2),
+                textposition='outside',
+                texttemplate='%{text}%',
+                textfont=dict(size=10, color=SUCCESS_COLOR),
+                hovertemplate='<b>%{x}</b><br>Accuracy: %{y:.2f}%<extra></extra>',
+                width=bar_width,
+                offsetgroup=2 if not use_dual_axis else None
+            )
+            if use_dual_axis:
+                fig.add_trace(trace, secondary_y=False)
+            else:
+                fig.add_trace(trace)
+
+    # Add error metrics (right y-axis for dual, same axis for single)
+    if show_errors:
+        if "MAE" in df_work.columns and df_work["MAE"].notna().any():
+            trace = go.Bar(
+                name="MAE",
+                x=df_work["Model"],
+                y=df_work["MAE"],
+                marker_color=PRIMARY_COLOR,
+                text=df_work["MAE"].round(2),
+                textposition='outside',
+                texttemplate='%{text}',
+                textfont=dict(size=10, color=PRIMARY_COLOR),
+                hovertemplate='<b>%{x}</b><br>MAE: %{y:.3f}<extra></extra>',
+                width=bar_width,
+                offsetgroup=3 if not use_dual_axis else None
+            )
+            if use_dual_axis:
+                fig.add_trace(trace, secondary_y=True)
+            else:
+                fig.add_trace(trace)
+
+        if "RMSE" in df_work.columns and df_work["RMSE"].notna().any():
+            trace = go.Bar(
+                name="RMSE",
+                x=df_work["Model"],
+                y=df_work["RMSE"],
+                marker_color=SECONDARY_COLOR,
+                text=df_work["RMSE"].round(2),
+                textposition='outside',
+                texttemplate='%{text}',
+                textfont=dict(size=10, color=SECONDARY_COLOR),
+                hovertemplate='<b>%{x}</b><br>RMSE: %{y:.3f}<extra></extra>',
+                width=bar_width,
+                offsetgroup=4 if not use_dual_axis else None
+            )
+            if use_dual_axis:
+                fig.add_trace(trace, secondary_y=True)
+            else:
+                fig.add_trace(trace)
+
+    # Calculate y-axis ranges with MORE padding for text labels
+    if use_dual_axis:
+        # Left y-axis (percentages)
+        if show_percentages:
+            max_pct = 0
+            if "MAPE_%" in df_work.columns and df_work["MAPE_%"].notna().any():
+                max_pct = max(max_pct, df_work["MAPE_%"].max())
+            if "Accuracy_%" in df_work.columns and df_work["Accuracy_%"].notna().any():
+                max_pct = max(max_pct, df_work["Accuracy_%"].max())
+            y_pct_range = [0, max_pct * 1.4] if np.isfinite(max_pct) and max_pct > 0 else [0, 130]
+        else:
+            y_pct_range = None
+
+        # Right y-axis (errors)
+        if show_errors:
+            max_error = 0
+            if "MAE" in df_work.columns and df_work["MAE"].notna().any():
+                max_error = max(max_error, df_work["MAE"].max())
+            if "RMSE" in df_work.columns and df_work["RMSE"].notna().any():
+                max_error = max(max_error, df_work["RMSE"].max())
+            y_error_range = [0, max_error * 1.4] if np.isfinite(max_error) and max_error > 0 else None
+        else:
+            y_error_range = None
+
+        # Update layout for dual y-axis
+        fig.update_layout(
+            title=dict(
+                text=f"<b>📊 {view_mode}</b><br><sub>Interactive Model Comparison</sub>",
+                x=0.5,
+                xanchor='center',
+                font=dict(size=14, color=TEXT_COLOR, family='Arial Black')
+            ),
+            xaxis=dict(
+                title="<b>Model</b>",
+                title_font=dict(size=12),
+                tickangle=0,
+                tickfont=dict(size=11),
+                showgrid=False,
+                color=TEXT_COLOR
+            ),
+            barmode='group',
+            bargap=0.25,  # Gap between bars of different models
+            bargroupgap=0.1,  # Gap between metric groups
+            plot_bgcolor=BG_BLACK,
+            paper_bgcolor=BG_BLACK,
+            margin=dict(t=70, b=90, l=80, r=80),
+            height=520,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.2,
+                xanchor="center",
+                x=0.5,
+                font=dict(color=TEXT_COLOR, size=10)
+            ),
+            font=dict(color=TEXT_COLOR)
+        )
+
+        # Left y-axis (percentages)
+        fig.update_yaxes(
+            title_text="<b>Percentage (%)</b>",
+            title_font=dict(size=12, color=TEXT_COLOR),
+            tickfont=dict(size=10),
+            range=y_pct_range,
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.08)',
+            color=TEXT_COLOR,
+            secondary_y=False
+        )
+
+        # Right y-axis (errors)
+        fig.update_yaxes(
+            title_text="<b>Error Value</b>",
+            title_font=dict(size=12, color=TEXT_COLOR),
+            tickfont=dict(size=10),
+            range=y_error_range,
+            showgrid=False,
+            color=TEXT_COLOR,
+            secondary_y=True
+        )
+    else:
+        # Single y-axis
+        max_val = 0
+        if show_percentages:
+            if "MAPE_%" in df_work.columns and df_work["MAPE_%"].notna().any():
+                max_val = max(max_val, df_work["MAPE_%"].max())
+            if "Accuracy_%" in df_work.columns and df_work["Accuracy_%"].notna().any():
+                max_val = max(max_val, df_work["Accuracy_%"].max())
+            y_title = "<b>Percentage (%)</b>"
+        else:  # Errors only
+            if "MAE" in df_work.columns and df_work["MAE"].notna().any():
+                max_val = max(max_val, df_work["MAE"].max())
+            if "RMSE" in df_work.columns and df_work["RMSE"].notna().any():
+                max_val = max(max_val, df_work["RMSE"].max())
+            y_title = "<b>Error Value (Lower is Better)</b>"
+
+        y_range = [0, max_val * 1.4] if np.isfinite(max_val) and max_val > 0 else None
+
+        fig.update_layout(
+            title=dict(
+                text=f"<b>📊 {view_mode}</b><br><sub>Interactive Model Comparison</sub>",
+                x=0.5,
+                xanchor='center',
+                font=dict(size=14, color=TEXT_COLOR, family='Arial Black')
+            ),
+            xaxis=dict(
+                title="<b>Model</b>",
+                title_font=dict(size=12),
+                tickangle=0,
+                tickfont=dict(size=11),
+                showgrid=False,
+                color=TEXT_COLOR
+            ),
+            yaxis=dict(
+                title=y_title,
+                title_font=dict(size=12),
+                tickfont=dict(size=10),
+                range=y_range,
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.08)',
+                color=TEXT_COLOR
+            ),
+            barmode='group',
+            bargap=0.25,
+            bargroupgap=0.1,
+            plot_bgcolor=BG_BLACK,
+            paper_bgcolor=BG_BLACK,
+            margin=dict(t=70, b=90, l=80, r=50),
+            height=520,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.2,
+                xanchor="center",
+                x=0.5,
+                font=dict(color=TEXT_COLOR, size=10)
+            ),
+            font=dict(color=TEXT_COLOR)
+        )
+
+    return fig
 
 def _build_model_comparison_charts(comp_df: pd.DataFrame):
     """Create comprehensive comparison visualizations."""
@@ -1574,6 +2845,10 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
             textfont=dict(size=12, color='white')
         ))
 
+    # Calculate y-axis range with padding for text labels
+    max_val = max([df_work[m].max() for m, _, _ in metrics_to_plot if m in df_work.columns])
+    y_range = [0, max_val * 1.25] if np.isfinite(max_val) else [0, 120]
+
     fig_metrics.update_layout(
         title=dict(text="📊 Multi-Metric Model Comparison", x=0.5, xanchor='center'),
         xaxis_title="Model",
@@ -1582,7 +2857,7 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
         plot_bgcolor=BG_BLACK,
         paper_bgcolor=BG_BLACK,
         margin=dict(t=70, b=80, l=60, r=40),
-        height=400,
+        height=450,
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -1590,7 +2865,8 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
             xanchor="right",
             x=1
         ),
-        xaxis=dict(tickangle=-45),
+        xaxis=dict(tickangle=-45, showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+        yaxis=dict(range=y_range, showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
         font_color='white'
     )
 
@@ -1623,8 +2899,8 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
 
             fig_scatter.update_layout(
                 title=dict(text="⚡ Runtime vs Accuracy Trade-off", x=0.5, xanchor='center'),
-                xaxis=dict(title="Runtime (seconds)", showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
-                yaxis=dict(title="Accuracy (%)", showgrid=True, gridcolor='rgba(200,200,200,0.2)'),
+                xaxis=dict(title="Runtime (seconds)", showgrid=True, gridcolor='rgba(255,255,255,0.15)'),
+                yaxis=dict(title="Accuracy (%)", showgrid=True, gridcolor='rgba(255,255,255,0.15)'),
                 plot_bgcolor=BG_BLACK,
                 paper_bgcolor=BG_BLACK,
                 margin=dict(t=70, b=60, l=60, r=60),
@@ -1663,6 +2939,14 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
                 textfont=dict(size=12, color='white')
             ))
 
+        # Calculate y-axis range with padding for text labels
+        max_error = 0
+        if "MAE" in df_work.columns and df_work["MAE"].notna().any():
+            max_error = max(max_error, df_work["MAE"].max())
+        if "RMSE" in df_work.columns and df_work["RMSE"].notna().any():
+            max_error = max(max_error, df_work["RMSE"].max())
+        y_error_range = [0, max_error * 1.25] if np.isfinite(max_error) and max_error > 0 else None
+
         fig_errors.update_layout(
             title=dict(text="📉 Error Metrics Comparison (Lower is Better)", x=0.5, xanchor='center'),
             xaxis_title="Model",
@@ -1671,7 +2955,7 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
             plot_bgcolor=BG_BLACK,
             paper_bgcolor=BG_BLACK,
             margin=dict(t=70, b=80, l=60, r=40),
-            height=400,
+            height=450,
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
@@ -1679,7 +2963,8 @@ def _build_model_comparison_charts(comp_df: pd.DataFrame):
                 xanchor="right",
                 x=1
             ),
-            xaxis=dict(tickangle=-45),
+            xaxis=dict(tickangle=-45, showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+            yaxis=dict(range=y_error_range, showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
             font_color='white'
         )
 

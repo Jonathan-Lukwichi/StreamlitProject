@@ -145,6 +145,207 @@ def _auto_order(
     # Fallback: modest seasonal default (weekly seasonality)
     return (1, 1, 1), (1, 1, 0, m), float("nan"), float("nan")
 
+
+def _auto_order_hybrid(
+    y_tr: pd.Series,
+    X_tr: Optional[pd.DataFrame],
+    m: int = 7,
+    n_folds: int = 3,
+    alpha: float = 0.3,  # AIC weight
+    beta: float = 0.7,   # CV-RMSE weight
+    max_p: int = 3, max_q: int = 3, max_d: int = 2,
+    max_P: int = 2, max_Q: int = 2, max_D: int = 1,
+) -> Tuple[Tuple[int,int,int], Tuple[int,int,int,int], float, float]:
+    """
+    Find optimal SARIMAX orders by minimizing weighted composite score:
+    Score = alpha * Normalized_AIC + beta * Normalized_CV_RMSE
+
+    Uses expanding window cross-validation for robust RMSE estimation.
+    Leverages pmdarima for efficient candidate generation.
+
+    Args:
+        y_tr: Training target series
+        X_tr: Training exogenous features
+        m: Seasonal period
+        n_folds: Number of CV folds (default 3)
+        alpha: Weight for AIC (complexity penalty), default 0.3
+        beta: Weight for CV-RMSE (prediction accuracy), default 0.7
+        max_p, max_q, max_d: Non-seasonal parameter bounds
+        max_P, max_Q, max_D: Seasonal parameter bounds
+
+    Returns:
+        Tuple (order, seasonal_order, aic, bic)
+    """
+    results = []
+
+    # Generate candidate orders using pmdarima stepwise (if available)
+    if PMDARIMA_AVAILABLE:
+        try:
+            # Get best order from pmdarima as starting point
+            auto_model = pm.auto_arima(
+                y_tr.values.astype(float),
+                X=None if X_tr is None or X_tr.shape[1] == 0 else X_tr.values,
+                start_p=0, max_p=max_p, start_q=0, max_q=max_q,
+                d=None, max_d=max_d, seasonal=True, m=m,
+                start_P=0, max_P=max_P, start_Q=0, max_Q=max_Q,
+                D=None, max_D=max_D, stepwise=True, suppress_warnings=True,
+                error_action="ignore", information_criterion="aic",
+                random_state=SEED, maxiter=100,
+            )
+
+            order_pm = auto_model.order
+            seasonal_order_pm = auto_model.seasonal_order
+
+            # Generate candidate variations around pmdarima suggestion
+            candidates = [
+                (order_pm, seasonal_order_pm),
+            ]
+
+            # Add variations for robustness
+            p, d, q = order_pm
+            P, D, Q, s = seasonal_order_pm
+
+            # Variations in non-seasonal parameters
+            if p > 0:
+                candidates.append(((p-1, d, q), seasonal_order_pm))
+            if p < max_p:
+                candidates.append(((p+1, d, q), seasonal_order_pm))
+            if q > 0:
+                candidates.append(((p, d, q-1), seasonal_order_pm))
+            if q < max_q:
+                candidates.append(((p, d, q+1), seasonal_order_pm))
+
+            # Variations in seasonal parameters
+            if P > 0:
+                candidates.append((order_pm, (P-1, D, Q, s)))
+            if P < max_P:
+                candidates.append((order_pm, (P+1, D, Q, s)))
+
+        except Exception:
+            # Fallback to simple candidates
+            candidates = [
+                ((1, 1, 1), (1, 1, 0, m)),
+                ((1, 1, 0), (1, 1, 0, m)),
+                ((0, 1, 1), (1, 1, 0, m)),
+            ]
+    else:
+        # No pmdarima available, use simple defaults
+        candidates = [
+            ((1, 1, 1), (1, 1, 0, m)),
+            ((1, 1, 0), (1, 1, 0, m)),
+        ]
+
+    # Remove duplicates
+    candidates = list(set(candidates))
+
+    # Evaluate each candidate with CV-RMSE
+    for order, seasonal_order in candidates:
+        try:
+            # 1. Full fit for AIC
+            model_full = SARIMAX(
+                endog=y_tr,
+                exog=X_tr if X_tr is not None and X_tr.shape[1] > 0 else None,
+                order=order,
+                seasonal_order=seasonal_order,
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            ).fit(disp=False)
+
+            aic = float(model_full.aic)
+            bic = float(model_full.bic)
+
+            # 2. Time Series CV for RMSE
+            cv_rmses = []
+            fold_size = max(20, len(y_tr) // (n_folds + 1))
+
+            for i in range(n_folds):
+                train_end = fold_size * (i + 2)
+                if train_end > len(y_tr):
+                    break
+
+                test_start = train_end
+                test_end = min(train_end + fold_size, len(y_tr))
+
+                if test_end <= test_start:
+                    continue
+
+                y_cv_train = y_tr.iloc[:train_end]
+                y_cv_test = y_tr.iloc[test_start:test_end]
+
+                if X_tr is not None and X_tr.shape[1] > 0:
+                    X_cv_train = X_tr.iloc[:train_end]
+                    X_cv_test = X_tr.iloc[test_start:test_end]
+                else:
+                    X_cv_train = None
+                    X_cv_test = None
+
+                if len(y_cv_train) < 20 or len(y_cv_test) == 0:
+                    continue
+
+                cv_model = SARIMAX(
+                    endog=y_cv_train,
+                    exog=X_cv_train,
+                    order=order,
+                    seasonal_order=seasonal_order,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False,
+                ).fit(disp=False)
+
+                cv_forecast = cv_model.get_forecast(
+                    steps=len(y_cv_test),
+                    exog=X_cv_test
+                ).predicted_mean
+
+                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
+                cv_rmses.append(rmse_fold)
+
+            # Average CV-RMSE across folds
+            avg_cv_rmse = float(np.mean(cv_rmses)) if cv_rmses else float('inf')
+
+            if np.isfinite(aic) and np.isfinite(avg_cv_rmse):
+                results.append({
+                    'order': order,
+                    'seasonal_order': seasonal_order,
+                    'aic': aic,
+                    'bic': bic,
+                    'cv_rmse': avg_cv_rmse,
+                })
+
+        except Exception:
+            continue
+
+    if not results:
+        # Fallback to default
+        return (1, 1, 1), (1, 1, 0, m), float("nan"), float("nan")
+
+    # Normalize and score
+    df = pd.DataFrame(results)
+
+    aic_min, aic_max = df['aic'].min(), df['aic'].max()
+    rmse_min, rmse_max = df['cv_rmse'].min(), df['cv_rmse'].max()
+
+    # Avoid division by zero
+    aic_range = aic_max - aic_min if aic_max > aic_min else 1.0
+    rmse_range = rmse_max - rmse_min if rmse_max > rmse_min else 1.0
+
+    df['aic_norm'] = (df['aic'] - aic_min) / aic_range
+    df['rmse_norm'] = (df['cv_rmse'] - rmse_min) / rmse_range
+
+    # Weighted composite score (lower is better)
+    df['composite_score'] = alpha * df['aic_norm'] + beta * df['rmse_norm']
+
+    # Select best
+    best_idx = df['composite_score'].idxmin()
+    best_row = df.loc[best_idx]
+
+    return (
+        tuple(best_row['order']),
+        tuple(best_row['seasonal_order']),
+        float(best_row['aic']),
+        float(best_row['bic'])
+    )
+
+
 # ---------- single-horizon SARIMAX (h=1) ----------
 def run_sarimax_single(
     df_merged: pd.DataFrame,
@@ -297,6 +498,9 @@ def run_sarimax_multihorizon(
     # Bounds for auto-order search (only used when order/seasonal_order are None)
     max_p: int = 3, max_q: int = 3, max_d: int = 2,
     max_P: int = 2, max_Q: int = 2, max_D: int = 1,
+    # Search mode: "aic_only" or "hybrid" (AIC + CV-RMSE)
+    search_mode: str = "hybrid",
+    n_folds: int = 3,
 ) -> Dict[str, Any]:
     """
     Train SARIMAX per horizon 1..H (expects columns Target_1..Target_H).
@@ -323,6 +527,10 @@ def run_sarimax_multihorizon(
     rows: List[Dict[str, Any]] = []
     per_h: Dict[int, Dict[str, Any]] = {}
     ok: List[int] = []
+
+    # Parameter sharing: find optimal parameters once for h=1, reuse for h>1 (automatic mode only)
+    shared_order = None
+    shared_seasonal_order = None
 
     for h in range(1, horizons + 1):
         tc = f"Target_{h}"
@@ -358,18 +566,57 @@ def run_sarimax_multihorizon(
         X_tr, X_te = X.iloc[:split, :], X.iloc[split:, :]
 
         # Determine orders (manual overrides > auto)
-        if (order is None) or (seasonal_order is None):
-            ord_auto, sord_auto, aic_auto, bic_auto = _auto_order(
-                y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                max_p=max_p, max_q=max_q, max_d=max_d,
-                max_P=max_P, max_Q=max_Q, max_D=max_D
-            )
+        # For automatic mode: find parameters for h=1, reuse for h>1 (7x speedup)
+        if (order is None or seasonal_order is None) and h == 1:
+            # Full auto search for first horizon only
+            if search_mode == "hybrid":
+                # Hybrid mode: optimize AIC + CV-RMSE
+                ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_hybrid(
+                    y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
+                    n_folds=n_folds, alpha=0.3, beta=0.7,
+                    max_p=max_p, max_q=max_q, max_d=max_d,
+                    max_P=max_P, max_Q=max_Q, max_D=max_D
+                )
+            else:
+                # AIC-only mode: standard pmdarima stepwise
+                ord_auto, sord_auto, aic_auto, bic_auto = _auto_order(
+                    y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
+                    max_p=max_p, max_q=max_q, max_d=max_d,
+                    max_P=max_P, max_Q=max_Q, max_D=max_D
+                )
+            # Save the optimal parameters found for reuse
+            shared_order = ord_auto if order is None else order
+            shared_seasonal_order = sord_auto if seasonal_order is None else seasonal_order
+            use_order = shared_order
+            use_sorder = shared_seasonal_order
+            aic_ref, bic_ref = aic_auto, bic_auto
+        elif (order is None or seasonal_order is None) and h > 1 and shared_order is not None and shared_seasonal_order is not None:
+            # Reuse parameters from h=1 for subsequent horizons (skip expensive auto search)
+            use_order = shared_order
+            use_sorder = shared_seasonal_order
+            aic_ref, bic_ref = float("nan"), float("nan")
+        elif order is not None and seasonal_order is not None:
+            # Manual mode: use user-specified orders (unchanged)
+            use_order, use_sorder = order, seasonal_order
+            aic_ref, bic_ref = float("nan"), float("nan")
+        else:
+            # Fallback for edge cases
+            if search_mode == "hybrid":
+                ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_hybrid(
+                    y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
+                    n_folds=n_folds, alpha=0.3, beta=0.7,
+                    max_p=max_p, max_q=max_q, max_d=max_d,
+                    max_P=max_P, max_Q=max_Q, max_D=max_D
+                )
+            else:
+                ord_auto, sord_auto, aic_auto, bic_auto = _auto_order(
+                    y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
+                    max_p=max_p, max_q=max_q, max_d=max_d,
+                    max_P=max_P, max_Q=max_Q, max_D=max_D
+                )
             use_order = ord_auto if order is None else order
             use_sorder = sord_auto if seasonal_order is None else seasonal_order
             aic_ref, bic_ref = aic_auto, bic_auto
-        else:
-            use_order, use_sorder = order, seasonal_order
-            aic_ref, bic_ref = float("nan"), float("nan")
 
         # Fit model
         fit = SARIMAX(

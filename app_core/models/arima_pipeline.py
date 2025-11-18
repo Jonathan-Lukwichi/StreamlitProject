@@ -92,6 +92,112 @@ def optimize_arima_order_with_pmdarima(
 
 
 # ===========================================
+# Hybrid AIC + CV-RMSE optimization
+# ===========================================
+def optimize_arima_order_hybrid(
+    y_train: np.ndarray,
+    n_folds: int = 3,
+    alpha: float = 0.3,  # AIC weight
+    beta: float = 0.7,   # CV-RMSE weight
+) -> Tuple[int, int, int]:
+    """
+    Find optimal ARIMA order by minimizing weighted composite score:
+    Score = alpha * Normalized_AIC + beta * Normalized_CV_RMSE
+
+    Uses expanding window cross-validation for robust RMSE estimation.
+
+    Args:
+        y_train: Training data array
+        n_folds: Number of CV folds (default 3)
+        alpha: Weight for AIC (complexity penalty), default 0.3
+        beta: Weight for CV-RMSE (prediction accuracy), default 0.7
+
+    Returns:
+        Tuple (p, d, q) with optimal ARIMA order
+    """
+    # Define search grid
+    common = [(1, 1, 1), (0, 1, 1), (1, 1, 0), (2, 1, 2), (1, 0, 1)]
+    grid = [(p, d, q) for p in range(0, 3) for d in range(0, 2) for q in range(0, 3)]
+    candidates = common + grid
+
+    results = []
+
+    for order in candidates:
+        try:
+            # 1. Fit full training data to get AIC
+            model_full = ARIMA(y_train, order=order).fit()
+            aic = float(model_full.aic)
+
+            # 2. Time Series Cross-Validation for RMSE
+            cv_rmses = []
+            fold_size = max(12, len(y_train) // (n_folds + 1))
+
+            for i in range(n_folds):
+                # Expanding window
+                train_end = fold_size * (i + 2)
+                if train_end > len(y_train):
+                    break
+
+                test_start = train_end
+                test_end = min(train_end + fold_size, len(y_train))
+
+                if test_end <= test_start or test_start >= len(y_train):
+                    continue
+
+                y_cv_train = y_train[:train_end]
+                y_cv_test = y_train[test_start:test_end]
+
+                if len(y_cv_train) < 10 or len(y_cv_test) == 0:
+                    continue
+
+                # Fit and forecast
+                cv_model = ARIMA(y_cv_train, order=order).fit()
+                cv_forecast = cv_model.forecast(steps=len(y_cv_test))
+
+                # Calculate RMSE for this fold
+                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
+                cv_rmses.append(rmse_fold)
+
+            # Average CV-RMSE across folds
+            avg_cv_rmse = float(np.mean(cv_rmses)) if cv_rmses else float('inf')
+
+            if np.isfinite(aic) and np.isfinite(avg_cv_rmse):
+                results.append({
+                    'order': order,
+                    'aic': aic,
+                    'cv_rmse': avg_cv_rmse,
+                })
+
+        except Exception:
+            continue
+
+    if not results:
+        return (1, 1, 1)
+
+    # Normalize scores to [0, 1] range
+    df = pd.DataFrame(results)
+
+    aic_min, aic_max = df['aic'].min(), df['aic'].max()
+    rmse_min, rmse_max = df['cv_rmse'].min(), df['cv_rmse'].max()
+
+    # Avoid division by zero
+    aic_range = aic_max - aic_min if aic_max > aic_min else 1.0
+    rmse_range = rmse_max - rmse_min if rmse_max > rmse_min else 1.0
+
+    df['aic_norm'] = (df['aic'] - aic_min) / aic_range
+    df['rmse_norm'] = (df['cv_rmse'] - rmse_min) / rmse_range
+
+    # Weighted composite score (lower is better)
+    df['composite_score'] = alpha * df['aic_norm'] + beta * df['rmse_norm']
+
+    # Select best order
+    best_idx = df['composite_score'].idxmin()
+    best_order = df.loc[best_idx, 'order']
+
+    return tuple(best_order)
+
+
+# ===========================================
 # Multi-horizon metrics
 # ===========================================
 def calculate_multi_horizon_metrics(F: np.ndarray, test_eval: pd.DataFrame, L: np.ndarray, U: np.ndarray) -> pd.DataFrame:
@@ -234,6 +340,20 @@ def run_arima_pipeline(
 
     # ---------------- Order selection ----------------
     results = None
+
+    # Path A-Hybrid: AIC + CV-RMSE optimization
+    if search_mode == "hybrid" and order is None:
+        try:
+            order = optimize_arima_order_hybrid(
+                y_train=y_train,
+                n_folds=n_folds,
+                alpha=0.3,  # AIC weight
+                beta=0.7,   # CV-RMSE weight
+            )
+            auto_select = False
+        except Exception:
+            # will fall back to AIC mini-grid
+            pass
 
     # Path A: pmdarima-backed selector
     if search_mode == "pmdarima_oos" and order is None:

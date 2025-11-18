@@ -756,23 +756,36 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
     try:
         # Find datetime column in dataframe
         datetime_col = None
+        datetime_cols_to_exclude = []
+
         for col in df.columns:
             # Check if column is datetime type or has datetime-like name
             if pd.api.types.is_datetime64_any_dtype(df[col]):
-                datetime_col = col
-                break
+                if datetime_col is None:
+                    datetime_col = col
+                datetime_cols_to_exclude.append(col)
             # Check common datetime column names
-            if col.lower() in ['date', 'datetime', 'timestamp', 'time', 'ds']:
+            elif col.lower() in ['date', 'datetime', 'timestamp', 'time', 'ds']:
                 try:
                     # Try to convert to datetime
                     pd.to_datetime(df[col])
-                    datetime_col = col
-                    break
+                    if datetime_col is None:
+                        datetime_col = col
+                    datetime_cols_to_exclude.append(col)
                 except:
                     continue
 
+        # Filter out datetime columns from features (ML models need numeric data only)
+        numeric_feature_cols = [col for col in feature_cols if col not in datetime_cols_to_exclude]
+
+        if not numeric_feature_cols:
+            return {
+                "success": False,
+                "error": "No numeric features available after excluding datetime columns. Please select numeric features only."
+            }
+
         # Extract features and target
-        X = df[feature_cols].values
+        X = df[numeric_feature_cols].values
         y = df[target_col].values
 
         # Split train/validation (time series - no shuffle)
@@ -854,7 +867,7 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             "training_time": training_time,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "split_ratio": split_ratio,
-            "n_features": len(feature_cols),
+            "n_features": len(numeric_feature_cols),
             "n_train": len(y_train),
             "n_val": len(y_val),
         }
