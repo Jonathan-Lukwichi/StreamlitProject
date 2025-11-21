@@ -66,7 +66,12 @@ def _prep_calendar(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare reason for visit data with multiple target columns."""
+    """Prepare reason for visit data - keeps ALL granular columns for maximum flexibility.
+
+    This function preserves all numeric reason columns (Asthma, Pneumonia, Fracture,
+    Chest_Pain, etc.) instead of aggregating them, allowing for detailed multi-target
+    forecasting at the granular level.
+    """
     df = df.copy()
     dt_col = "datetime" if "datetime" in df.columns else _find_datetime_col(df, want="datetime")
     if dt_col is None:
@@ -76,13 +81,23 @@ def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Could not parse any valid datetimes in reason date/datetime column.")
     df["Date"] = df["datetime"].dt.normalize()
 
-    # Extract all numeric columns as potential reason categories
+    # Initialize output with Date column
     out = df[["Date"]].copy()
-    reason_cols = ["Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases", "Gastrointestinal_Cases",
-                   "Infectious_Cases", "Other_Cases", "Total_Arrivals"]
-    for col in reason_cols:
-        if col in df.columns:
-            out[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Extract ALL numeric columns (keeps all granular reason columns)
+    # Exclude date/datetime columns from numeric extraction
+    exclude_cols = ["Date", "datetime", "date", "timestamp", "ds"]
+    for col in df.columns:
+        if col not in exclude_cols and col not in out.columns:
+            # Try to convert to numeric - if successful, include it
+            try:
+                numeric_series = pd.to_numeric(df[col], errors="coerce")
+                # Only include if at least some values are numeric
+                if not numeric_series.isna().all():
+                    out[col] = numeric_series
+            except Exception:
+                # Skip non-numeric columns
+                pass
 
     return out
 

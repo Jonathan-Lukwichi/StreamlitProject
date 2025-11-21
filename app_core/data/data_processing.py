@@ -122,18 +122,38 @@ def _add_calendar_features(df: pd.DataFrame, date_col: Optional[str]) -> pd.Data
     return df
 
 def _detect_reason_columns(df: pd.DataFrame) -> List[str]:
-    """Detect reason for visit columns in the dataset.
+    """Dynamically detect ALL reason for visit columns in the dataset.
 
-    Note: Total_Arrivals may have been removed during fusion if it was
-    identical to Target_1 (patient arrivals). This function only returns
-    columns that actually exist in the dataframe.
+    This function identifies reason columns by excluding known non-reason columns
+    (date, weather, calendar, lag/target features) and keeping all numeric columns
+    that appear to be medical reasons for visit.
+
+    Supports both:
+    - Aggregated categories (Respiratory_Cases, Cardiac_Cases, etc.)
+    - Granular columns (Asthma, Pneumonia, Fracture, Chest_Pain, etc.)
     """
-    reason_candidates = [
-        "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
-        "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"
+    # Define columns that are NOT reason columns
+    exclude_patterns = [
+        "date", "datetime", "timestamp", "ds", "time",  # Date columns
+        "target_", "ed_",  # Lag/target features
+        "day_of_week", "is_weekend", "day_of_month", "week_of_year", "month", "year",  # Calendar features
+        "holiday", "moon_phase",  # Calendar features
+        "temp", "wind", "mslp", "pressure", "precip", "rain", "snow", "humidity", "dew"  # Weather features
     ]
-    found = [col for col in reason_candidates if col in df.columns]
-    return found
+
+    reason_cols = []
+    for col in df.columns:
+        col_lower = col.lower()
+
+        # Skip if matches exclude patterns
+        if any(pattern in col_lower for pattern in exclude_patterns):
+            continue
+
+        # Check if column is numeric
+        if pd.api.types.is_numeric_dtype(df[col]):
+            reason_cols.append(col)
+
+    return reason_cols
 
 def _generate_lags_and_targets(df: pd.DataFrame, ed_col: str, n_lags: int) -> pd.DataFrame:
     """Generate lag features (ED_1..ED_n) and future targets (Target_1..Target_n) from ED column."""
