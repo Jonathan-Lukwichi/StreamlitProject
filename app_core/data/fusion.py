@@ -65,12 +65,48 @@ def _prep_calendar(df: pd.DataFrame) -> pd.DataFrame:
         out["Day_of_week"] = pd.to_numeric(df["Day_of_week"], errors="coerce").astype('Int64')
     return out
 
-def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare reason for visit data - keeps ALL granular columns for maximum flexibility.
+def _create_aggregated_categories(df: pd.DataFrame) -> pd.DataFrame:
+    """Create aggregated medical category columns from granular reason columns.
 
-    This function preserves all numeric reason columns (Asthma, Pneumonia, Fracture,
-    Chest_Pain, etc.) instead of aggregating them, allowing for detailed multi-target
-    forecasting at the granular level.
+    This function automatically sums related granular conditions into broader categories:
+    - Respiratory_Cases = Asthma + Pneumonia + Shortness_of_Breath
+    - Cardiac_Cases = Chest_Pain + Arrhythmia + Hypertensive_Emergency
+    - Trauma_Cases = Fracture + Laceration + Burn + Fall_Injury
+    - Gastrointestinal_Cases = Abdominal_Pain + Vomiting + Diarrhea
+    - Infectious_Cases = Flu_Symptoms + Fever + Viral_Infection
+    - Other_Cases = Headache + Dizziness + Allergic_Reaction + Mental_Health
+
+    Returns the dataframe with aggregated columns added (keeps all original granular columns).
+    """
+    df = df.copy()
+
+    # Define category mappings
+    category_mappings = {
+        "Respiratory_Cases": ["Asthma", "Pneumonia", "Shortness_of_Breath"],
+        "Cardiac_Cases": ["Chest_Pain", "Arrhythmia", "Hypertensive_Emergency"],
+        "Trauma_Cases": ["Fracture", "Laceration", "Burn", "Fall_Injury"],
+        "Gastrointestinal_Cases": ["Abdominal_Pain", "Vomiting", "Diarrhea"],
+        "Infectious_Cases": ["Flu_Symptoms", "Fever", "Viral_Infection"],
+        "Other_Cases": ["Headache", "Dizziness", "Allergic_Reaction", "Mental_Health"]
+    }
+
+    # Create each aggregated category
+    for category_name, component_cols in category_mappings.items():
+        # Find which component columns exist in the dataframe
+        available_cols = [col for col in component_cols if col in df.columns]
+
+        if available_cols:
+            # Sum available columns, filling NaN with 0
+            df[category_name] = df[available_cols].fillna(0).sum(axis=1)
+
+    return df
+
+def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepare reason for visit data - creates aggregated category columns only.
+
+    This function extracts granular reason columns (Asthma, Pneumonia, Fracture, etc.),
+    aggregates them into broader categories (Respiratory_Cases, Cardiac_Cases, etc.),
+    and returns only the aggregated categories for high-level multi-target forecasting.
     """
     df = df.copy()
     dt_col = "datetime" if "datetime" in df.columns else _find_datetime_col(df, want="datetime")
@@ -84,7 +120,7 @@ def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
     # Initialize output with Date column
     out = df[["Date"]].copy()
 
-    # Extract ALL numeric columns (keeps all granular reason columns)
+    # Extract ALL numeric columns (temporarily keep granular columns for aggregation)
     # Exclude date/datetime columns from numeric extraction
     exclude_cols = ["Date", "datetime", "date", "timestamp", "ds"]
     for col in df.columns:
@@ -98,6 +134,17 @@ def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
             except Exception:
                 # Skip non-numeric columns
                 pass
+
+    # Create aggregated category columns from granular columns
+    out = _create_aggregated_categories(out)
+
+    # Drop all granular columns, keep only Date + aggregated categories
+    aggregated_categories = [
+        "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
+        "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases"
+    ]
+    columns_to_keep = ["Date"] + [col for col in aggregated_categories if col in out.columns]
+    out = out[columns_to_keep]
 
     return out
 
@@ -114,7 +161,12 @@ def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: p
         c = _prep_calendar(calendar_df); log.append("✅ Calendar data prepared.")
         r = None
         if reason_df is not None:
-            r = _prep_reason(reason_df); log.append("✅ Reason for Visit data prepared.")
+            r = _prep_reason(reason_df)
+            log.append("✅ Reason for Visit data prepared.")
+            # Check which aggregated categories were created
+            agg_cats = [col for col in r.columns if col.endswith("_Cases")]
+            if agg_cats:
+                log.append(f"ℹ️  Created {len(agg_cats)} aggregated categories from granular columns: {', '.join(agg_cats)}")
         log.append("ℹ️ Verified 'Date' columns are aligned (datetime64[ns] @ 00:00).")
         log.append("🔗 Merging Patient + Weather (inner join on Date)...")
         merged = p.merge(w.drop(columns=['datetime'], errors='ignore'), on="Date", how="inner", suffixes=("", "_wx"))
