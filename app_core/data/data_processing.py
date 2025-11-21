@@ -122,7 +122,12 @@ def _add_calendar_features(df: pd.DataFrame, date_col: Optional[str]) -> pd.Data
     return df
 
 def _detect_reason_columns(df: pd.DataFrame) -> List[str]:
-    """Detect reason for visit columns in the dataset."""
+    """Detect reason for visit columns in the dataset.
+
+    Note: Total_Arrivals may have been removed during fusion if it was
+    identical to Target_1 (patient arrivals). This function only returns
+    columns that actually exist in the dataframe.
+    """
     reason_candidates = [
         "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
         "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"

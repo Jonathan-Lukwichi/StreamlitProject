@@ -67,6 +67,12 @@ except Exception:
         if w is not None and wk: merged = merged.merge(w, left_on=pk, right_on=wk, how="outer")
         if c is not None and ck: merged = merged.merge(c, left_on=pk or wk, right_on=ck, how="outer")
         if r is not None and rk: merged = merged.merge(r, left_on=pk or wk or ck, right_on=rk, how="outer")
+
+        # Intelligent duplicate detection
+        if "Total_Arrivals" in merged.columns and "Target_1" in merged.columns:
+            if merged["Total_Arrivals"].equals(merged["Target_1"]):
+                merged = merged.drop(columns=["Total_Arrivals"])
+
         return merged, {}
 
 try:
@@ -74,6 +80,7 @@ try:
 except Exception:
     def process_dataset(df: pd.DataFrame, n_lags: int, date_col=None, ed_col=None, strict_drop_na_edges=True):
         # basic placeholder: add ED_1..ED_n and Target_1..Target_n from first numeric col
+        # plus multi-targets for reason columns
         work = df.copy()
         y = None
         for c in work.columns:
@@ -83,6 +90,15 @@ except Exception:
             for i in range(1, n_lags+1):
                 work[f"ED_{i}"] = work[y].shift(i)
                 work[f"Target_{i}"] = work[y].shift(-i)
+
+        # Generate multi-targets for reason columns
+        reason_cols = ["Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
+                      "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"]
+        for col in reason_cols:
+            if col in work.columns:
+                for i in range(1, n_lags+1):
+                    work[f"{col}_{i}"] = work[col].shift(-i)
+
         if strict_drop_na_edges:
             work = work.dropna(how="any")
         return work, {}

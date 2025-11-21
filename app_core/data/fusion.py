@@ -129,17 +129,29 @@ def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: p
         elif "Target_1" not in merged.columns:
             log.append("❌ Error: Neither 'patient_count' nor 'Target_1' found in merged data.")
             return None, log
-        desired_order = [
+
+        # Intelligent duplicate detection: Check if Total_Arrivals equals Target_1
+        if "Total_Arrivals" in merged.columns and "Target_1" in merged.columns:
+            if merged["Total_Arrivals"].equals(merged["Target_1"]):
+                merged = merged.drop(columns=["Total_Arrivals"])
+                log.append("ℹ️ Detected Total_Arrivals == Target_1, removed duplicate column.")
+            else:
+                log.append("ℹ️ Total_Arrivals and Target_1 are different, keeping both columns.")
+
+        # Column ordering: Priority columns first, then append all remaining columns
+        priority_order = [
             "Date", "Day_of_week", "Holiday", "Moon_Phase", "Average_Temp", "Max_temp",
             "Average_wind", "Max_wind", "Average_mslp", "Total_precipitation",
             "Holiday_prev", "Target_1",
             "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases", "Gastrointestinal_Cases",
             "Infectious_Cases", "Other_Cases", "Total_Arrivals",
         ]
-        final_cols = [col for col in desired_order if col in merged.columns]
-        missing_cols = [col for col in desired_order if col not in merged.columns]
-        if missing_cols:
-            log.append(f"⚠️ Warning: Expected columns missing from final merge: {', '.join(missing_cols)}")
+        # Keep priority columns that exist
+        ordered_cols = [col for col in priority_order if col in merged.columns]
+        # Append all remaining columns not in priority list
+        remaining_cols = [col for col in merged.columns if col not in ordered_cols]
+        final_cols = ordered_cols + remaining_cols
+
         merged = merged[final_cols].sort_values("Date").reset_index(drop=True)
         log.append("✅ Selected, ordered, and sorted final columns.")
         log.append("🎉 Data fusion complete!")
