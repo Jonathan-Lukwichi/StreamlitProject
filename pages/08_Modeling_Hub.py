@@ -7234,20 +7234,23 @@ def page_classification():
                 # Select feature columns
                 available_features = [col for col in df.columns if col != target_col]
 
+                # Initialize default selection in session state
+                if "selected_features" not in st.session_state:
+                    st.session_state.selected_features = available_features[:min(10, len(available_features))]
+
                 # Add Select All button
                 col_a, col_b = st.columns([3, 1])
                 with col_a:
                     feature_cols = st.multiselect(
                         "Select Feature Columns",
                         options=available_features,
-                        default=available_features[:min(10, len(available_features))],
-                        help="Columns to use as predictors",
-                        key="feature_cols_multiselect"
+                        default=st.session_state.selected_features,
+                        help="Columns to use as predictors"
                     )
                 with col_b:
                     st.markdown("<br>", unsafe_allow_html=True)  # Spacing
                     if st.button("✅ Select All", use_container_width=True):
-                        st.session_state.feature_cols_multiselect = available_features
+                        st.session_state.selected_features = available_features
                         st.rerun()
 
                 # Model selection
