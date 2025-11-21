@@ -65,16 +65,41 @@ def _prep_calendar(df: pd.DataFrame) -> pd.DataFrame:
         out["Day_of_week"] = pd.to_numeric(df["Day_of_week"], errors="coerce").astype('Int64')
     return out
 
-def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: pd.DataFrame) -> tuple[pd.DataFrame | None, list[str]]:
+def _prep_reason(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepare reason for visit data with multiple target columns."""
+    df = df.copy()
+    dt_col = "datetime" if "datetime" in df.columns else _find_datetime_col(df, want="datetime")
+    if dt_col is None:
+        raise ValueError("Reason CSV must include a date/datetime column.")
+    df["datetime"] = _to_datetime_series(df[dt_col])
+    if df["datetime"].isna().all():
+        raise ValueError("Could not parse any valid datetimes in reason date/datetime column.")
+    df["Date"] = df["datetime"].dt.normalize()
+
+    # Extract all numeric columns as potential reason categories
+    out = df[["Date"]].copy()
+    reason_cols = ["Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases", "Gastrointestinal_Cases",
+                   "Infectious_Cases", "Other_Cases", "Total_Arrivals"]
+    for col in reason_cols:
+        if col in df.columns:
+            out[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return out
+
+def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: pd.DataFrame, reason_df: pd.DataFrame = None) -> tuple[pd.DataFrame | None, list[str]]:
     log = []
+    required_count = 4 if reason_df is not None else 3
     if patient_df is None or weather_df is None or calendar_df is None:
-        log.append("❌ Error: All three datasets (Patient, Weather, Calendar) must be loaded before fusion.")
+        log.append(f"❌ Error: All {required_count} datasets (Patient, Weather, Calendar{', Reason' if reason_df is not None else ''}) must be loaded before fusion.")
         return None, log
     try:
         log.append("🚀 Starting data preparation...")
         p = _prep_patient(patient_df); log.append("✅ Patient data prepared.")
         w = _prep_weather(weather_df); log.append("✅ Weather data prepared.")
         c = _prep_calendar(calendar_df); log.append("✅ Calendar data prepared.")
+        r = None
+        if reason_df is not None:
+            r = _prep_reason(reason_df); log.append("✅ Reason for Visit data prepared.")
         log.append("ℹ️ Verified 'Date' columns are aligned (datetime64[ns] @ 00:00).")
         log.append("🔗 Merging Patient + Weather (inner join on Date)...")
         merged = p.merge(w.drop(columns=['datetime'], errors='ignore'), on="Date", how="inner", suffixes=("", "_wx"))
@@ -84,10 +109,17 @@ def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: p
             return None, log
         log.append("🔗 Merging + Calendar (inner join on Date)...")
         merged = merged.merge(c, on="Date", how="inner")
-        log.append(f"  → Final Result: {merged.shape[0]} rows, {merged.shape[1]} cols")
+        log.append(f"  → Result: {merged.shape[0]} rows, {merged.shape[1]} cols")
         if merged.empty:
-            log.append("❌ Error: Final merge resulted in zero rows. Check date ranges.")
+            log.append("❌ Error: Merge with Calendar resulted in zero rows. Check date ranges.")
             return None, log
+        if r is not None:
+            log.append("🔗 Merging + Reason for Visit (inner join on Date)...")
+            merged = merged.merge(r, on="Date", how="inner")
+            log.append(f"  → Final Result: {merged.shape[0]} rows, {merged.shape[1]} cols")
+            if merged.empty:
+                log.append("❌ Error: Merge with Reason data resulted in zero rows. Check date ranges.")
+                return None, log
         if "Day_of_week" not in merged.columns:
             merged["Day_of_week"] = merged["Date"].dt.dayofweek + 1
             log.append("ℹ️ Derived 'Day_of_week' from Date.")
@@ -101,6 +133,8 @@ def fuse_data(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: p
             "Date", "Day_of_week", "Holiday", "Moon_Phase", "Average_Temp", "Max_temp",
             "Average_wind", "Max_wind", "Average_mslp", "Total_precipitation",
             "Holiday_prev", "Target_1",
+            "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases", "Gastrointestinal_Cases",
+            "Infectious_Cases", "Other_Cases", "Total_Arrivals",
         ]
         final_cols = [col for col in desired_order if col in merged.columns]
         missing_cols = [col for col in desired_order if col not in merged.columns]
