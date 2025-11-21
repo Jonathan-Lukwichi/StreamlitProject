@@ -35,6 +35,6 @@ echo ========================================
 echo.
 
 REM Run Streamlit using the virtual environment's Python directly
-forecast_env_py311\Scripts\python.exe -m streamlit run Welcome.py
+forecast_env_py311\Scripts\python.exe -m streamlit run app.py
 
 pause

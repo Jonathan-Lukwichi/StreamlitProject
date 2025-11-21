@@ -32,7 +32,7 @@
       "module": "streamlit",
       "args": [
         "run",
-        "Welcome.py",
+        "app.py",
         "--server.headless",
         "false"
       ],
@@ -68,7 +68,7 @@
       "module": "streamlit",
       "args": [
         "run",
-        "Welcome.py"
+        "app.py"
       ],
       "console": "integratedTerminal",
       "justMyCode": true

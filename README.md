@@ -18,7 +18,7 @@ This scaffold preserves your current design and behavior. It only organizes code
    - `pages/03_Data_Fusion.py` -> Fusion body
    - `pages/04_EDA.py` -> EDA body
    - `pages/05_Benchmarks.py` -> Benchmarks body
-4. Run: `streamlit run Welcome.py`
+4. Run: `streamlit run app.py`
 5. Move incrementally: one page at a time, test, then continue.
 
 ## Notes
