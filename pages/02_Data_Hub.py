@@ -244,13 +244,13 @@ def page_data_hub():
     )
 
     # Ensure session keys exist
-    for k in ["patient_data", "weather_data", "calendar_data"]:
+    for k in ["patient_data", "weather_data", "calendar_data", "reason_data"]:
         st.session_state.setdefault(k, None)
 
     # ========================================================================
-    # THREE-COLUMN GRID LAYOUT FOR DATA UPLOAD CARDS
+    # FOUR-COLUMN GRID LAYOUT FOR DATA UPLOAD CARDS
     # ========================================================================
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     # ========================================================================
     # PATIENT DATA CARD (Column 1)
@@ -340,6 +340,35 @@ def page_data_hub():
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ========================================================================
+    # REASON FOR VISIT DATA CARD (Column 4)
+    # ========================================================================
+    with col4:
+        st.markdown("""
+        <div class='hf-feature-card' style='height: 100%; padding: 1.25rem;'>
+            <div style='text-align: center; margin-bottom: 1rem;'>
+                <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2rem;'>🏥</div>
+                <h2 class='hf-feature-title' style='margin: 0; font-size: 1.25rem;'>Reason for Visit</h2>
+                <p class='hf-feature-description' style='margin: 0.5rem 0 0 0; font-size: 0.8125rem;'>Visit reasons by category</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        _upload_generic("Upload CSV", "reason", "datetime")
+        df_reason = st.session_state.get("reason_data")
+
+        if isinstance(df_reason, pd.DataFrame) and not df_reason.empty:
+            st.markdown("<div style='margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.06);'></div>", unsafe_allow_html=True)
+            st.metric("Rows", f"{df_reason.shape[0]:,}")
+            st.metric("Columns", df_reason.shape[1])
+
+            dcol = _date_col(df_reason)
+            if dcol:
+                dt = pd.to_datetime(df_reason[dcol], errors="coerce")
+                if dt.notna().any():
+                    st.caption(f"📅 {dt.min().date()} → {dt.max().date()}")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # ========================================================================
     # DETAILED DATA PREVIEW SECTION (EXPANDABLE)
     # ========================================================================
     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
@@ -348,6 +377,7 @@ def page_data_hub():
     df_patient = st.session_state.get("patient_data")
     df_weather = st.session_state.get("weather_data")
     df_calendar = st.session_state.get("calendar_data")
+    df_reason = st.session_state.get("reason_data")
 
     # Show detailed previews for loaded data
     if isinstance(df_patient, pd.DataFrame) and not df_patient.empty:
@@ -368,11 +398,18 @@ def page_data_hub():
             st.markdown("**Data Health**")
             _data_health(df_calendar)
 
+    if isinstance(df_reason, pd.DataFrame) and not df_reason.empty:
+        with st.expander("🏥 Reason for Visit Data - Detailed View", expanded=False):
+            st.dataframe(df_reason.head(20), use_container_width=True)
+            st.markdown("**Data Health**")
+            _data_health(df_reason)
+
     # Premium Footer CTA
     all_loaded = all([
         bool(st.session_state.get("patient_data")  is not None and not getattr(st.session_state.get("patient_data"),  "empty", True)),
         bool(st.session_state.get("weather_data")  is not None and not getattr(st.session_state.get("weather_data"),  "empty", True)),
         bool(st.session_state.get("calendar_data") is not None and not getattr(st.session_state.get("calendar_data"), "empty", True)),
+        bool(st.session_state.get("reason_data") is not None and not getattr(st.session_state.get("reason_data"), "empty", True)),
     ])
 
     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
@@ -400,6 +437,12 @@ def page_data_hub():
                 </div>
                 <div style='color: {SUBTLE_TEXT}; font-size: 0.8125rem;'>Calendar Data</div>
             </div>
+            <div>
+                <div style='font-size: 1.25rem; margin-bottom: 0.25rem;'>
+                    {'✅' if st.session_state.get("reason_data") is not None else '⏳'}
+                </div>
+                <div style='color: {SUBTLE_TEXT}; font-size: 0.8125rem;'>Reason for Visit</div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -414,7 +457,7 @@ def page_data_hub():
                 "🧠 Continue to Data Preprocessing Studio",
                 use_container_width=True,
                 disabled=True,
-                help="Upload all three datasets to proceed.",
+                help="Upload all four datasets to proceed.",
             )
 
 init_state()
