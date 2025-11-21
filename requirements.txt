@@ -7,6 +7,8 @@ numpy>=1.24.0
 
 # Visualization
 plotly>=5.17.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
 
 # Statistical & Time Series Models
 statsmodels>=0.14.0
