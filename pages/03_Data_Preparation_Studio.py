@@ -26,6 +26,7 @@ except Exception:
             "patient_data": None,
             "weather_data": None,
             "calendar_data": None,
+            "reason_data": None,
             "merged_data": None,
             "processed_df": None,
             "patient_loaded": False,
@@ -47,21 +48,25 @@ except Exception:
 try:
     from app_core.data.fusion import fuse_data
 except Exception:
-    def fuse_data(patient_df, weather_df, calendar_df):
+    def fuse_data(patient_df, weather_df, calendar_df, reason_df=None):
         # naive outer-merge fallback on best-effort datetime/date keys
         def _key(df):
             for c in ["datetime", "Date", "date", "timestamp", "ds", "time"]:
                 if c in df.columns: return c
             return None
         p, w, c = patient_df.copy(), weather_df.copy(), calendar_df.copy()
-        for df in (p, w, c):
-            for k in ["datetime","Date","date","timestamp","ds","time"]:
-                if k in df.columns:
-                    df[k] = pd.to_datetime(df[k], errors="coerce")
+        r = reason_df.copy() if reason_df is not None else None
+        for df in (p, w, c, r):
+            if df is not None:
+                for k in ["datetime","Date","date","timestamp","ds","time"]:
+                    if k in df.columns:
+                        df[k] = pd.to_datetime(df[k], errors="coerce")
         pk, wk, ck = _key(p), _key(w), _key(c)
+        rk = _key(r) if r is not None else None
         merged = p
         if w is not None and wk: merged = merged.merge(w, left_on=pk, right_on=wk, how="outer")
         if c is not None and ck: merged = merged.merge(c, left_on=pk or wk, right_on=ck, how="outer")
+        if r is not None and rk: merged = merged.merge(r, left_on=pk or wk or ck, right_on=rk, how="outer")
         return merged, {}
 
 try:
@@ -202,8 +207,8 @@ def _harmonize_day_of_week_and_ed(df: pd.DataFrame) -> pd.DataFrame:
 
 # ---------- CACHED PROCESSORS ---------------------------------------------------
 @st.cache_data(show_spinner=False)
-def _run_fusion_cached(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: pd.DataFrame):
-    merged, _ = fuse_data(patient_df, weather_df, calendar_df)
+def _run_fusion_cached(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: pd.DataFrame, reason_df: pd.DataFrame = None):
+    merged, _ = fuse_data(patient_df, weather_df, calendar_df, reason_df)
     return merged
 
 @st.cache_data(show_spinner=False)
@@ -282,10 +287,11 @@ def _dataset_badge(ok: bool, label: str):
 def _detect_key(df: pd.DataFrame) -> str | None:
     return _find_time_like_col(df) if df is not None and not df.empty else None
 
-def _merge_plan_preview(patient_df, weather_df, calendar_df):
+def _merge_plan_preview(patient_df, weather_df, calendar_df, reason_df=None):
     pk = _detect_key(patient_df)
     wk = _detect_key(weather_df)
     ck = _detect_key(calendar_df)
+    rk = _detect_key(reason_df)
 
     st.markdown("<div class='hf-feature-card' style='padding: 1.5rem;'>", unsafe_allow_html=True)
     st.markdown(
@@ -297,7 +303,7 @@ def _merge_plan_preview(patient_df, weather_df, calendar_df):
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown(f"**Patient Dataset**")
         st.code(pk or "—", language=None)
@@ -307,6 +313,9 @@ def _merge_plan_preview(patient_df, weather_df, calendar_df):
     with col3:
         st.markdown(f"**Calendar Dataset**")
         st.code(ck or "—", language=None)
+    with col4:
+        st.markdown(f"**Reason for Visit**")
+        st.code(rk or "—", language=None)
 
     st.caption("✨ Keys are auto-normalized to `datetime` and `Date` columns during the fusion process")
 
@@ -319,8 +328,9 @@ def _merge_plan_preview(patient_df, weather_df, calendar_df):
         dot.node("P", f"Patient\nkey: {pk or '—'}", shape="box", style="filled", fillcolor="#3b82f6", fontcolor="white")
         dot.node("W", f"Weather\nkey: {wk or '—'}", shape="box", style="filled", fillcolor="#22d3ee", fontcolor="white")
         dot.node("C", f"Calendar\nkey: {ck or '—'}", shape="box", style="filled", fillcolor="#22c55e", fontcolor="white")
+        dot.node("R", f"Reason\nkey: {rk or '—'}", shape="box", style="filled", fillcolor="#a855f7", fontcolor="white")
         dot.node("M", "Merged\nDataset", shape="ellipse", style="filled", fillcolor="#f59e0b", fontcolor="white")
-        dot.edges([("P","M"), ("W","M"), ("C","M")])
+        dot.edges([("P","M"), ("W","M"), ("C","M"), ("R","M")])
         st.graphviz_chart(dot, use_container_width=True)
     except Exception:
         st.caption("📊 Graphviz not available; skipping merge flow diagram")
@@ -510,14 +520,16 @@ def page_data_preparation_studio():
     patient_df  = st.session_state.get("patient_data")
     weather_df  = st.session_state.get("weather_data")
     calendar_df = st.session_state.get("calendar_data")
+    reason_df   = st.session_state.get("reason_data")
 
     patient_ready  = patient_df is not None and not getattr(patient_df, "empty", True)
     weather_ready  = weather_df is not None and not getattr(weather_df, "empty", True)
     calendar_ready = calendar_df is not None and not getattr(calendar_df, "empty", True)
-    all_ready = patient_ready and weather_ready and calendar_ready
+    reason_ready   = reason_df is not None and not getattr(reason_df, "empty", True)
+    all_ready = patient_ready and weather_ready and calendar_ready and reason_ready
 
     # Premium Data Source Status Cards
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         status_icon = "✅" if patient_ready else "⏳"
@@ -579,6 +591,26 @@ def page_data_preparation_studio():
             unsafe_allow_html=True,
         )
 
+    with col4:
+        status_icon = "✅" if reason_ready else "⏳"
+        status_text = "Ready" if reason_ready else "Pending"
+        rgb = "16,185,129" if reason_ready else "245,158,11"
+        color = SUCCESS_COLOR if reason_ready else WARNING_COLOR
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; padding: 1rem;'>
+              <div class='hf-feature-description' style='color: {SUBTLE_TEXT}; font-size: 0.8125rem; margin-bottom: 0.5rem;'>Reason for Visit</div>
+              <div style='margin: 1rem 0;'>
+                <span class='hf-pill' style='background:rgba({rgb},.15);color:{color};border:1px solid rgba({rgb},.3); font-size: 0.875rem; padding: 0.5rem 1rem;'>
+                  {status_icon} {status_text}
+                </span>
+              </div>
+              <div class='hf-feature-description' style='font-size: 0.75rem;'>Visit reasons by category</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
 
     # Tabular Workflow Navigation
@@ -610,7 +642,7 @@ def page_data_preparation_studio():
                 <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05)); border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.2);'>
                   <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>⚠️</div>
                   <div style='font-size: 1.125rem; font-weight: 700; color: {WARNING_COLOR}; margin-bottom: 0.5rem;'>Missing Datasets</div>
-                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Please upload all three datasets in the Data Hub to proceed with data fusion</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Please upload all four datasets in the Data Hub to proceed with data fusion</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -631,6 +663,7 @@ def page_data_preparation_studio():
         if patient_ready:  _summarize_df(patient_df,  "Patient — sample & schema")
         if weather_ready:  _summarize_df(weather_df,  "Weather — sample & schema")
         if calendar_ready: _summarize_df(calendar_df, "Calendar — sample & schema")
+        if reason_ready:   _summarize_df(reason_df,   "Reason for Visit — sample & schema")
 
     # TAB 2 — Preview Merge Plan
     with tab2:
@@ -650,7 +683,7 @@ def page_data_preparation_studio():
             st.info("Upload all sources first to preview the merge plan.")
             st.markdown("</div>", unsafe_allow_html=True)
         else:
-            _merge_plan_preview(patient_df, weather_df, calendar_df)
+            _merge_plan_preview(patient_df, weather_df, calendar_df, reason_df)
             st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
             with st.expander("📖 What happens during fusion?", expanded=False):
                 st.markdown(
@@ -659,7 +692,7 @@ def page_data_preparation_studio():
                       <h4 style='margin-bottom: 1rem;'>Fusion Process Overview</h4>
                       <ul style='line-height: 1.8;'>
                         <li>Normalize time keys to <strong>datetime</strong> and <strong>Date</strong> columns</li>
-                        <li>Intelligently join Patient, Weather, and Calendar datasets on time keys</li>
+                        <li>Intelligently join Patient, Weather, Calendar, and Reason for Visit datasets on time keys</li>
                         <li>Preserve all original columns and resolve duplicate column names</li>
                         <li>Validate row counts and check for missing values</li>
                         <li>Ensure temporal alignment across all data sources</li>
@@ -687,7 +720,7 @@ def page_data_preparation_studio():
             """
             <div style='text-align: center; margin-bottom: 1.5rem;'>
               <p style='font-size: 1rem; color: {BODY_TEXT};'>
-                Ready to merge? This will combine Patient, Weather, and Calendar datasets on their time keys.
+                Ready to merge? This will combine Patient, Weather, Calendar, and Reason for Visit datasets on their time keys.
               </p>
             </div>
             """.format(BODY_TEXT=BODY_TEXT),
@@ -697,7 +730,8 @@ def page_data_preparation_studio():
         keys_ok = all([
             _detect_key(patient_df)  is not None if patient_ready  else False,
             _detect_key(weather_df)  is not None if weather_ready  else False,
-            _detect_key(calendar_df) is not None if calendar_ready else False
+            _detect_key(calendar_df) is not None if calendar_ready else False,
+            _detect_key(reason_df)   is not None if reason_ready   else False
         ])
 
         if not all_ready:
@@ -706,7 +740,7 @@ def page_data_preparation_studio():
                 <div style='text-align: center; padding: 1.5rem; background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05)); border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2); margin-bottom: 1.5rem;'>
                   <div style='font-size: 2.5rem; margin-bottom: 0.75rem;'>❌</div>
                   <div style='font-size: 1.125rem; font-weight: 700; color: {DANGER_COLOR}; margin-bottom: 0.5rem;'>Missing Sources</div>
-                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Upload all three datasets before running fusion</div>
+                  <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Upload all four datasets before running fusion</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -729,7 +763,7 @@ def page_data_preparation_studio():
             prog = st.progress(0, text="Starting fusion…")
             try:
                 prog.progress(25, text="Aligning time keys…")
-                merged = _run_fusion_cached(patient_df, weather_df, calendar_df)
+                merged = _run_fusion_cached(patient_df, weather_df, calendar_df, reason_df)
                 prog.progress(70, text="Validating fused frame…")
                 st.session_state["merged_data"] = merged if merged is not None and not merged.empty else None
 
