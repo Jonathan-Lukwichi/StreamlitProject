@@ -178,8 +178,25 @@ def _detect_ed_columns(columns: list[str]) -> list[str]:
     return sorted(ed_lags, key=lambda x: int(x.split("_")[1]))
 
 def _detect_target_columns(columns: list[str]) -> list[str]:
+    """Detect all target columns including multi-target forecasting patterns."""
+    # Standard targets (Target_1, Target_2, etc.)
     targets = [c for c in columns if re.fullmatch(r"Target_\d+", c)]
-    return sorted(targets, key=lambda x: int(x.split("_")[1]))
+
+    # Multi-target patterns (Respiratory_Cases_1, Cardiac_Cases_2, etc.)
+    reason_patterns = [
+        "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
+        "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"
+    ]
+    for pattern in reason_patterns:
+        multi_targets = [c for c in columns if re.fullmatch(rf"{pattern}_\d+", c)]
+        targets.extend(multi_targets)
+
+    # Sort by extracting the numeric suffix
+    def sort_key(col):
+        match = re.search(r"_(\d+)$", col)
+        return (col.rsplit("_", 1)[0], int(match.group(1)) if match else 0)
+
+    return sorted(targets, key=sort_key)
 
 def order_columns_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     cols = list(df.columns)

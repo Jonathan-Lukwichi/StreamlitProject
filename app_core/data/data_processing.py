@@ -121,11 +121,30 @@ def _add_calendar_features(df: pd.DataFrame, date_col: Optional[str]) -> pd.Data
     df["year"] = df[date_col].dt.year
     return df
 
+def _detect_reason_columns(df: pd.DataFrame) -> List[str]:
+    """Detect reason for visit columns in the dataset."""
+    reason_candidates = [
+        "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
+        "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"
+    ]
+    found = [col for col in reason_candidates if col in df.columns]
+    return found
+
 def _generate_lags_and_targets(df: pd.DataFrame, ed_col: str, n_lags: int) -> pd.DataFrame:
+    """Generate lag features (ED_1..ED_n) and future targets (Target_1..Target_n) from ED column."""
     df = df.copy()
     for i in range(1, n_lags + 1):
         df[f"ED_{i}"] = df[ed_col].shift(i)
         df[f"Target_{i}"] = df[ed_col].shift(-i)
+    return df
+
+def _generate_multi_targets(df: pd.DataFrame, target_cols: List[str], n_lags: int) -> pd.DataFrame:
+    """Generate future targets for multiple reason columns (e.g., Respiratory_Cases_1..Respiratory_Cases_n)."""
+    df = df.copy()
+    for col in target_cols:
+        if col in df.columns:
+            for i in range(1, n_lags + 1):
+                df[f"{col}_{i}"] = df[col].shift(-i)
     return df
 
 def _impute_numerics(df: pd.DataFrame, exclude: List[str]) -> pd.DataFrame:
@@ -149,7 +168,7 @@ def process_dataset(
     strict_drop_na_edges: bool = True,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Clean and engineer a dataset for ED forecasting.
+    Clean and engineer a dataset for ED forecasting with multi-target support.
     Returns (processed_df, report).
     """
     report: Dict[str, Any] = {
@@ -159,6 +178,7 @@ def process_dataset(
         "created_ed": False,
         "created_lags": [],
         "created_targets": [],
+        "created_multi_targets": {},
         "dropped_rows": 0,
         "notes": [],
         "columns_before": list(df.columns),
@@ -232,6 +252,15 @@ def process_dataset(
     else:
         report["notes"].append("Skipped lag/target generation because ED was not identified.")
 
+    # 6b) Generate multi-target forecasting features for reason columns
+    reason_cols = _detect_reason_columns(df)
+    if len(reason_cols) > 0:
+        df = _generate_multi_targets(df, target_cols=reason_cols, n_lags=n_lags)
+        for col in reason_cols:
+            report["created_multi_targets"][col] = [f"{col}_{i}" for i in range(1, n_lags+1)]
+        report["notes"].append(f"Generated {n_lags} future targets for {len(reason_cols)} reason columns: {', '.join(reason_cols)}")
+        report["steps"].append("generate_multi_targets")
+
     # 7) Add calendar features
     df = _add_calendar_features(df, date_col=date_col)
     report["steps"].append("add_calendar_features")
@@ -244,6 +273,9 @@ def process_dataset(
     before_drop = len(df)
     if ed_col is not None and strict_drop_na_edges:
         needed_cols = [ed_col] + [f"ED_{i}" for i in range(1, n_lags+1)] + [f"Target_{i}" for i in range(1, n_lags+1)]
+        # Also include multi-target columns
+        for col in reason_cols:
+            needed_cols.extend([f"{col}_{i}" for i in range(1, n_lags+1)])
         have_cols = [c for c in needed_cols if c in df.columns]
         df = df.dropna(subset=have_cols)
         report["dropped_rows"] = before_drop - len(df)
