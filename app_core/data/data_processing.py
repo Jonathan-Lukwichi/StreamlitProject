@@ -136,6 +136,7 @@ def _detect_reason_columns(df: pd.DataFrame) -> List[str]:
     exclude_patterns = [
         "date", "datetime", "timestamp", "ds", "time",  # Date columns
         "target_", "ed_",  # Lag/target features
+        "_lag_",  # Reason lag features (Asthma_lag_1, etc.)
         "day_of_week", "is_weekend", "day_of_month", "week_of_year", "month", "year",  # Calendar features
         "holiday", "moon_phase",  # Calendar features
         "temp", "wind", "mslp", "pressure", "precip", "rain", "snow", "humidity", "dew"  # Weather features
@@ -161,6 +162,19 @@ def _generate_lags_and_targets(df: pd.DataFrame, ed_col: str, n_lags: int) -> pd
     for i in range(1, n_lags + 1):
         df[f"ED_{i}"] = df[ed_col].shift(i)
         df[f"Target_{i}"] = df[ed_col].shift(-i)
+    return df
+
+def _generate_multi_lags(df: pd.DataFrame, lag_cols: List[str], n_lags: int) -> pd.DataFrame:
+    """Generate lag features for multiple reason columns (e.g., Asthma_lag_1..Asthma_lag_n).
+
+    This creates historical features for each reason column, allowing models to learn
+    temporal patterns and autocorrelations in specific medical conditions.
+    """
+    df = df.copy()
+    for col in lag_cols:
+        if col in df.columns:
+            for i in range(1, n_lags + 1):
+                df[f"{col}_lag_{i}"] = df[col].shift(i)
     return df
 
 def _generate_multi_targets(df: pd.DataFrame, target_cols: List[str], n_lags: int) -> pd.DataFrame:
@@ -203,6 +217,7 @@ def process_dataset(
         "created_ed": False,
         "created_lags": [],
         "created_targets": [],
+        "created_multi_lags": {},
         "created_multi_targets": {},
         "dropped_rows": 0,
         "notes": [],
@@ -277,9 +292,20 @@ def process_dataset(
     else:
         report["notes"].append("Skipped lag/target generation because ED was not identified.")
 
-    # 6b) Generate multi-target forecasting features for reason columns
+    # 6b) Generate multi-lag and multi-target forecasting features for reason columns
     reason_cols = _detect_reason_columns(df)
+    # Exclude the ED column itself to avoid duplicate lag features
+    if ed_col and ed_col in reason_cols:
+        reason_cols.remove(ed_col)
     if len(reason_cols) > 0:
+        # Generate lag features (past values)
+        df = _generate_multi_lags(df, lag_cols=reason_cols, n_lags=n_lags)
+        for col in reason_cols:
+            report["created_multi_lags"][col] = [f"{col}_lag_{i}" for i in range(1, n_lags+1)]
+        report["notes"].append(f"Generated {n_lags} lag features for {len(reason_cols)} reason columns: {', '.join(reason_cols)}")
+        report["steps"].append("generate_multi_lags")
+
+        # Generate target features (future values)
         df = _generate_multi_targets(df, target_cols=reason_cols, n_lags=n_lags)
         for col in reason_cols:
             report["created_multi_targets"][col] = [f"{col}_{i}" for i in range(1, n_lags+1)]
@@ -298,8 +324,9 @@ def process_dataset(
     before_drop = len(df)
     if ed_col is not None and strict_drop_na_edges:
         needed_cols = [ed_col] + [f"ED_{i}" for i in range(1, n_lags+1)] + [f"Target_{i}" for i in range(1, n_lags+1)]
-        # Also include multi-target columns
+        # Also include multi-lag and multi-target columns for reason data
         for col in reason_cols:
+            needed_cols.extend([f"{col}_lag_{i}" for i in range(1, n_lags+1)])
             needed_cols.extend([f"{col}_{i}" for i in range(1, n_lags+1)])
         have_cols = [c for c in needed_cols if c in df.columns]
         df = df.dropna(subset=have_cols)
