@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    
+    {
+      "name": "Attach",
+      "port": 9229,
+      "request": "attach",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "type": "node"
+    },
+
+
+    {
+      "address": "TCP/IP address of process to be debugged",
+      "localRoot": "${workspaceFolder}",
+      "name": "Attach to Remote",
+      "port": 9229,
+      "remoteRoot": "Absolute path to the remote directory containing the program",
+      "request": "attach",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "type": "node"
+    },
+    {
+      "name": "🚀 Streamlit with LSTM (Python 3.11 + TensorFlow)",
+      "type": "python",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "Welcome.py",
+        "--server.headless",
+        "false"
+      ],
+      "python": "${workspaceFolder}/forecast_env_py311/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "🧪 Test LSTM Environment",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/test_lstm_import.py",
+      "python": "${workspaceFolder}/forecast_env_py311/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "🐍 Run Current File (Python 3.11)",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "python": "${workspaceFolder}/forecast_env_py311/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Streamlit: run app (OLD - Python 3.14)",
+      "type": "python",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "Welcome.py"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
