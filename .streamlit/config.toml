@@ -1,8 +1,8 @@
-# Optional theme layer (your CSS already controls most visuals).
+# Dark theme configuration for Enterprise Healthcare Intelligence Platform
 [theme]
-base = "light"
+base = "dark"
 primaryColor = "#667eea"
-backgroundColor = "#f8f9fa"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#2c3e50"
+backgroundColor = "#0a0e27"
+secondaryBackgroundColor = "#1a1f3a"
+textColor = "#ffffff"
 font = "sans serif"
