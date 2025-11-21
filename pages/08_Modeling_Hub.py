@@ -7203,14 +7203,52 @@ def page_classification():
                     help="Column containing the reason categories"
                 )
 
+                # Show class distribution for selected target
+                if target_col:
+                    st.markdown("##### Class Distribution")
+                    class_dist = df[target_col].value_counts()
+
+                    # Highlight rare classes (< 2 samples)
+                    rare_count = (class_dist < 2).sum()
+                    if rare_count > 0:
+                        st.error(f"⚠️ **{rare_count} class(es) with < 2 samples** - May cause training issues!")
+
+                    # Display distribution
+                    dist_df = pd.DataFrame({
+                        'Class': class_dist.index,
+                        'Count': class_dist.values,
+                        'Percentage': (class_dist.values / len(df) * 100).round(2)
+                    }).reset_index(drop=True)
+
+                    # Color code rare classes
+                    def highlight_rare(row):
+                        if row['Count'] < 2:
+                            return ['background-color: #FEE2E2'] * len(row)  # Light red
+                        elif row['Count'] < 5:
+                            return ['background-color: #FEF3C7'] * len(row)  # Light yellow
+                        return [''] * len(row)
+
+                    styled_df = dist_df.style.apply(highlight_rare, axis=1)
+                    st.dataframe(styled_df, use_container_width=True, height=200)
+
                 # Select feature columns
                 available_features = [col for col in df.columns if col != target_col]
-                feature_cols = st.multiselect(
-                    "Select Feature Columns",
-                    options=available_features,
-                    default=available_features[:min(10, len(available_features))],
-                    help="Columns to use as predictors"
-                )
+
+                # Add Select All button
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    feature_cols = st.multiselect(
+                        "Select Feature Columns",
+                        options=available_features,
+                        default=available_features[:min(10, len(available_features))],
+                        help="Columns to use as predictors",
+                        key="feature_cols_multiselect"
+                    )
+                with col_b:
+                    st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+                    if st.button("✅ Select All", use_container_width=True):
+                        st.session_state.feature_cols_multiselect = available_features
+                        st.rerun()
 
                 # Model selection
                 model_type = st.selectbox(
@@ -7283,9 +7321,26 @@ def page_classification():
                             y_encoded = label_encoder.fit_transform(y)
                             st.session_state.label_encoder = label_encoder
 
-                            # Split data
+                            # Check class distribution for stratification
+                            class_counts = pd.Series(y_encoded).value_counts()
+                            min_class_count = class_counts.min()
+                            can_stratify = min_class_count >= 2
+
+                            # Display warning if classes are too small
+                            if not can_stratify:
+                                rare_classes = class_counts[class_counts < 2].index
+                                rare_class_names = [label_encoder.classes_[i] for i in rare_classes]
+                                st.warning(
+                                    f"⚠️ **Stratification disabled**: Some classes have only 1 sample ({', '.join(rare_class_names)}). "
+                                    f"Consider collecting more data or removing rare classes for better model performance."
+                                )
+
+                            # Split data with smart stratification
                             X_train, X_test, y_train, y_test = train_test_split(
-                                X, y_encoded, test_size=test_size, random_state=int(random_state), stratify=y_encoded
+                                X, y_encoded,
+                                test_size=test_size,
+                                random_state=int(random_state),
+                                stratify=y_encoded if can_stratify else None  # Only stratify if possible
                             )
 
                             # Scale features
