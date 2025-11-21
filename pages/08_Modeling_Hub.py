@@ -11,6 +11,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
+from datetime import datetime
+import joblib
+from pathlib import Path
 
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
@@ -1332,9 +1336,79 @@ def render_ml_results(results: dict):
         with col4:
             st.metric("Train Accuracy", f"{train_metrics['Accuracy']:.2f}%")
 
+def render_ml_metrics_only(ml_mh_results: dict, model_name: str):
+    """
+    Render only performance metrics (KPIs and table) without detailed graphs.
+    Used for "All Models" comparison mode.
+
+    Args:
+        ml_mh_results: Multi-horizon results from run_ml_multihorizon()
+        model_name: Name of the model (e.g., "XGBoost", "LSTM", "ANN")
+    """
+    if not ml_mh_results:
+        st.warning(f"No results available for {model_name}.")
+        return
+
+    results_df = ml_mh_results.get("results_df")
+    successful = ml_mh_results.get("successful", [])
+
+    if results_df is None or results_df.empty or not successful:
+        st.error(f"❌ **{model_name} Training Failed**")
+        return
+
+    # Average Performance Metrics (KPI Cards)
+    col1, col2, col3, col4 = st.columns(4)
+
+    avg_test_mae = results_df["Test_MAE"].mean()
+    avg_test_rmse = results_df["Test_RMSE"].mean()
+    avg_test_mape = results_df["Test_MAPE"].mean()
+    avg_test_acc = results_df["Test_Acc"].mean()
+
+    with col1:
+        st.plotly_chart(
+            _create_kpi_indicator("MAE", avg_test_mae, "", PRIMARY_COLOR),
+            use_container_width=True,
+            key=f"all_models_mae_{model_name}"
+        )
+    with col2:
+        st.plotly_chart(
+            _create_kpi_indicator("RMSE", avg_test_rmse, "", SECONDARY_COLOR),
+            use_container_width=True,
+            key=f"all_models_rmse_{model_name}"
+        )
+    with col3:
+        st.plotly_chart(
+            _create_kpi_indicator("MAPE", avg_test_mape, "%", WARNING_COLOR),
+            use_container_width=True,
+            key=f"all_models_mape_{model_name}"
+        )
+    with col4:
+        st.plotly_chart(
+            _create_kpi_indicator("Accuracy", avg_test_acc, "%", SUCCESS_COLOR),
+            use_container_width=True,
+            key=f"all_models_acc_{model_name}"
+        )
+
+    # Compact metrics table
+    with st.expander("📊 Per-Horizon Performance", expanded=False):
+        compact_metrics = results_df[['Horizon', 'Test_MAE', 'Test_RMSE', 'Test_MAPE', 'Test_Acc']].copy()
+        compact_metrics.columns = ['Horizon', 'MAE', 'RMSE', 'MAPE (%)', 'Accuracy (%)']
+
+        st.dataframe(
+            compact_metrics.style.format({
+                'MAE': '{:.4f}',
+                'RMSE': '{:.4f}',
+                'MAPE (%)': '{:.2f}',
+                'Accuracy (%)': '{:.2f}'
+            }),
+            use_container_width=True,
+            height=300
+        )
+
 def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
     """
     Render multi-horizon ML training results with optimized fluorescent design.
+    Shows full detailed graphs and visualizations.
 
     Args:
         ml_mh_results: Multi-horizon results from run_ml_multihorizon()
@@ -1730,8 +1804,26 @@ def page_ml():
         """,
         unsafe_allow_html=True
     )
-    selected_model = MLUIComponents.render_model_selector(cfg.get("ml_choice", "XGBoost"))
-    cfg["ml_choice"] = selected_model
+
+    # Training mode selection
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        training_mode = st.radio(
+            "Training Mode",
+            options=["Single Model", "All Models (XGBoost + LSTM + ANN)"],
+            index=0 if cfg.get("ml_training_mode", "Single Model") == "Single Model" else 1,
+            horizontal=True,
+            help="Choose to train a single model or all three models at once"
+        )
+        cfg["ml_training_mode"] = training_mode
+
+    # Only show model selector if training single model
+    if training_mode == "Single Model":
+        selected_model = MLUIComponents.render_model_selector(cfg.get("ml_choice", "XGBoost"))
+        cfg["ml_choice"] = selected_model
+    else:
+        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially with default configurations")
+        selected_model = None  # Not needed for all models mode
 
     # 2. Dataset Selection (from Feature Selection results)
     datasets, metadata = get_feature_selection_datasets()
@@ -1815,32 +1907,33 @@ def page_ml():
         st.warning("⚠️ No feature selection results found. Please run **Automated Feature Selection** (Page 07) first.")
         data_source_placeholder()
 
-    # 3. Manual Configuration - Redesigned with vertical layout
-    st.markdown(
-        f"""
-        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
-                    border-left: 4px solid {PRIMARY_COLOR};
-                    padding: 1.5rem;
-                    border-radius: 12px;
-                    margin: 2rem 0 1.5rem 0;
-                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
-            <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
-                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
-                ⚙️ Model Configuration
-            </h3>
-            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
-                Configure hyperparameters manually. For automated optimization, use the <strong>Hyperparameter Tuning</strong> tab.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # 3. Manual Configuration - Only show for Single Model mode
+    if training_mode == "Single Model":
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                        border-left: 4px solid {PRIMARY_COLOR};
+                        padding: 1.5rem;
+                        border-radius: 12px;
+                        margin: 2rem 0 1.5rem 0;
+                        box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+                <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                           text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                    ⚙️ Model Configuration
+                </h3>
+                <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
+                    Configure hyperparameters manually. For automated optimization, use the <strong>Hyperparameter Tuning</strong> tab.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # Manual params (model-specific, but rendered generically)
-    manual_params = MLUIComponents.render_manual_params(selected_model, cfg)
-    cfg.update(manual_params)
+        # Manual params (model-specific, but rendered generically)
+        manual_params = MLUIComponents.render_manual_params(selected_model, cfg)
+        cfg.update(manual_params)
 
-    st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
 
     # Train/test split ratio - Full width with better styling
     st.markdown(
@@ -1886,38 +1979,134 @@ def page_ml():
     ])
 
     if can_run:
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            run_button = st.button(
-                f"🚀 Train Multi-Horizon {cfg['ml_choice']}",
-                type="primary",
-                use_container_width=True,
-                help=f"Train {cfg.get('ml_horizons', 7)} models for horizons 1-{cfg.get('ml_horizons', 7)}"
-            )
+        # Different button based on training mode
+        if training_mode == "Single Model":
+            # Single Model Training
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                run_button = st.button(
+                    f"🚀 Train Multi-Horizon {cfg['ml_choice']}",
+                    type="primary",
+                    use_container_width=True,
+                    help=f"Train {cfg.get('ml_horizons', 7)} models for horizons 1-{cfg.get('ml_horizons', 7)}"
+                )
 
-        if run_button:
-            with st.spinner(f"Training {cfg['ml_choice']} for {cfg.get('ml_horizons', 7)} horizons..."):
-                try:
-                    results = run_ml_multihorizon(
-                        model_type=cfg['ml_choice'],
-                        config=cfg,
-                        df=selected_df,
-                        feature_cols=cfg['ml_feature_cols'],
-                        split_ratio=cfg.get('split_ratio', 0.8),
-                        horizons=cfg.get('ml_horizons', 7),
-                    )
+            if run_button:
+                with st.spinner(f"Training {cfg['ml_choice']} for {cfg.get('ml_horizons', 7)} horizons..."):
+                    try:
+                        results = run_ml_multihorizon(
+                            model_type=cfg['ml_choice'],
+                            config=cfg,
+                            df=selected_df,
+                            feature_cols=cfg['ml_feature_cols'],
+                            split_ratio=cfg.get('split_ratio', 0.8),
+                            horizons=cfg.get('ml_horizons', 7),
+                        )
 
-                    # Store results in session state
-                    st.session_state["ml_mh_results"] = results
-                except Exception as e:
-                    st.error(f"❌ **Training failed with error:**\n\n```\n{str(e)}\n```")
-                    import traceback
-                    st.code(traceback.format_exc())
+                        # Store results in session state
+                        st.session_state["ml_mh_results"] = results
+                    except Exception as e:
+                        st.error(f"❌ **Training failed with error:**\n\n```\n{str(e)}\n```")
+                        import traceback
+                        st.code(traceback.format_exc())
 
-        # Display results if available
-        if "ml_mh_results" in st.session_state:
-            st.divider()
-            render_ml_multihorizon_results(st.session_state["ml_mh_results"], cfg['ml_choice'])
+            # Display results if available
+            if "ml_mh_results" in st.session_state:
+                st.divider()
+                render_ml_multihorizon_results(st.session_state["ml_mh_results"], cfg['ml_choice'])
+
+        else:
+            # All Models Training
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                run_all_button = st.button(
+                    "🚀 Train All Models (XGBoost + LSTM + ANN)",
+                    type="primary",
+                    use_container_width=True,
+                    help=f"Train all three models for {cfg.get('ml_horizons', 7)} horizons each"
+                )
+
+            if run_all_button:
+                all_models = ["XGBoost", "LSTM", "ANN"]
+                all_results = {}
+
+                # Progress tracking
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                for idx, model_name in enumerate(all_models):
+                    status_text.markdown(f"**Training {idx+1}/3: {model_name}...**")
+                    progress_bar.progress((idx) / len(all_models))
+
+                    with st.spinner(f"Training {model_name} for {cfg.get('ml_horizons', 7)} horizons..."):
+                        try:
+                            results = run_ml_multihorizon(
+                                model_type=model_name,
+                                config=cfg,
+                                df=selected_df,
+                                feature_cols=cfg['ml_feature_cols'],
+                                split_ratio=cfg.get('split_ratio', 0.8),
+                                horizons=cfg.get('ml_horizons', 7),
+                            )
+
+                            # Store results for each model
+                            all_results[model_name] = results
+                            st.session_state[f"ml_mh_results_{model_name}"] = results
+
+                        except Exception as e:
+                            st.error(f"❌ **{model_name} training failed:**\n\n```\n{str(e)}\n```")
+                            import traceback
+                            st.code(traceback.format_exc())
+                            all_results[model_name] = None
+
+                # Complete progress
+                progress_bar.progress(1.0)
+                status_text.markdown("✅ **All models training completed!**")
+
+                # Store flag that all models were trained
+                st.session_state["ml_all_models_trained"] = True
+
+            # Display results for all models if available
+            if st.session_state.get("ml_all_models_trained"):
+                st.divider()
+                st.markdown(
+                    f"""
+                    <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
+                                border: 2px solid {SUCCESS_COLOR};
+                                padding: 1.25rem;
+                                border-radius: 12px;
+                                margin-bottom: 2rem;
+                                text-align: center;
+                                box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);'>
+                        <h2 style='margin: 0; color: {SUCCESS_COLOR}; font-size: 1.5rem; font-weight: 800;'>
+                            📊 All Models Comparison
+                        </h2>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                # Display each model's results (metrics only, no detailed graphs)
+                for model_name in ["XGBoost", "LSTM", "ANN"]:
+                    if f"ml_mh_results_{model_name}" in st.session_state:
+                        results = st.session_state[f"ml_mh_results_{model_name}"]
+                        if results:
+                            st.markdown(
+                                f"""
+                                <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(34, 211, 238, 0.05));
+                                            border-left: 4px solid {PRIMARY_COLOR};
+                                            padding: 1rem;
+                                            border-radius: 10px;
+                                            margin-bottom: 1rem;'>
+                                    <h3 style='color: {PRIMARY_COLOR}; margin: 0; font-size: 1.2rem;'>
+                                        🤖 {model_name} Performance
+                                    </h3>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            render_ml_metrics_only(results, model_name)
+                            st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
     else:
         st.warning(
             "⚠️ **Cannot run model**\n\n"
@@ -1928,6 +2117,670 @@ def page_ml():
 
     # 7. Debug Panel (Preserved)
     debug_panel()
+
+# -----------------------------------------------------------------------------
+# HYPERPARAMETER OPTIMIZATION HELPERS
+# -----------------------------------------------------------------------------
+def run_grid_search_optimization(model_type: str, X_train, y_train, n_splits: int,
+                                 primary_metric: str, param_grid: dict, progress_callback=None):
+    """
+    Run Grid Search optimization with TimeSeriesSplit CV.
+
+    Args:
+        model_type: "XGBoost", "LSTM", or "ANN"
+        X_train: Training features
+        y_train: Training target
+        n_splits: Number of CV folds
+        primary_metric: Metric to optimize ("RMSE", "MAE", "MAPE", "Accuracy")
+        param_grid: Parameter grid to search
+        progress_callback: Optional callback for progress updates
+
+    Returns:
+        dict with best_params, cv_results, and all metrics
+    """
+    from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, make_scorer
+    import numpy as np
+
+    # Define custom scorers
+    def mape_scorer(y_true, y_pred):
+        """Mean Absolute Percentage Error"""
+        mask = y_true != 0
+        return np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+
+    def accuracy_scorer(y_true, y_pred):
+        """Accuracy = 100 - MAPE"""
+        mape = mape_scorer(y_true, y_pred)
+        return 100 - mape
+
+    def rmse_scorer(y_true, y_pred):
+        """Root Mean Square Error"""
+        return np.sqrt(mean_squared_error(y_true, y_pred))
+
+    # Create scoring dictionary
+    scoring = {
+        'RMSE': make_scorer(rmse_scorer, greater_is_better=False),
+        'MAE': make_scorer(mean_absolute_error, greater_is_better=False),
+        'MAPE': make_scorer(mape_scorer, greater_is_better=False),
+        'Accuracy': make_scorer(accuracy_scorer, greater_is_better=True),
+    }
+
+    # Map primary metric to refit parameter
+    refit_map = {
+        'RMSE': 'RMSE',
+        'MAE': 'MAE',
+        'MAPE': 'MAPE',
+        'Accuracy': 'Accuracy'
+    }
+    refit_metric = refit_map.get(primary_metric, 'RMSE')
+
+    # Create TimeSeriesSplit
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+
+    # Build model based on type
+    if model_type == "XGBoost":
+        from xgboost import XGBRegressor
+        base_model = XGBRegressor(random_state=42, n_jobs=-1)
+
+    elif model_type == "LSTM":
+        from app_core.models.ml.lstm_pipeline import LSTMPipeline
+        # LSTM requires special handling - wrap in sklearn-compatible estimator
+        base_model = create_sklearn_lstm_wrapper()
+
+    elif model_type == "ANN":
+        from app_core.models.ml.ann_pipeline import ANNPipeline
+        base_model = create_sklearn_ann_wrapper()
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    # Run Grid Search
+    grid_search = GridSearchCV(
+        estimator=base_model,
+        param_grid=param_grid,
+        cv=tscv,
+        scoring=scoring,
+        refit=refit_metric,
+        n_jobs=-1,
+        verbose=2,
+        return_train_score=True
+    )
+
+    grid_search.fit(X_train, y_train)
+
+    # Extract results
+    cv_results = pd.DataFrame(grid_search.cv_results_)
+
+    return {
+        'best_params': grid_search.best_params_,
+        'best_score': grid_search.best_score_,
+        'best_estimator': grid_search.best_estimator_,
+        'cv_results': cv_results,
+        'refit_metric': refit_metric,
+        'all_scores': {
+            'RMSE': -cv_results[f'mean_test_RMSE'].iloc[grid_search.best_index_],
+            'MAE': -cv_results[f'mean_test_MAE'].iloc[grid_search.best_index_],
+            'MAPE': -cv_results[f'mean_test_MAPE'].iloc[grid_search.best_index_],
+            'Accuracy': cv_results[f'mean_test_Accuracy'].iloc[grid_search.best_index_],
+        }
+    }
+
+def create_sklearn_lstm_wrapper():
+    """Create sklearn-compatible wrapper for LSTM pipeline"""
+    from sklearn.base import BaseEstimator, RegressorMixin
+
+    class LSTMWrapper(BaseEstimator, RegressorMixin):
+        def __init__(self, lookback_window=14, lstm_hidden_units=64, lstm_layers=2,
+                     dropout=0.2, lstm_epochs=50, lstm_lr=0.001, batch_size=32):
+            self.lookback_window = lookback_window
+            self.lstm_hidden_units = lstm_hidden_units
+            self.lstm_layers = lstm_layers
+            self.dropout = dropout
+            self.lstm_epochs = lstm_epochs
+            self.lstm_lr = lstm_lr
+            self.batch_size = batch_size
+            self.pipeline = None
+
+        def fit(self, X, y):
+            from app_core.models.ml.lstm_pipeline import LSTMPipeline
+            config = {
+                'lookback_window': self.lookback_window,
+                'lstm_hidden_units': self.lstm_hidden_units,
+                'lstm_layers': self.lstm_layers,
+                'dropout': self.dropout,
+                'lstm_epochs': self.lstm_epochs,
+                'lstm_lr': self.lstm_lr,
+                'batch_size': self.batch_size
+            }
+            self.pipeline = LSTMPipeline(config)
+            self.pipeline.build_model(X.shape[1])
+            self.pipeline.train(X, y, X, y)  # No validation split for CV
+            return self
+
+        def predict(self, X):
+            if self.pipeline is None:
+                raise ValueError("Model not fitted yet")
+            return self.pipeline.predict(X)
+
+    return LSTMWrapper()
+
+def create_sklearn_ann_wrapper():
+    """Create sklearn-compatible wrapper for ANN pipeline"""
+    from sklearn.base import BaseEstimator, RegressorMixin
+
+    class ANNWrapper(BaseEstimator, RegressorMixin):
+        def __init__(self, ann_hidden_layers=2, ann_neurons=64, ann_activation='relu',
+                     dropout=0.2, ann_epochs=30):
+            self.ann_hidden_layers = ann_hidden_layers
+            self.ann_neurons = ann_neurons
+            self.ann_activation = ann_activation
+            self.dropout = dropout
+            self.ann_epochs = ann_epochs
+            self.pipeline = None
+
+        def fit(self, X, y):
+            from app_core.models.ml.ann_pipeline import ANNPipeline
+            config = {
+                'ann_hidden_layers': self.ann_hidden_layers,
+                'ann_neurons': self.ann_neurons,
+                'ann_activation': self.ann_activation,
+                'dropout': self.dropout,
+                'ann_epochs': self.ann_epochs
+            }
+            self.pipeline = ANNPipeline(config)
+            self.pipeline.build_model(X.shape[1])
+            self.pipeline.train(X, y, X, y)  # No validation split for CV
+            return self
+
+        def predict(self, X):
+            if self.pipeline is None:
+                raise ValueError("Model not fitted yet")
+            return self.pipeline.predict(X)
+
+    return ANNWrapper()
+
+def get_param_grid(model_type: str, cfg: dict):
+    """Get parameter grid for Grid Search based on model type"""
+
+    if model_type == "XGBoost":
+        return {
+            'n_estimators': [100, 300, 500],
+            'max_depth': [3, 6, 9],
+            'learning_rate': [0.01, 0.1, 0.3],
+            'subsample': [0.8, 1.0],
+            'colsample_bytree': [0.8, 1.0],
+        }
+
+    elif model_type == "LSTM":
+        return {
+            'lookback_window': [7, 14, 21],
+            'lstm_hidden_units': [32, 64, 128],
+            'lstm_layers': [1, 2],
+            'dropout': [0.1, 0.2],
+            'lstm_epochs': [30, 50],
+        }
+
+    elif model_type == "ANN":
+        return {
+            'ann_hidden_layers': [2, 3, 4],
+            'ann_neurons': [32, 64, 128],
+            'ann_activation': ['relu', 'tanh'],
+            'dropout': [0.1, 0.2],
+            'ann_epochs': [20, 30],
+        }
+
+    return {}
+
+def get_param_distributions(model_type: str, cfg: dict):
+    """Get parameter distributions for Random Search based on model type"""
+    from scipy.stats import randint, uniform
+
+    if model_type == "XGBoost":
+        return {
+            'n_estimators': randint(100, 1000),
+            'max_depth': randint(3, 12),
+            'learning_rate': uniform(0.01, 0.29),  # 0.01 to 0.30
+            'subsample': uniform(0.6, 0.4),  # 0.6 to 1.0
+            'colsample_bytree': uniform(0.6, 0.4),  # 0.6 to 1.0
+            'min_child_weight': randint(1, 10),
+        }
+
+    elif model_type == "LSTM":
+        return {
+            'lookback_window': randint(5, 30),
+            'lstm_hidden_units': [32, 64, 128, 256],
+            'lstm_layers': randint(1, 4),
+            'dropout': uniform(0.1, 0.4),  # 0.1 to 0.5
+            'lstm_epochs': randint(20, 100),
+        }
+
+    elif model_type == "ANN":
+        return {
+            'ann_hidden_layers': randint(2, 6),
+            'ann_neurons': [32, 64, 128, 256],
+            'ann_activation': ['relu', 'tanh', 'sigmoid'],
+            'dropout': uniform(0.1, 0.4),
+            'ann_epochs': randint(20, 60),
+        }
+
+    return {}
+
+def run_random_search_optimization(model_type: str, X_train, y_train, n_splits: int,
+                                   primary_metric: str, param_distributions: dict,
+                                   n_iter: int = 20, progress_callback=None):
+    """
+    Run Random Search optimization with TimeSeriesSplit CV.
+
+    Args:
+        model_type: "XGBoost", "LSTM", or "ANN"
+        X_train: Training features
+        y_train: Training target
+        n_splits: Number of CV folds
+        primary_metric: Metric to optimize
+        param_distributions: Parameter distributions to sample
+        n_iter: Number of iterations
+        progress_callback: Optional callback for progress updates
+
+    Returns:
+        dict with best_params, cv_results, and all metrics
+    """
+    from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, make_scorer
+    import numpy as np
+
+    # Define custom scorers (same as Grid Search)
+    def mape_scorer(y_true, y_pred):
+        mask = y_true != 0
+        return np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+
+    def accuracy_scorer(y_true, y_pred):
+        mape = mape_scorer(y_true, y_pred)
+        return 100 - mape
+
+    def rmse_scorer(y_true, y_pred):
+        return np.sqrt(mean_squared_error(y_true, y_pred))
+
+    scoring = {
+        'RMSE': make_scorer(rmse_scorer, greater_is_better=False),
+        'MAE': make_scorer(mean_absolute_error, greater_is_better=False),
+        'MAPE': make_scorer(mape_scorer, greater_is_better=False),
+        'Accuracy': make_scorer(accuracy_scorer, greater_is_better=True),
+    }
+
+    refit_map = {'RMSE': 'RMSE', 'MAE': 'MAE', 'MAPE': 'MAPE', 'Accuracy': 'Accuracy'}
+    refit_metric = refit_map.get(primary_metric, 'RMSE')
+
+    # Create TimeSeriesSplit
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+
+    # Build model
+    if model_type == "XGBoost":
+        from xgboost import XGBRegressor
+        base_model = XGBRegressor(random_state=42, n_jobs=-1)
+    elif model_type == "LSTM":
+        base_model = create_sklearn_lstm_wrapper()
+    elif model_type == "ANN":
+        base_model = create_sklearn_ann_wrapper()
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    # Run Random Search
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=param_distributions,
+        n_iter=n_iter,
+        cv=tscv,
+        scoring=scoring,
+        refit=refit_metric,
+        n_jobs=-1,
+        verbose=2,
+        random_state=42,
+        return_train_score=True
+    )
+
+    random_search.fit(X_train, y_train)
+
+    # Extract results
+    cv_results = pd.DataFrame(random_search.cv_results_)
+
+    return {
+        'best_params': random_search.best_params_,
+        'best_score': random_search.best_score_,
+        'best_estimator': random_search.best_estimator_,
+        'cv_results': cv_results,
+        'refit_metric': refit_metric,
+        'all_scores': {
+            'RMSE': -cv_results[f'mean_test_RMSE'].iloc[random_search.best_index_],
+            'MAE': -cv_results[f'mean_test_MAE'].iloc[random_search.best_index_],
+            'MAPE': -cv_results[f'mean_test_MAPE'].iloc[random_search.best_index_],
+            'Accuracy': cv_results[f'mean_test_Accuracy'].iloc[random_search.best_index_],
+        }
+    }
+
+def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
+                              primary_metric: str, n_trials: int = 30,
+                              progress_callback=None):
+    """
+    Run Bayesian Optimization using Optuna with TimeSeriesSplit CV.
+
+    Args:
+        model_type: "XGBoost", "LSTM", or "ANN"
+        X_train: Training features
+        y_train: Training target
+        n_splits: Number of CV folds
+        primary_metric: Metric to optimize
+        n_trials: Number of Optuna trials
+        progress_callback: Optional callback for progress updates
+
+    Returns:
+        dict with best_params, trial_results, and all metrics
+    """
+    import optuna
+    from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, make_scorer
+    import numpy as np
+
+    # Define custom scorers
+    def mape_scorer(y_true, y_pred):
+        mask = y_true != 0
+        return np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+
+    def accuracy_scorer(y_true, y_pred):
+        mape = mape_scorer(y_true, y_pred)
+        return 100 - mape
+
+    def rmse_scorer(y_true, y_pred):
+        return np.sqrt(mean_squared_error(y_true, y_pred))
+
+    # Map primary metric to scorer
+    if primary_metric == "RMSE":
+        scorer = make_scorer(rmse_scorer, greater_is_better=False)
+        direction = "minimize"
+    elif primary_metric == "MAE":
+        scorer = make_scorer(mean_absolute_error, greater_is_better=False)
+        direction = "minimize"
+    elif primary_metric == "MAPE":
+        scorer = make_scorer(mape_scorer, greater_is_better=False)
+        direction = "minimize"
+    elif primary_metric == "Accuracy":
+        scorer = make_scorer(accuracy_scorer, greater_is_better=True)
+        direction = "maximize"
+    else:
+        scorer = make_scorer(rmse_scorer, greater_is_better=False)
+        direction = "minimize"
+
+    # Create TimeSeriesSplit
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+
+    # Define objective function
+    def objective(trial):
+        # Suggest hyperparameters based on model type
+        if model_type == "XGBoost":
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'max_depth': trial.suggest_int('max_depth', 3, 12),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+            }
+            from xgboost import XGBRegressor
+            model = XGBRegressor(random_state=42, n_jobs=-1, **params)
+
+        elif model_type == "LSTM":
+            params = {
+                'lookback_window': trial.suggest_int('lookback_window', 5, 30),
+                'lstm_hidden_units': trial.suggest_categorical('lstm_hidden_units', [32, 64, 128, 256]),
+                'lstm_layers': trial.suggest_int('lstm_layers', 1, 3),
+                'dropout': trial.suggest_float('dropout', 0.1, 0.5),
+                'lstm_epochs': trial.suggest_int('lstm_epochs', 20, 100),
+            }
+            model = create_sklearn_lstm_wrapper()
+            model.set_params(**params)
+
+        elif model_type == "ANN":
+            params = {
+                'ann_hidden_layers': trial.suggest_int('ann_hidden_layers', 2, 5),
+                'ann_neurons': trial.suggest_categorical('ann_neurons', [32, 64, 128, 256]),
+                'ann_activation': trial.suggest_categorical('ann_activation', ['relu', 'tanh']),
+                'dropout': trial.suggest_float('dropout', 0.1, 0.5),
+                'ann_epochs': trial.suggest_int('ann_epochs', 20, 60),
+            }
+            model = create_sklearn_ann_wrapper()
+            model.set_params(**params)
+
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+        # Cross-validation
+        scores = cross_val_score(model, X_train, y_train, cv=tscv, scoring=scorer, n_jobs=-1)
+        return scores.mean()
+
+    # Suppress Optuna logs
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    # Create study
+    study = optuna.create_study(direction=direction)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+
+    # Get best parameters
+    best_params = study.best_params
+
+    # Train final model with best params and get all metrics
+    if model_type == "XGBoost":
+        from xgboost import XGBRegressor
+        final_model = XGBRegressor(random_state=42, n_jobs=-1, **best_params)
+    elif model_type == "LSTM":
+        final_model = create_sklearn_lstm_wrapper()
+        final_model.set_params(**best_params)
+    elif model_type == "ANN":
+        final_model = create_sklearn_ann_wrapper()
+        final_model.set_params(**best_params)
+
+    final_model.fit(X_train, y_train)
+
+    # Compute all metrics on cross-validation
+    from sklearn.model_selection import cross_validate
+
+    all_scorers = {
+        'RMSE': make_scorer(rmse_scorer, greater_is_better=False),
+        'MAE': make_scorer(mean_absolute_error, greater_is_better=False),
+        'MAPE': make_scorer(mape_scorer, greater_is_better=False),
+        'Accuracy': make_scorer(accuracy_scorer, greater_is_better=True),
+    }
+
+    cv_results = cross_validate(final_model, X_train, y_train, cv=tscv, scoring=all_scorers, return_train_score=False)
+
+    return {
+        'best_params': best_params,
+        'best_score': study.best_value,
+        'best_estimator': final_model,
+        'study': study,
+        'refit_metric': primary_metric,
+        'all_scores': {
+            'RMSE': -cv_results['test_RMSE'].mean(),
+            'MAE': -cv_results['test_MAE'].mean(),
+            'MAPE': -cv_results['test_MAPE'].mean(),
+            'Accuracy': cv_results['test_Accuracy'].mean(),
+        },
+        'trial_results': pd.DataFrame({
+            'trial': range(len(study.trials)),
+            'value': [t.value for t in study.trials],
+            'params': [t.params for t in study.trials],
+        })
+    }
+
+def run_7day_backtesting(model_type: str, best_params: dict, X, y, dates,
+                         n_windows: int = 5, horizon: int = 7):
+    """
+    Perform 7-day rolling-origin backtesting.
+
+    Args:
+        model_type: Type of model ('XGBoost', 'LSTM', 'ANN')
+        best_params: Best hyperparameters from optimization
+        X: Full feature array
+        y: Full target array
+        dates: Date array corresponding to data points
+        n_windows: Number of backtesting windows
+        horizon: Forecast horizon (days)
+
+    Returns:
+        dict with aggregate metrics and window results
+    """
+    from sklearn.metrics import mean_squared_error, mean_absolute_error
+    import numpy as np
+
+    # Validate inputs
+    if len(X) < 20:  # Minimum data requirement
+        return {
+            'aggregate_metrics': {
+                'RMSE': None,
+                'MAE': None,
+                'MAPE': None,
+                'Accuracy': None
+            },
+            'window_results': [],
+            'n_successful_windows': 0,
+            'error': f'Insufficient data: only {len(X)} samples available, need at least 20'
+        }
+
+    # Calculate window starting points (evenly spaced in the latter half of data)
+    data_len = len(X)
+    min_train_size = max(int(data_len * 0.5), 10)  # Use at least 50% for training, minimum 10 samples
+    max_train_size = data_len - horizon  # Leave room for horizon
+
+    # Check if we have enough data for even one window
+    if max_train_size < min_train_size:
+        return {
+            'aggregate_metrics': {
+                'RMSE': None,
+                'MAE': None,
+                'MAPE': None,
+                'Accuracy': None
+            },
+            'window_results': [],
+            'n_successful_windows': 0,
+            'error': f'Insufficient data: need at least {min_train_size + horizon} samples, have {data_len}'
+        }
+
+    # Generate cutoff indices for rolling windows
+    if n_windows == 1:
+        cutoff_indices = [max_train_size]
+    else:
+        step = max((max_train_size - min_train_size) // (n_windows - 1), 1)
+        cutoff_indices = list(range(min_train_size, max_train_size + 1, step))[:n_windows]
+
+    window_results = []
+    all_y_true = []
+    all_y_pred = []
+    failed_windows = []
+
+    for window_idx, cutoff_idx in enumerate(cutoff_indices):
+        # Split data at cutoff
+        X_train = X[:cutoff_idx]
+        y_train = y[:cutoff_idx]
+        X_test = X[cutoff_idx:cutoff_idx + horizon]
+        y_test = y[cutoff_idx:cutoff_idx + horizon]
+
+        # Skip if not enough test data
+        if len(X_test) < horizon:
+            failed_windows.append({
+                'window': window_idx + 1,
+                'reason': f'Not enough test data: {len(X_test)} < {horizon}'
+            })
+            continue
+
+        try:
+            # Build and train model with best params
+            if model_type == "XGBoost":
+                from app_core.models.ml.xgboost_pipeline import XGBoostPipeline
+
+                # Create config dict for XGBoostPipeline
+                config = {
+                    'n_estimators': best_params.get('n_estimators', 300),
+                    'max_depth': best_params.get('max_depth', 6),
+                    'eta': best_params.get('learning_rate', 0.1),  # XGBoost uses 'eta' not 'learning_rate'
+                    'subsample': best_params.get('subsample', 0.8),
+                    'colsample_bytree': best_params.get('colsample_bytree', 0.8),
+                    'min_child_weight': best_params.get('min_child_weight', 1),
+                    'gamma': best_params.get('gamma', 0),
+                }
+
+                pipeline = XGBoostPipeline(config)
+                pipeline.build_model()
+                pipeline.train(X_train, y_train)
+                y_pred = pipeline.predict(X_test)
+
+            elif model_type == "LSTM":
+                # Use the LSTM wrapper
+                wrapper = create_sklearn_lstm_wrapper()
+                wrapper.set_params(**best_params)
+                wrapper.fit(X_train, y_train)
+                y_pred = wrapper.predict(X_test)
+
+            elif model_type == "ANN":
+                # Use the ANN wrapper
+                wrapper = create_sklearn_ann_wrapper()
+                wrapper.set_params(**best_params)
+                wrapper.fit(X_train, y_train)
+                y_pred = wrapper.predict(X_test)
+
+            # Calculate metrics for this window
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1e-10))) * 100
+            accuracy = 100 - mape
+
+            window_results.append({
+                'window': window_idx + 1,
+                'cutoff_idx': cutoff_idx,
+                'train_size': len(X_train),
+                'test_size': len(X_test),
+                'RMSE': rmse,
+                'MAE': mae,
+                'MAPE': mape,
+                'Accuracy': accuracy,
+                'y_true': y_test,
+                'y_pred': y_pred,
+                'dates': dates[cutoff_idx:cutoff_idx + horizon] if dates is not None else None
+            })
+
+            # Collect all predictions for aggregate metrics
+            all_y_true.extend(y_test)
+            all_y_pred.extend(y_pred)
+
+        except Exception as e:
+            # Capture error details for debugging
+            import traceback
+            failed_windows.append({
+                'window': window_idx + 1,
+                'reason': f'{type(e).__name__}: {str(e)}',
+                'traceback': traceback.format_exc()
+            })
+            continue
+
+    # Calculate aggregate metrics across all windows
+    if len(all_y_true) > 0:
+        all_y_true = np.array(all_y_true)
+        all_y_pred = np.array(all_y_pred)
+
+        aggregate_rmse = np.sqrt(mean_squared_error(all_y_true, all_y_pred))
+        aggregate_mae = mean_absolute_error(all_y_true, all_y_pred)
+        aggregate_mape = np.mean(np.abs((all_y_true - all_y_pred) / (all_y_true + 1e-10))) * 100
+        aggregate_accuracy = 100 - aggregate_mape
+    else:
+        aggregate_rmse = aggregate_mae = aggregate_mape = aggregate_accuracy = None
+
+    return {
+        'aggregate_metrics': {
+            'RMSE': aggregate_rmse,
+            'MAE': aggregate_mae,
+            'MAPE': aggregate_mape,
+            'Accuracy': aggregate_accuracy
+        },
+        'window_results': window_results,
+        'n_successful_windows': len(window_results),
+        'failed_windows': failed_windows
+    }
 
 # -----------------------------------------------------------------------------
 # HYPERPARAMETER TUNING
@@ -1952,38 +2805,250 @@ def page_hyperparameter_tuning():
         unsafe_allow_html=True,
     )
 
-    # Check if model and dataset are configured
-    model_selected = cfg.get("ml_choice")
+    # =========================================================================
+    # SECTION 1: MODEL PERFORMANCE COMPARISON (Always visible)
+    # =========================================================================
+    st.subheader("📊 Model Performance Comparison")
+    st.caption("Automatically detecting all trained models and their performance metrics")
+
+    # Auto-detect all trained models
+    arima_metrics = _extract_arima_metrics()
+    sarimax_metrics = _extract_sarimax_metrics()
+    ml_metrics = _extract_ml_metrics()
+
+    # Collect all available models
+    available_models = []
+
+    if arima_metrics is not None:
+        available_models.append(("ARIMA", arima_metrics))
+
+    if sarimax_metrics is not None:
+        available_models.append(("SARIMAX", sarimax_metrics))
+
+    # Check for single ML model result
+    if ml_metrics is not None:
+        model_name = ml_metrics.get("Model", "ML Model")
+        available_models.append((model_name, ml_metrics))
+
+    # Check for individual model results (when "All Models" was trained)
+    for model_name in ["XGBoost", "LSTM", "ANN"]:
+        model_results = st.session_state.get(f"ml_mh_results_{model_name}")
+        if model_results is not None:
+            results_df = model_results.get("results_df")
+            if results_df is not None and not results_df.empty:
+                results_df = _sanitize_metrics_df(results_df)
+                metrics = {
+                    "MAE": _mean_from_any(results_df, ["Test_MAE", "MAE"]),
+                    "RMSE": _mean_from_any(results_df, ["Test_RMSE", "RMSE"]),
+                    "MAPE": _mean_from_any(results_df, ["Test_MAPE", "MAPE_%", "MAPE"]),
+                    "Accuracy": _mean_from_any(results_df, ["Test_Acc", "Accuracy_%", "Accuracy"]),
+                    "Model": model_name,
+                }
+                # Only add if not already in the list (avoid duplicates)
+                if not any(m[0] == model_name for m in available_models):
+                    available_models.append((model_name, metrics))
+
+    # Display results
+    if len(available_models) == 0:
+        st.info(
+            "📈 **No models trained yet**\n\n"
+            "Train models in the **Benchmarks** or **Machine Learning** tabs to see their performance comparison here.\n\n"
+            "Available models:\n"
+            "- 📊 ARIMA (Statistical)\n"
+            "- 📊 SARIMAX (Statistical with seasonality)\n"
+            "- 🤖 XGBoost (Gradient Boosting)\n"
+            "- 🧠 LSTM (Recurrent Neural Network)\n"
+            "- 🔷 ANN (Feedforward Neural Network)"
+        )
+    else:
+        st.success(f"✅ **{len(available_models)} model(s) detected**")
+
+        # Create comparison table
+        st.markdown("### 📋 Performance Metrics Comparison")
+
+        # Display metrics in a structured table
+        import pandas as pd
+
+        comparison_data = []
+        for model_name, metrics in available_models:
+            comparison_data.append({
+                "Model": model_name,
+                "MAE": f"{metrics['MAE']:.4f}" if metrics.get('MAE') is not None else "N/A",
+                "RMSE": f"{metrics['RMSE']:.4f}" if metrics.get('RMSE') is not None else "N/A",
+                "MAPE": f"{metrics['MAPE']:.2f}%" if metrics.get('MAPE') is not None else "N/A",
+                "Accuracy": f"{metrics['Accuracy']:.2f}%" if metrics.get('Accuracy') is not None else "N/A",
+            })
+
+        comparison_df = pd.DataFrame(comparison_data)
+
+        # Display table with highlighting
+        st.dataframe(
+            comparison_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # Display KPI cards for each model
+        st.markdown("### 🎯 Detailed Metrics by Model")
+
+        for model_name, metrics in available_models:
+            with st.expander(f"**{model_name}** - Detailed Metrics", expanded=False):
+                cols = st.columns(4)
+
+                with cols[0]:
+                    mae_val = metrics.get('MAE')
+                    if mae_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAE", mae_val, "", PRIMARY_COLOR),
+                            use_container_width=True,
+                            key=f"tuning_mae_{model_name}",
+                        )
+                    else:
+                        st.metric("MAE", "N/A")
+
+                with cols[1]:
+                    rmse_val = metrics.get('RMSE')
+                    if rmse_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("RMSE", rmse_val, "", SECONDARY_COLOR),
+                            use_container_width=True,
+                            key=f"tuning_rmse_{model_name}",
+                        )
+                    else:
+                        st.metric("RMSE", "N/A")
+
+                with cols[2]:
+                    mape_val = metrics.get('MAPE')
+                    if mape_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAPE", mape_val, "%", WARNING_COLOR),
+                            use_container_width=True,
+                            key=f"tuning_mape_{model_name}",
+                        )
+                    else:
+                        st.metric("MAPE", "N/A")
+
+                with cols[3]:
+                    acc_val = metrics.get('Accuracy')
+                    if acc_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("Accuracy", acc_val, "%", SUCCESS_COLOR),
+                            use_container_width=True,
+                            key=f"tuning_acc_{model_name}",
+                        )
+                    else:
+                        st.metric("Accuracy", "N/A")
+
+        # Best model recommendation
+        st.markdown("### 🏆 Best Model Recommendation")
+
+        # Find best model by Accuracy (higher is better)
+        best_by_accuracy = max(available_models, key=lambda x: x[1].get('Accuracy', 0) if x[1].get('Accuracy') is not None else 0)
+
+        # Find best model by RMSE (lower is better)
+        valid_rmse_models = [(name, metrics) for name, metrics in available_models if metrics.get('RMSE') is not None]
+        if valid_rmse_models:
+            best_by_rmse = min(valid_rmse_models, key=lambda x: x[1]['RMSE'])
+        else:
+            best_by_rmse = best_by_accuracy
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown(
+                f"""
+                <div class='hf-feature-card' style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); border-left: 4px solid {SUCCESS_COLOR};'>
+                    <div style='font-size: 1.5rem; margin-bottom: 0.5rem;'>🏆 Best by Accuracy</div>
+                    <div style='font-size: 2rem; font-weight: bold; color: {SUCCESS_COLOR};'>{best_by_accuracy[0]}</div>
+                    <div style='font-size: 1.2rem; margin-top: 0.5rem;'>{best_by_accuracy[1].get('Accuracy', 0):.2f}% Accuracy</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with col2:
+            st.markdown(
+                f"""
+                <div class='hf-feature-card' style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05)); border-left: 4px solid {PRIMARY_COLOR};'>
+                    <div style='font-size: 1.5rem; margin-bottom: 0.5rem;'>📉 Best by RMSE</div>
+                    <div style='font-size: 2rem; font-weight: bold; color: {PRIMARY_COLOR};'>{best_by_rmse[0]}</div>
+                    <div style='font-size: 1.2rem; margin-top: 0.5rem;'>RMSE: {best_by_rmse[1].get('RMSE', 0):.4f}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # =========================================================================
+    # SECTION 2: HYPERPARAMETER OPTIMIZATION (Requires configuration)
+    # =========================================================================
+    st.divider()
+    st.subheader("🎯 Hyperparameter Optimization")
+    st.caption("Automated search for optimal model parameters using Grid Search, Random Search, or Bayesian Optimization")
+
+    # Check if we have trained data from ML tab
     dataset_available = cfg.get("training_data") is not None
-    target_selected = cfg.get("ml_target_col") is not None
     features_selected = cfg.get("ml_feature_cols") and len(cfg.get("ml_feature_cols", [])) > 0
 
-    if not all([model_selected, dataset_available, target_selected, features_selected]):
+    if not all([dataset_available, features_selected]):
         st.warning(
             "⚠️ **Configuration Required**\n\n"
             "Please configure the following in the **Machine Learning** tab first:\n"
-            f"- {'✅' if model_selected else '❌'} Model selection\n"
             f"- {'✅' if dataset_available else '❌'} Dataset selection\n"
-            f"- {'✅' if target_selected else '❌'} Target variable\n"
             f"- {'✅' if features_selected else '❌'} Feature selection"
         )
         st.info("👈 Navigate to the **🧮 Machine Learning** tab to complete the configuration.")
         return
 
+    # 1. Optimization Mode Selection (Single Model / All Models)
+    st.markdown("### 🎯 Optimization Mode")
+
+    opt_mode = st.radio(
+        "Training Mode",
+        options=["Single Model", "All Models (XGBoost + LSTM + ANN)"],
+        index=0 if cfg.get("opt_training_mode", "Single Model") == "Single Model" else 1,
+        horizontal=True,
+        help="Single Model: Optimize one model with full visualization | All Models: Optimize all three with metrics comparison only",
+        key="opt_mode_radio"
+    )
+    cfg["opt_training_mode"] = opt_mode
+
     # Display current configuration summary
     with st.expander("📋 Current Configuration", expanded=False):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Model", cfg.get("ml_choice", "N/A"))
-        with col2:
-            st.metric("Dataset", cfg.get("selected_dataset", "N/A"))
-        with col3:
-            st.metric("Target", cfg.get("ml_target_col", "N/A"))
+        if opt_mode == "Single Model":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Mode", "Single Model")
+            with col2:
+                st.metric("Dataset", cfg.get("selected_dataset", "N/A"))
+            with col3:
+                st.metric("Features", len(cfg.get('ml_feature_cols', [])))
+        else:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Mode", "All Models")
+            with col2:
+                st.metric("Models", "XGBoost + LSTM + ANN")
+            with col3:
+                st.metric("Features", len(cfg.get('ml_feature_cols', [])))
 
-        st.caption(f"Features: {', '.join(cfg.get('ml_feature_cols', [])[:5])}{'...' if len(cfg.get('ml_feature_cols', [])) > 5 else ''}")
+    # Model Selection for Single Model mode
+    if opt_mode == "Single Model":
+        st.markdown("### 🤖 Model Selection")
+        from app_core.ui.ml_components import MLUIComponents
+        selected_model_opt = st.selectbox(
+            "Select model to optimize",
+            options=["XGBoost", "LSTM", "ANN"],
+            index=["XGBoost", "LSTM", "ANN"].index(cfg.get("opt_model_choice", "XGBoost")),
+            help="Choose which ML model to optimize",
+            key="opt_model_select"
+        )
+        cfg["opt_model_choice"] = selected_model_opt
+    else:
+        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be optimized sequentially")
+        selected_model_opt = None
 
-    # 1. Optimization Settings
-    st.subheader("🎯 Optimization Settings")
+    # 2. Optimization Settings
+    st.markdown("### ⚙️ Optimization Settings")
 
     col1, col2 = st.columns(2)
 
@@ -2040,13 +3105,36 @@ def page_hyperparameter_tuning():
             )
             cfg["tuning_n_iter"] = n_iter
 
-    # 3. Search Space / Bounds
-    st.subheader("🔍 Search Space Configuration")
-    st.caption("Define the hyperparameter ranges to explore")
+    # 3. 7-Day Rolling-Origin Backtesting
+    st.subheader("📅 7-Day Rolling-Origin Backtesting (Optional)")
 
-    selected_model = cfg.get("ml_choice")
-    auto_params = MLUIComponents.render_automatic_params(selected_model, cfg)
-    cfg.update(auto_params)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        enable_backtesting = st.checkbox(
+            "Enable 7-Day Backtesting",
+            value=cfg.get("enable_backtesting", False),
+            help="Perform rolling-origin backtesting with 7-day horizon after optimization"
+        )
+        cfg["enable_backtesting"] = enable_backtesting
+
+    if enable_backtesting:
+        with col2:
+            n_windows = st.slider(
+                "Number of Backtesting Windows",
+                min_value=3,
+                max_value=10,
+                value=cfg.get("backtest_n_windows", 5),
+                help="Number of different cutoff dates for backtesting"
+            )
+            cfg["backtest_n_windows"] = n_windows
+
+        st.info(
+            "🔄 **Backtesting Process:**\n\n"
+            f"After optimization, the best model will be trained on {n_windows} different historical cutoffs. "
+            f"Each training uses data up to the cutoff date to forecast the next 7 days. "
+            f"Metrics are aggregated across all windows to provide robust performance estimates."
+        )
 
     # 4. Run Optimization
     st.divider()
@@ -2054,64 +3142,803 @@ def page_hyperparameter_tuning():
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col2:
+        if opt_mode == "Single Model":
+            button_text = f"🚀 Run {search_method} - {selected_model_opt}"
+        else:
+            button_text = f"🚀 Run {search_method} - All Models"
+
         run_optimization = st.button(
-            f"🚀 Run {search_method}",
+            button_text,
             type="primary",
             use_container_width=True,
-            help="Start hyperparameter optimization (placeholder)"
+            help="Start hyperparameter optimization with TimeSeriesSplit CV"
         )
 
+    # Execute optimization
     if run_optimization:
-        st.info(
-            f"🔄 **Optimization Started**\n\n"
-            f"- Method: {search_method}\n"
-            f"- Metric: {optimization_metric}\n"
-            f"- CV Folds: {n_splits}\n"
-            f"- Model: {selected_model}\n\n"
-            "This is a placeholder. Full implementation will include:\n"
-            "- TimeSeriesSplit CV\n"
-            "- Parallel training\n"
-            "- Progress tracking\n"
-            "- Results storage in session state"
-        )
+        if opt_mode == "Single Model" and search_method == "Grid Search":
+            # PHASE 1: Grid Search for Single Model
+            st.markdown(f"### 🔄 Running {search_method} for {selected_model_opt}")
 
-    # 5. Results Comparison (placeholder for after optimization)
-    st.divider()
-    st.subheader("📊 Results Comparison")
+            # Get dataset
+            df = cfg.get("training_data")
+            feature_cols = cfg.get("ml_feature_cols")
+            split_ratio = cfg.get("split_ratio", 0.8)
 
-    # Check if optimization results exist
-    tuning_results = st.session_state.get("tuning_results")
+            # Prepare data for first target (Target_1)
+            target_col = "Target_1"
 
-    if tuning_results is None:
-        st.info(
-            "📈 **Results will appear here after optimization**\n\n"
-            "After running optimization, you'll see:\n"
-            "- ✅ Baseline vs Optimized metrics comparison\n"
-            "- 📋 Parameter changes table\n"
-            "- 📊 Cross-validation scores distribution\n"
-            "- ⏱️ Optimization time and trial count\n"
-            "- 🎯 Best parameters found"
-        )
-    else:
-        # Display results (will be implemented when training logic is added)
-        st.success("✅ Optimization completed!")
+            if target_col not in df.columns:
+                st.error(f"❌ Target column '{target_col}' not found in dataset")
+            else:
+                # Filter to only numeric features (exclude datetime, object, string, etc.)
+                numeric_feature_cols = []
+                for col in feature_cols:
+                    if col in df.columns:
+                        dtype = df[col].dtype
+                        # Only keep numeric dtypes (int, float) - exclude datetime, object, etc.
+                        if pd.api.types.is_numeric_dtype(dtype) and not pd.api.types.is_datetime64_any_dtype(dtype):
+                            numeric_feature_cols.append(col)
 
-        # Metrics comparison
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Baseline Model**")
-            # Placeholder metrics
-        with col2:
-            st.markdown("**Optimized Model**")
-            # Placeholder metrics
+                if len(numeric_feature_cols) == 0:
+                    st.error("❌ No numeric features found in the dataset. Please check your feature selection.")
+                else:
+                    # Extract features and target
+                    X = df[numeric_feature_cols].values
+                    y = df[target_col].values
+
+                    # Train/test split
+                    split_idx = int(len(df) * split_ratio)
+                    X_train, X_test = X[:split_idx], X[split_idx:]
+                    y_train, y_test = y[:split_idx], y[split_idx:]
+
+                    # Get parameter grid
+                    param_grid = get_param_grid(selected_model_opt, cfg)
+
+                    # Show optimization info
+                    st.info(
+                        f"**Optimization Configuration:**\n\n"
+                        f"- Model: {selected_model_opt}\n"
+                        f"- Search Method: {search_method}\n"
+                        f"- Optimization Metric: {optimization_metric}\n"
+                        f"- CV Folds: {n_splits}\n"
+                        f"- Training Samples: {len(X_train)}\n"
+                        f"- Test Samples: {len(X_test)}\n"
+                        f"- Features: {len(numeric_feature_cols)}\n"
+                        f"- Parameter Combinations: {np.prod([len(v) for v in param_grid.values()])}"
+                    )
+
+                    # Run optimization with progress
+                    with st.spinner(f"⏳ Running Grid Search... This may take several minutes."):
+                        try:
+                            results = run_grid_search_optimization(
+                                model_type=selected_model_opt,
+                                X_train=X_train,
+                                y_train=y_train,
+                                n_splits=n_splits,
+                                primary_metric=optimization_metric,
+                                param_grid=param_grid
+                            )
+
+                            # Store results in session state
+                            st.session_state[f"opt_results_{selected_model_opt}"] = results
+                            st.session_state["opt_last_model"] = selected_model_opt
+                            st.session_state["opt_last_method"] = search_method
+
+                            st.success(f"✅ Optimization completed successfully!")
+
+                            # Run 7-day backtesting if enabled
+                            if cfg.get("enable_backtesting", False):
+                                n_backtest_windows = cfg.get("backtest_n_windows", 5)
+
+                                with st.spinner(f"⏳ Running 7-day backtesting ({n_backtest_windows} windows)..."):
+                                    try:
+                                        # Get dates if available
+                                        date_col = None
+                                        for col in df.columns:
+                                            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                                                date_col = df[col].values
+                                                break
+
+                                        backtest_results = run_7day_backtesting(
+                                            model_type=selected_model_opt,
+                                            best_params=results['best_params'],
+                                            X=X,
+                                            y=y,
+                                            dates=date_col,
+                                            n_windows=n_backtest_windows,
+                                            horizon=7
+                                        )
+
+                                        # Store backtesting results
+                                        st.session_state[f"backtest_results_{selected_model_opt}"] = backtest_results
+
+                                        st.success(f"✅ Backtesting completed! {backtest_results['n_successful_windows']}/{n_backtest_windows} windows successful.")
+
+                                    except Exception as e:
+                                        st.warning(f"⚠️ Backtesting failed: {str(e)}")
+                                        import traceback
+                                        with st.expander("🔍 Backtesting Error Details"):
+                                            st.code(traceback.format_exc())
+
+                        except Exception as e:
+                            st.error(f"❌ **Optimization failed:**\n\n```\n{str(e)}\n```")
+                            import traceback
+                            with st.expander("🔍 Error Details"):
+                                st.code(traceback.format_exc())
+
+        elif opt_mode == "Single Model" and search_method == "Random Search":
+            # PHASE 2: Random Search for Single Model
+            st.markdown(f"### 🎲 Running {search_method} for {selected_model_opt}")
+
+            # Get dataset
+            df = cfg.get("training_data")
+            feature_cols = cfg.get("ml_feature_cols")
+            split_ratio = cfg.get("split_ratio", 0.8)
+            target_col = "Target_1"
+
+            if target_col not in df.columns:
+                st.error(f"❌ Target column '{target_col}' not found in dataset")
+            else:
+                # Filter to only numeric features (exclude datetime, object, string, etc.)
+                numeric_feature_cols = []
+                for col in feature_cols:
+                    if col in df.columns:
+                        dtype = df[col].dtype
+                        # Only keep numeric dtypes (int, float) - exclude datetime, object, etc.
+                        if pd.api.types.is_numeric_dtype(dtype) and not pd.api.types.is_datetime64_any_dtype(dtype):
+                            numeric_feature_cols.append(col)
+
+                if len(numeric_feature_cols) == 0:
+                    st.error("❌ No numeric features found in the dataset. Please check your feature selection.")
+                else:
+                    # Extract features and target
+                    X = df[numeric_feature_cols].values
+                    y = df[target_col].values
+
+                    # Train/test split
+                    split_idx = int(len(df) * split_ratio)
+                    X_train, X_test = X[:split_idx], X[split_idx:]
+                    y_train, y_test = y[:split_idx], y[split_idx:]
+
+                    # Get parameter distributions
+                    param_distributions = get_param_distributions(selected_model_opt, cfg)
+
+                    # Show optimization info
+                    st.info(
+                        f"**Optimization Configuration:**\n\n"
+                        f"- Model: {selected_model_opt}\n"
+                        f"- Search Method: {search_method}\n"
+                        f"- Optimization Metric: {optimization_metric}\n"
+                        f"- CV Folds: {n_splits}\n"
+                        f"- Iterations: {n_iter}\n"
+                        f"- Training Samples: {len(X_train)}\n"
+                        f"- Test Samples: {len(X_test)}\n"
+                        f"- Features: {len(numeric_feature_cols)}"
+                    )
+
+                # Run optimization with progress
+                with st.spinner(f"⏳ Running Random Search... This may take several minutes."):
+                    try:
+                        results = run_random_search_optimization(
+                            model_type=selected_model_opt,
+                            X_train=X_train,
+                            y_train=y_train,
+                            n_splits=n_splits,
+                            primary_metric=optimization_metric,
+                            param_distributions=param_distributions,
+                            n_iter=n_iter
+                        )
+
+                        # Store results in session state
+                        st.session_state[f"opt_results_{selected_model_opt}"] = results
+                        st.session_state["opt_last_model"] = selected_model_opt
+                        st.session_state["opt_last_method"] = search_method
+
+                        st.success(f"✅ Optimization completed successfully!")
+
+                        # Run 7-day backtesting if enabled
+                        if cfg.get("enable_backtesting", False):
+                            n_backtest_windows = cfg.get("backtest_n_windows", 5)
+
+                            with st.spinner(f"⏳ Running 7-day backtesting ({n_backtest_windows} windows)..."):
+                                try:
+                                    # Get dates if available
+                                    date_col = None
+                                    for col in df.columns:
+                                        if pd.api.types.is_datetime64_any_dtype(df[col]):
+                                            date_col = df[col].values
+                                            break
+
+                                    backtest_results = run_7day_backtesting(
+                                        model_type=selected_model_opt,
+                                        best_params=results['best_params'],
+                                        X=X,
+                                        y=y,
+                                        dates=date_col,
+                                        n_windows=n_backtest_windows,
+                                        horizon=7
+                                    )
+
+                                    # Store backtesting results
+                                    st.session_state[f"backtest_results_{selected_model_opt}"] = backtest_results
+
+                                    st.success(f"✅ Backtesting completed! {backtest_results['n_successful_windows']}/{n_backtest_windows} windows successful.")
+
+                                except Exception as e:
+                                    st.warning(f"⚠️ Backtesting failed: {str(e)}")
+                                    import traceback
+                                    with st.expander("🔍 Backtesting Error Details"):
+                                        st.code(traceback.format_exc())
+
+                    except Exception as e:
+                        st.error(f"❌ **Optimization failed:**\n\n```\n{str(e)}\n```")
+                        import traceback
+                        with st.expander("🔍 Error Details"):
+                            st.code(traceback.format_exc())
+
+        elif opt_mode == "Single Model" and search_method == "Bayesian Optimization":
+            # PHASE 2: Bayesian Optimization for Single Model
+            st.markdown(f"### 🧠 Running {search_method} for {selected_model_opt}")
+
+            # Get dataset
+            df = cfg.get("training_data")
+            feature_cols = cfg.get("ml_feature_cols")
+            split_ratio = cfg.get("split_ratio", 0.8)
+            target_col = "Target_1"
+
+            if target_col not in df.columns:
+                st.error(f"❌ Target column '{target_col}' not found in dataset")
+            else:
+                # Filter to only numeric features (exclude datetime, object, string, etc.)
+                numeric_feature_cols = []
+                for col in feature_cols:
+                    if col in df.columns:
+                        dtype = df[col].dtype
+                        # Only keep numeric dtypes (int, float) - exclude datetime, object, etc.
+                        if pd.api.types.is_numeric_dtype(dtype) and not pd.api.types.is_datetime64_any_dtype(dtype):
+                            numeric_feature_cols.append(col)
+
+                if len(numeric_feature_cols) == 0:
+                    st.error("❌ No numeric features found in the dataset. Please check your feature selection.")
+                else:
+                    # Extract features and target
+                    X = df[numeric_feature_cols].values
+                    y = df[target_col].values
+
+                    # Train/test split
+                    split_idx = int(len(df) * split_ratio)
+                    X_train, X_test = X[:split_idx], X[split_idx:]
+                    y_train, y_test = y[:split_idx], y[split_idx:]
+
+                    # Show optimization info
+                    st.info(
+                        f"**Optimization Configuration:**\n\n"
+                        f"- Model: {selected_model_opt}\n"
+                        f"- Search Method: {search_method}\n"
+                        f"- Optimization Metric: {optimization_metric}\n"
+                        f"- CV Folds: {n_splits}\n"
+                        f"- Trials: {n_iter}\n"
+                        f"- Training Samples: {len(X_train)}\n"
+                        f"- Test Samples: {len(X_test)}\n"
+                        f"- Features: {len(numeric_feature_cols)}"
+                    )
+
+                    # Run optimization with progress
+                    with st.spinner(f"⏳ Running Bayesian Optimization... This may take several minutes."):
+                        try:
+                            results = run_bayesian_optimization(
+                                model_type=selected_model_opt,
+                                X_train=X_train,
+                                y_train=y_train,
+                                n_splits=n_splits,
+                                primary_metric=optimization_metric,
+                                n_trials=n_iter
+                            )
+
+                            # Store results in session state
+                            st.session_state[f"opt_results_{selected_model_opt}"] = results
+                            st.session_state["opt_last_model"] = selected_model_opt
+                            st.session_state["opt_last_method"] = search_method
+
+                            st.success(f"✅ Optimization completed successfully!")
+
+                            # Show Optuna optimization history
+                            if 'study' in results:
+                                with st.expander("📈 Optimization History", expanded=False):
+                                    trial_results = results['trial_results']
+                                    st.line_chart(trial_results.set_index('trial')['value'])
+
+                            # Run 7-day backtesting if enabled
+                            if cfg.get("enable_backtesting", False):
+                                n_backtest_windows = cfg.get("backtest_n_windows", 5)
+
+                                with st.spinner(f"⏳ Running 7-day backtesting ({n_backtest_windows} windows)..."):
+                                    try:
+                                        # Get dates if available
+                                        date_col = None
+                                        for col in df.columns:
+                                            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                                                date_col = df[col].values
+                                                break
+
+                                        backtest_results = run_7day_backtesting(
+                                            model_type=selected_model_opt,
+                                            best_params=results['best_params'],
+                                            X=X,
+                                            y=y,
+                                            dates=date_col,
+                                            n_windows=n_backtest_windows,
+                                            horizon=7
+                                        )
+
+                                        # Store backtesting results
+                                        st.session_state[f"backtest_results_{selected_model_opt}"] = backtest_results
+
+                                        st.success(f"✅ Backtesting completed! {backtest_results['n_successful_windows']}/{n_backtest_windows} windows successful.")
+
+                                    except Exception as e:
+                                        st.warning(f"⚠️ Backtesting failed: {str(e)}")
+                                        import traceback
+                                        with st.expander("🔍 Backtesting Error Details"):
+                                            st.code(traceback.format_exc())
+
+                        except Exception as e:
+                            st.error(f"❌ **Optimization failed:**\n\n```\n{str(e)}\n```")
+                            import traceback
+                            with st.expander("🔍 Error Details"):
+                                st.code(traceback.format_exc())
+
+        elif opt_mode == "All Models":
+            # PHASE 3: Optimize all three models sequentially
+            st.markdown(f"### 🚀 Running {search_method} for All Models")
+
+            # Get dataset (shared for all models)
+            df = cfg.get("training_data")
+            feature_cols = cfg.get("ml_feature_cols")
+            split_ratio = cfg.get("split_ratio", 0.8)
+            target_col = "Target_1"
+
+            if target_col not in df.columns:
+                st.error(f"❌ Target column '{target_col}' not found in dataset")
+            else:
+                # Filter to only numeric features (exclude datetime, object, string, etc.)
+                numeric_feature_cols = []
+                for col in feature_cols:
+                    if col in df.columns:
+                        dtype = df[col].dtype
+                        # Only keep numeric dtypes (int, float) - exclude datetime, object, etc.
+                        if pd.api.types.is_numeric_dtype(dtype) and not pd.api.types.is_datetime64_any_dtype(dtype):
+                            numeric_feature_cols.append(col)
+
+                if len(numeric_feature_cols) == 0:
+                    st.error("❌ No numeric features found in the dataset. Please check your feature selection.")
+                else:
+                    # Extract features and target
+                    X = df[numeric_feature_cols].values
+                    y = df[target_col].values
+
+                    # Train/test split
+                    split_idx = int(len(df) * split_ratio)
+                    X_train, X_test = X[:split_idx], X[split_idx:]
+                    y_train, y_test = y[:split_idx], y[split_idx:]
+
+                    # Show optimization info
+                    st.info(
+                        f"**Optimization Configuration:**\n\n"
+                        f"- Models: XGBoost, LSTM, ANN\n"
+                        f"- Search Method: {search_method}\n"
+                        f"- Optimization Metric: {optimization_metric}\n"
+                        f"- CV Folds: {n_splits}\n"
+                        f"- Training Samples: {len(X_train)}\n"
+                        f"- Test Samples: {len(X_test)}\n"
+                        f"- Features: {len(numeric_feature_cols)}"
+                    )
+
+                    # Models to optimize
+                    all_models = ["XGBoost", "LSTM", "ANN"]
+
+                    # Progress tracking
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+
+                    # Store all results
+                    all_model_results = {}
+                    failed_models = []
+
+                    # Optimize each model
+                    for idx, model_type in enumerate(all_models):
+                        try:
+                            # Update progress
+                            progress = (idx) / len(all_models)
+                            progress_bar.progress(progress)
+                            status_text.markdown(f"**🔄 Optimizing Model {idx+1}/3: {model_type}**")
+
+                            # Select optimization function based on search method
+                            if search_method == "Grid Search":
+                                param_grid = get_param_grid(model_type, cfg)
+
+                                with st.spinner(f"⏳ Optimizing {model_type}..."):
+                                    results = run_grid_search_optimization(
+                                        model_type=model_type,
+                                        X_train=X_train,
+                                        y_train=y_train,
+                                        n_splits=n_splits,
+                                        primary_metric=optimization_metric,
+                                        param_grid=param_grid
+                                    )
+
+                            elif search_method == "Random Search":
+                                param_distributions = get_param_distributions(model_type, cfg)
+
+                                with st.spinner(f"⏳ Optimizing {model_type}..."):
+                                    results = run_random_search_optimization(
+                                        model_type=model_type,
+                                        X_train=X_train,
+                                        y_train=y_train,
+                                        n_splits=n_splits,
+                                        primary_metric=optimization_metric,
+                                        param_distributions=param_distributions,
+                                        n_iter=n_iter
+                                    )
+
+                            elif search_method == "Bayesian Optimization":
+                                with st.spinner(f"⏳ Optimizing {model_type}..."):
+                                    results = run_bayesian_optimization(
+                                        model_type=model_type,
+                                        X_train=X_train,
+                                        y_train=y_train,
+                                        n_splits=n_splits,
+                                        primary_metric=optimization_metric,
+                                        n_trials=n_iter
+                                    )
+
+                            # Store results
+                            all_model_results[model_type] = results
+                            st.session_state[f"opt_results_{model_type}"] = results
+
+                            status_text.markdown(f"**✅ {model_type} optimization completed!**")
+
+                        except Exception as e:
+                            failed_models.append(model_type)
+                            st.error(f"❌ **{model_type} optimization failed:**\n\n```\n{str(e)}\n```")
+                            import traceback
+                            with st.expander(f"🔍 {model_type} Error Details"):
+                                st.code(traceback.format_exc())
+
+                    # Final progress update
+                    progress_bar.progress(1.0)
+
+                    # Store metadata
+                    st.session_state["opt_all_models_results"] = all_model_results
+                    st.session_state["opt_last_mode"] = "All Models"
+                    st.session_state["opt_last_method"] = search_method
+
+                    # Summary
+                    if len(all_model_results) == len(all_models):
+                        status_text.markdown("**✅ All models optimized successfully!**")
+                        st.success(f"🎉 Successfully optimized {len(all_model_results)}/{len(all_models)} models!")
+                    elif len(all_model_results) > 0:
+                        status_text.markdown(f"**⚠️ Partial success: {len(all_model_results)}/{len(all_models)} models optimized**")
+                        st.warning(f"⚠️ {len(failed_models)} model(s) failed: {', '.join(failed_models)}")
+                    else:
+                        status_text.markdown("**❌ All models failed to optimize**")
+                        st.error("❌ All optimizations failed. Please check the error details above.")
+
+    # Display optimization results
+    if opt_mode == "Single Model" and selected_model_opt:
+        opt_results = st.session_state.get(f"opt_results_{selected_model_opt}")
+
+        if opt_results is not None:
+            st.divider()
+            st.markdown("### 📊 Optimization Results")
+
+            # Best parameters and scores
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### 🏆 Best Parameters")
+                best_params_df = pd.DataFrame(list(opt_results['best_params'].items()), columns=['Parameter', 'Value'])
+                st.dataframe(best_params_df, use_container_width=True, hide_index=True)
+
+            with col2:
+                st.markdown("#### 📈 Performance Metrics")
+                all_scores = opt_results['all_scores']
+
+                # Display as KPI cards
+                metric_cols = st.columns(4)
+                with metric_cols[0]:
+                    st.plotly_chart(
+                        _create_kpi_indicator("RMSE", all_scores['RMSE'], "", PRIMARY_COLOR),
+                        use_container_width=True,
+                        key=f"opt_rmse_{selected_model_opt}"
+                    )
+                with metric_cols[1]:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAE", all_scores['MAE'], "", SECONDARY_COLOR),
+                        use_container_width=True,
+                        key=f"opt_mae_{selected_model_opt}"
+                    )
+                with metric_cols[2]:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAPE", all_scores['MAPE'], "%", WARNING_COLOR),
+                        use_container_width=True,
+                        key=f"opt_mape_{selected_model_opt}"
+                    )
+                with metric_cols[3]:
+                    st.plotly_chart(
+                        _create_kpi_indicator("Accuracy", all_scores['Accuracy'], "%", SUCCESS_COLOR),
+                        use_container_width=True,
+                        key=f"opt_acc_{selected_model_opt}"
+                    )
+
+            # CV Results Table
+            with st.expander("📋 All Parameter Combinations (CV Results)", expanded=False):
+                cv_results = opt_results['cv_results']
+
+                # Select relevant columns
+                display_cols = ['params', 'mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE', 'mean_test_Accuracy', 'rank_test_' + opt_results['refit_metric']]
+                available_cols = [col for col in display_cols if col in cv_results.columns]
+
+                if available_cols:
+                    display_df = cv_results[available_cols].copy()
+
+                    # Invert negative scores for display
+                    if 'mean_test_RMSE' in display_df.columns:
+                        display_df['mean_test_RMSE'] = -display_df['mean_test_RMSE']
+                    if 'mean_test_MAE' in display_df.columns:
+                        display_df['mean_test_MAE'] = -display_df['mean_test_MAE']
+                    if 'mean_test_MAPE' in display_df.columns:
+                        display_df['mean_test_MAPE'] = -display_df['mean_test_MAPE']
+
+                    st.dataframe(display_df, use_container_width=True, height=400)
+
+            # Display 7-day backtesting results if available
+            backtest_results = st.session_state.get(f"backtest_results_{selected_model_opt}")
+
+            if backtest_results is not None:
+                st.divider()
+                st.markdown("### 📅 7-Day Rolling-Origin Backtesting Results")
+
+                aggregate_metrics = backtest_results['aggregate_metrics']
+                window_results = backtest_results['window_results']
+                n_successful = backtest_results['n_successful_windows']
+
+                if aggregate_metrics['RMSE'] is not None:
+                    # Aggregate metrics KPI cards
+                    st.markdown("#### 🎯 Aggregate Metrics (All Windows)")
+
+                    metric_cols = st.columns(4)
+                    with metric_cols[0]:
+                        st.plotly_chart(
+                            _create_kpi_indicator("RMSE", aggregate_metrics['RMSE'], "", PRIMARY_COLOR),
+                            use_container_width=True,
+                            key=f"backtest_agg_rmse_{selected_model_opt}"
+                        )
+                    with metric_cols[1]:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAE", aggregate_metrics['MAE'], "", SECONDARY_COLOR),
+                            use_container_width=True,
+                            key=f"backtest_agg_mae_{selected_model_opt}"
+                        )
+                    with metric_cols[2]:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAPE", aggregate_metrics['MAPE'], "%", WARNING_COLOR),
+                            use_container_width=True,
+                            key=f"backtest_agg_mape_{selected_model_opt}"
+                        )
+                    with metric_cols[3]:
+                        st.plotly_chart(
+                            _create_kpi_indicator("Accuracy", aggregate_metrics['Accuracy'], "%", SUCCESS_COLOR),
+                            use_container_width=True,
+                            key=f"backtest_agg_acc_{selected_model_opt}"
+                        )
+
+                    # Window-by-window metrics table
+                    with st.expander(f"📋 Individual Window Results ({n_successful} windows)", expanded=False):
+                        window_data = []
+                        for w in window_results:
+                            window_data.append({
+                                'Window': w['window'],
+                                'Train Size': w['train_size'],
+                                'Test Size': w['test_size'],
+                                'RMSE': w['RMSE'],
+                                'MAE': w['MAE'],
+                                'MAPE': w['MAPE'],
+                                'Accuracy': w['Accuracy']
+                            })
+
+                        window_df = pd.DataFrame(window_data)
+                        st.dataframe(window_df.style.format({
+                            'RMSE': '{:.4f}',
+                            'MAE': '{:.4f}',
+                            'MAPE': '{:.2f}',
+                            'Accuracy': '{:.2f}'
+                        }), use_container_width=True, hide_index=True)
+
+                    # Representative forecast plot (first window)
+                    if len(window_results) > 0:
+                        with st.expander("📈 Sample Forecast (First Window)", expanded=False):
+                            first_window = window_results[0]
+                            y_true = first_window['y_true']
+                            y_pred = first_window['y_pred']
+
+                            import plotly.graph_objects as go
+
+                            fig = go.Figure()
+
+                            # Actual values
+                            fig.add_trace(go.Scatter(
+                                x=list(range(len(y_true))),
+                                y=y_true,
+                                mode='lines+markers',
+                                name='Actual',
+                                line=dict(color=PRIMARY_COLOR, width=2),
+                                marker=dict(size=8)
+                            ))
+
+                            # Predicted values
+                            fig.add_trace(go.Scatter(
+                                x=list(range(len(y_pred))),
+                                y=y_pred,
+                                mode='lines+markers',
+                                name='Predicted',
+                                line=dict(color=SECONDARY_COLOR, width=2, dash='dash'),
+                                marker=dict(size=8)
+                            ))
+
+                            fig.update_layout(
+                                title=f"7-Day Forecast - Window 1 (Train Size: {first_window['train_size']})",
+                                xaxis_title="Day",
+                                yaxis_title="Target Value",
+                                height=400,
+                                hovermode='x unified',
+                                template='plotly_white'
+                            )
+
+                            st.plotly_chart(fig, use_container_width=True)
+
+                else:
+                    # No successful windows - show error details
+                    st.warning("⚠️ Backtesting completed but no successful windows were processed.")
+
+                    # Show error information if available
+                    if 'error' in backtest_results:
+                        st.error(f"**Error:** {backtest_results['error']}")
+
+                    # Show failed window details
+                    failed_windows = backtest_results.get('failed_windows', [])
+                    if failed_windows:
+                        with st.expander(f"🔍 Failed Windows Details ({len(failed_windows)} windows)", expanded=True):
+                            for failed in failed_windows:
+                                st.markdown(f"**Window {failed['window']}:** {failed['reason']}")
+                                if 'traceback' in failed:
+                                    with st.expander(f"Traceback for Window {failed['window']}"):
+                                        st.code(failed['traceback'])
+
+    # Display "All Models" optimization results
+    elif opt_mode == "All Models":
+        all_model_results = st.session_state.get("opt_all_models_results", {})
+
+        if all_model_results:
+            st.divider()
+            st.markdown("### 📊 All Models Comparison")
+
+            # Create comparison table with all metrics
+            comparison_data = []
+            for model_name, results in all_model_results.items():
+                all_scores = results['all_scores']
+                comparison_data.append({
+                    "Model": model_name,
+                    "RMSE": all_scores['RMSE'],
+                    "MAE": all_scores['MAE'],
+                    "MAPE": all_scores['MAPE'],
+                    "Accuracy": all_scores['Accuracy']
+                })
+
+            comparison_df = pd.DataFrame(comparison_data)
+
+            # Display metrics in KPI cards for each model
+            st.markdown("#### 🏆 Performance Metrics by Model")
+
+            # Display each model's results
+            for model_name in all_model_results.keys():
+                with st.expander(f"📈 {model_name} Results", expanded=True):
+                    results = all_model_results[model_name]
+                    all_scores = results['all_scores']
+
+                    # Two columns: parameters and metrics
+                    col1, col2 = st.columns([1, 2])
+
+                    with col1:
+                        st.markdown("**Best Parameters**")
+                        best_params_df = pd.DataFrame(
+                            list(results['best_params'].items()),
+                            columns=['Parameter', 'Value']
+                        )
+                        st.dataframe(best_params_df, use_container_width=True, hide_index=True)
+
+                    with col2:
+                        st.markdown("**Performance Metrics**")
+                        metric_cols = st.columns(4)
+                        with metric_cols[0]:
+                            st.plotly_chart(
+                                _create_kpi_indicator("RMSE", all_scores['RMSE'], "", PRIMARY_COLOR),
+                                use_container_width=True,
+                                key=f"all_rmse_{model_name}"
+                            )
+                        with metric_cols[1]:
+                            st.plotly_chart(
+                                _create_kpi_indicator("MAE", all_scores['MAE'], "", SECONDARY_COLOR),
+                                use_container_width=True,
+                                key=f"all_mae_{model_name}"
+                            )
+                        with metric_cols[2]:
+                            st.plotly_chart(
+                                _create_kpi_indicator("MAPE", all_scores['MAPE'], "%", WARNING_COLOR),
+                                use_container_width=True,
+                                key=f"all_mape_{model_name}"
+                            )
+                        with metric_cols[3]:
+                            st.plotly_chart(
+                                _create_kpi_indicator("Accuracy", all_scores['Accuracy'], "%", SUCCESS_COLOR),
+                                use_container_width=True,
+                                key=f"all_acc_{model_name}"
+                            )
+
+            # Overall comparison table
+            st.markdown("#### 📋 Side-by-Side Comparison")
+
+            # Find best model for each metric
+            best_rmse_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
+            best_mae_model = comparison_df.loc[comparison_df['MAE'].idxmin(), 'Model']
+            best_mape_model = comparison_df.loc[comparison_df['MAPE'].idxmin(), 'Model']
+            best_accuracy_model = comparison_df.loc[comparison_df['Accuracy'].idxmax(), 'Model']
+
+            # Format comparison table
+            def highlight_best(row):
+                styles = [''] * len(row)
+                if row['Model'] == best_rmse_model:
+                    styles[comparison_df.columns.get_loc('RMSE')] = 'background-color: rgba(34, 197, 94, 0.2)'
+                if row['Model'] == best_mae_model:
+                    styles[comparison_df.columns.get_loc('MAE')] = 'background-color: rgba(34, 197, 94, 0.2)'
+                if row['Model'] == best_mape_model:
+                    styles[comparison_df.columns.get_loc('MAPE')] = 'background-color: rgba(34, 197, 94, 0.2)'
+                if row['Model'] == best_accuracy_model:
+                    styles[comparison_df.columns.get_loc('Accuracy')] = 'background-color: rgba(34, 197, 94, 0.2)'
+                return styles
+
+            styled_df = comparison_df.style.apply(highlight_best, axis=1).format({
+                'RMSE': '{:.4f}',
+                'MAE': '{:.4f}',
+                'MAPE': '{:.2f}',
+                'Accuracy': '{:.2f}'
+            })
+
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+            # Best model summary
+            st.markdown("#### 🥇 Best Models by Metric")
+            summary_cols = st.columns(4)
+            with summary_cols[0]:
+                st.metric("Best RMSE", best_rmse_model, f"{comparison_df[comparison_df['Model'] == best_rmse_model]['RMSE'].values[0]:.4f}")
+            with summary_cols[1]:
+                st.metric("Best MAE", best_mae_model, f"{comparison_df[comparison_df['Model'] == best_mae_model]['MAE'].values[0]:.4f}")
+            with summary_cols[2]:
+                st.metric("Best MAPE", best_mape_model, f"{comparison_df[comparison_df['Model'] == best_mape_model]['MAPE'].values[0]:.2f}%")
+            with summary_cols[3]:
+                st.metric("Best Accuracy", best_accuracy_model, f"{comparison_df[comparison_df['Model'] == best_accuracy_model]['Accuracy'].values[0]:.2f}%")
 
     # Debug panel
     debug_panel()
 
 # -----------------------------------------------------------------------------
-# HYBRID MODELS (LSTM-XGB / LSTM-ANN / LSTM-SARIMAX)
+# HYBRID MODELS - Ensemble Forecasting
 # -----------------------------------------------------------------------------
 def page_hybrid():
+    """Hybrid Models: Weighted Ensemble and Decomposition + Ensemble."""
+
+    # Main Header
     st.markdown(
         f"""
         <div class='hf-feature-card' style='text-align: left; margin-bottom: 2rem;'>
@@ -2119,192 +3946,3762 @@ def page_hybrid():
             <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🧬</div>
             <h1 class='hf-feature-title' style='font-size: 2.5rem; margin: 0;'>Hybrid Models</h1>
           </div>
-          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 0 0 4.5rem;'>
-            Explore and configure powerful hybrid forecasting architectures that combine multiple modeling approaches
+          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 750px; margin: 0 0 0 4.5rem;'>
+            Advanced ensemble strategies combining multiple models or decomposing time series components for superior forecasting
           </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Model selection header + dropdown
-    st.subheader("Model selection")
-    hyb_options = ["LSTM-XGBoost", "LSTM-ANN", "LSTM-SARIMAX"]
-    cfg["hybrid_choice"] = st.selectbox(
-        "Choose a hybrid model",
-        options=hyb_options,
-        index=hyb_options.index(cfg.get("hybrid_choice","LSTM-XGBoost")),
-        help="Pick a hybrid architecture to configure."
+    # Ensemble Strategy Selection
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
+                    border-left: 4px solid #A855F7;
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
+            <h3 style='color: #A855F7; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
+                🎯 Select Ensemble Strategy
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    data_source_placeholder()
-
-    # Parameter mode
-    st.subheader("Parameter mode")
-    mode = st.radio(
-        "How do you want to set parameters?",
-        options=["Automatic (optimize)", "Manual"], horizontal=True,
-        index=0 if (
-            (cfg["hybrid_choice"] == "LSTM-XGBoost"  and cfg.get("hyb_lstm_xgb_param_mode","Automatic")     == "Automatic") or
-            (cfg["hybrid_choice"] == "LSTM-ANN"      and cfg.get("hyb_lstm_ann_param_mode","Automatic")     == "Automatic") or
-            (cfg["hybrid_choice"] == "LSTM-SARIMAX"  and cfg.get("hyb_lstm_sarimax_param_mode","Automatic") == "Automatic")
-        ) else 1,
-        key="hyb_mode_radio"
+    ensemble_type = st.radio(
+        "Choose your hybrid modeling approach",
+        options=[
+            "⚖️ Weighted Ensemble (Combine Trained Models)",
+            "🔬 Decomposition + Ensemble (Component-Based Modeling)",
+            "🔗 Stacking Ensemble (Meta-Learning)",
+            "🧠 LSTM-SARIMAX Hybrid (Neural + Statistical)",
+            "🚀 LSTM-XGBoost Hybrid (Neural + Gradient Boosting)",
+            "🎯 LSTM-ANN Hybrid (Neural + Neural Residuals)"
+        ],
+        index=0,
+        help="Weighted: Combine trained models | Decomposition: Component-based | Stacking: Meta-learning | LSTM-SARIMAX: LSTM + ARIMA residuals | LSTM-XGBoost: LSTM + XGBoost residuals | LSTM-ANN: LSTM + ANN residual network"
     )
 
-    # ---------------- LSTM-XGBoost ----------------
-    if cfg["hybrid_choice"] == "LSTM-XGBoost":
-        cfg["hyb_lstm_xgb_param_mode"] = "Automatic" if "Automatic" in mode else "Manual"
-        with st.expander("🔗 Strategy (placeholder)", expanded=True):
-            st.write("• Phase 1: LSTM → predictions/residuals")
-            st.write("• Phase 2: XGBoost on residuals or stacked features")
+    # Dataset Selection (Feature Engineering Integration)
+    st.markdown("### 🎨 Dataset Selection")
 
-        if cfg["hyb_lstm_xgb_param_mode"] == "Automatic":
-            st.caption("No training yet — placeholders for search settings.")
-            c1, c2 = st.columns(2)
-            with c1:
-                cfg["hyb_lstm_search_method"] = st.selectbox(
-                    "Search method", ["Grid (bounded)", "Random", "Bayesian (planned)"],
-                    index=["Grid (bounded)", "Random", "Bayesian (planned)"].index(cfg.get("hyb_lstm_search_method","Grid (bounded)")),
-                    key="hyb_lstm_xgb_search_method_select"
-                )
-            with c2:
-                cfg["split_ratio"] = st.slider("Train/Validation split ratio", 0.50, 0.95, float(cfg.get("split_ratio",0.80)), 0.01, key="hyb_lstm_xgb_split_ratio")
+    # Check if feature engineering has been run
+    feature_eng_data = st.session_state.get("feature_engineering", {})
+    has_variant_a = "A" in feature_eng_data and isinstance(feature_eng_data["A"], pd.DataFrame) and not feature_eng_data["A"].empty
+    has_variant_b = "B" in feature_eng_data and isinstance(feature_eng_data["B"], pd.DataFrame) and not feature_eng_data["B"].empty
 
-            st.markdown("**Bounds (placeholders)**")
-            c1, c2, c3 = st.columns(3)
-            with c1: cfg["hyb_lstm_max_units"] = int(st.number_input("LSTM max units", 8, 1024, int(cfg.get("hyb_lstm_max_units",256)), step=8))
-            with c2:
-                cfg["hyb_xgb_estimators_min"] = int(st.number_input("XGB min n_estimators", 50, 5000, int(cfg.get("hyb_xgb_estimators_min",100)), step=50))
-                cfg["hyb_xgb_estimators_max"] = int(st.number_input("XGB max n_estimators", 50, 5000, int(cfg.get("hyb_xgb_estimators_max",1000)), step=50))
-            with c3:
-                cfg["hyb_xgb_depth_min"] = int(st.number_input("XGB min max_depth", 1, 30, int(cfg.get("hyb_xgb_depth_min",3))))
-                cfg["hyb_xgb_depth_max"] = int(st.number_input("XGB max max_depth", 1, 30, int(cfg.get("hyb_xgb_depth_max",12))))
-            st.slider("XGB eta range (placeholder)",
-                      float(cfg.get("hyb_xgb_eta_min",0.01)),
-                      float(cfg.get("hyb_xgb_eta_max",0.3)),
-                      float(cfg.get("hyb_xgb_eta",0.1)),
-                      key="hyb_xgb_eta_range")
+    dataset_options = ["📊 Original Dataset (Basic Features)"]
+    if has_variant_a:
+        dataset_options.append("🔢 Variant A (OHE + Calendar Features)")
+    if has_variant_b:
+        dataset_options.append("🌀 Variant B (Cyclical + Harmonic Features)")
+
+    if len(dataset_options) > 1:
+        st.info("✨ **Feature-engineered datasets detected!** Select a dataset with advanced features to improve base model performance.")
+
+    selected_dataset = st.selectbox(
+        "Choose dataset for hybrid models",
+        options=dataset_options,
+        index=0,
+        help="Original: Basic time series data | Variant A: One-hot encoded calendar features | Variant B: Cyclical sin/cos encoded features"
+    )
+
+    # Store selected dataset in session state for hybrid functions to access
+    st.session_state["hybrid_selected_dataset"] = selected_dataset
+
+    st.divider()
+
+    if "Weighted Ensemble" in ensemble_type:
+        _page_hybrid_weighted()
+    elif "Decomposition" in ensemble_type:
+        _page_hybrid_decomposition()
+    elif "LSTM-SARIMAX" in ensemble_type:
+        _page_hybrid_lstm_sarimax()
+    elif "LSTM-XGBoost" in ensemble_type:
+        _page_hybrid_lstm_xgb()
+    elif "LSTM-ANN" in ensemble_type:
+        _page_hybrid_lstm_ann()
+    else:
+        _page_hybrid_stacking()
+
+
+def _get_hybrid_dataset():
+    """
+    Get the selected dataset for hybrid models based on user choice.
+    Returns the appropriate dataset (original, Variant A, or Variant B).
+    """
+    selected = st.session_state.get("hybrid_selected_dataset", "📊 Original Dataset (Basic Features)")
+
+    # Try Variant A (OHE + Calendar Features)
+    if "Variant A" in selected:
+        feature_eng_data = st.session_state.get("feature_engineering", {})
+        variant_a = feature_eng_data.get("A")
+        if isinstance(variant_a, pd.DataFrame) and not variant_a.empty:
+            return variant_a.copy()
+
+    # Try Variant B (Cyclical + Harmonic Features)
+    if "Variant B" in selected:
+        feature_eng_data = st.session_state.get("feature_engineering", {})
+        variant_b = feature_eng_data.get("B")
+        if isinstance(variant_b, pd.DataFrame) and not variant_b.empty:
+            return variant_b.copy()
+
+    # Fallback to original dataset
+    fused_data = st.session_state.get("processed_df")
+    if fused_data is None or (isinstance(fused_data, pd.DataFrame) and fused_data.empty):
+        fused_data = st.session_state.get("merged_data")
+
+    return fused_data
+
+
+def _page_hybrid_weighted():
+    """Weighted Ensemble combining SARIMAX, XGBoost, LSTM, and ANN predictions."""
+
+    # Weighted Ensemble Header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
+                    border-left: 4px solid {SUCCESS_COLOR};
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);'>
+            <h2 style='color: {SUCCESS_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);'>
+                ⚖️ Weighted Ensemble
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                Combine predictions from multiple trained models with optimized weights
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Check available models in session state
+    available_models = {}
+    model_info = []
+
+    # Check SARIMAX
+    sarimax_results = st.session_state.get("sarimax_results")
+    if sarimax_results and sarimax_results.get("per_h"):
+        available_models["SARIMAX"] = sarimax_results
+        sarimax_metrics = _extract_sarimax_metrics()
+        if sarimax_metrics:
+            model_info.append({
+                "Model": "SARIMAX",
+                "MAE": sarimax_metrics.get("MAE", np.nan),
+                "RMSE": sarimax_metrics.get("RMSE", np.nan),
+                "MAPE": sarimax_metrics.get("MAPE", np.nan),
+                "Accuracy": sarimax_metrics.get("Accuracy", np.nan),
+            })
+
+    # Check ML models
+    ml_mh_results = st.session_state.get("ml_mh_results")
+    if ml_mh_results and ml_mh_results.get("per_h"):
+        model_type = ml_mh_results.get("results_df", {}).get("Model", pd.Series(["Unknown"])).iloc[0] if not ml_mh_results.get("results_df", pd.DataFrame()).empty else "ML Model"
+        available_models[model_type] = ml_mh_results
+        ml_metrics = _extract_ml_metrics()
+        if ml_metrics:
+            model_info.append({
+                "Model": model_type,
+                "MAE": ml_metrics.get("MAE", np.nan),
+                "RMSE": ml_metrics.get("RMSE", np.nan),
+                "MAPE": ml_metrics.get("MAPE", np.nan),
+                "Accuracy": ml_metrics.get("Accuracy", np.nan),
+            })
+
+    # Check for individual XGBoost/LSTM/ANN results (from All Models mode)
+    for model_name in ["XGBoost", "LSTM", "ANN"]:
+        key = f"ml_mh_results_{model_name.lower()}"
+        model_results = st.session_state.get(key)
+        if model_results and model_results.get("per_h") and model_name not in available_models:
+            available_models[model_name] = model_results
+            results_df = model_results.get("results_df")
+            if results_df is not None and not results_df.empty:
+                model_info.append({
+                    "Model": model_name,
+                    "MAE": results_df["Test_MAE"].mean(),
+                    "RMSE": results_df["Test_RMSE"].mean(),
+                    "MAPE": results_df["Test_MAPE"].mean(),
+                    "Accuracy": results_df["Test_Acc"].mean(),
+                })
+
+    # Display available models
+    if len(available_models) < 2:
+        st.warning(
+            f"""
+            ⚠️ **Insufficient Models for Ensemble**
+
+            Found **{len(available_models)} model(s)**. Need at least **2 models** to create an ensemble.
+
+            **Available models:** {', '.join(available_models.keys()) if available_models else 'None'}
+
+            **To train models:**
+            - **SARIMAX**: Go to Benchmarks (Page 05)
+            - **XGBoost/LSTM/ANN**: Go to Machine Learning tab above
+
+            Train at least 2 different models, then return here to create your ensemble!
+            """
+        )
+        return
+
+    # Success - show available models
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
+                    border-left: 4px solid {SUCCESS_COLOR};
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);'>
+            <h3 style='color: {SUCCESS_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.2rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);'>
+                ✅ {len(available_models)} Models Ready for Ensemble
+            </h3>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                {', '.join(available_models.keys())}
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Show model comparison table
+    if model_info:
+        st.markdown("### 📊 Individual Model Performance")
+        comparison_df = pd.DataFrame(model_info)
+        comparison_df = comparison_df.sort_values("RMSE", ascending=True).reset_index(drop=True)
+
+        st.dataframe(
+            comparison_df.style.format({
+                "MAE": "{:.4f}",
+                "RMSE": "{:.4f}",
+                "MAPE": "{:.2f}",
+                "Accuracy": "{:.2f}"
+            }).background_gradient(cmap='RdYlGn_r', subset=['MAE', 'RMSE'])
+             .background_gradient(cmap='RdYlGn', subset=['Accuracy']),
+            use_container_width=True,
+            height=200
+        )
+
+    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
+
+    # Weighting strategy selection
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 2rem 0 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+            <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                ⚖️ Weighting Strategy
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    weighting_strategy = st.radio(
+        "Choose how to combine model predictions",
+        options=[
+            "Simple Average (Equal Weights)",
+            "Inverse Error Weighting (Performance-Based)",
+            "Manual Weights"
+        ],
+        index=0,
+        help="Simple Average: All models weighted equally | Inverse Error: Better models get higher weights | Manual: Set your own weights"
+    )
+
+    # Configure weights based on strategy
+    weights = {}
+
+    if "Simple Average" in weighting_strategy:
+        # Equal weights
+        equal_weight = 1.0 / len(available_models)
+        for model_name in available_models.keys():
+            weights[model_name] = equal_weight
+
+        st.info(f"ℹ️ Each model weighted equally at {equal_weight:.3f} ({equal_weight*100:.1f}%)")
+
+    elif "Inverse Error" in weighting_strategy:
+        # Weight by inverse RMSE
+        rmse_values = {}
+        for info in model_info:
+            rmse_values[info["Model"]] = info["RMSE"]
+
+        # Calculate inverse error weights
+        inverse_rmse = {k: 1.0 / v if v > 0 else 0 for k, v in rmse_values.items()}
+        total_inv = sum(inverse_rmse.values())
+
+        if total_inv > 0:
+            weights = {k: v / total_inv for k, v in inverse_rmse.items()}
         else:
-            st.caption("Manual hyperparameters (placeholders).")
-            c1, c2, c3 = st.columns(3)
-            with c1: cfg["hyb_lstm_units"] = int(st.number_input("LSTM hidden units", 8, 1024, int(cfg.get("hyb_lstm_units",64)), step=8))
-            with c2: cfg["hyb_xgb_estimators"] = int(st.number_input("XGB n_estimators", 50, 5000, int(cfg.get("hyb_xgb_estimators",300)), step=50))
-            with c3: cfg["hyb_xgb_depth"] = int(st.number_input("XGB max_depth", 1, 30, int(cfg.get("hyb_xgb_depth",6))))
-            cfg["hyb_xgb_eta"] = float(st.number_input("XGB learning rate (eta)", 0.001, 1.0, float(cfg.get("hyb_xgb_eta",0.1))))
+            # Fallback to equal weights
+            equal_weight = 1.0 / len(available_models)
+            weights = {k: equal_weight for k in available_models.keys()}
 
-    # ---------------- LSTM-ANN ----------------
-    elif cfg["hybrid_choice"] == "LSTM-ANN":
-        cfg["hyb_lstm_ann_param_mode"] = "Automatic" if "Automatic" in mode else "Manual"
-        with st.expander("🔗 Strategy (placeholder)", expanded=True):
-            st.write("• LSTM sequence embedding → ANN dense head")
+        # Show weights
+        st.markdown("**📊 Calculated Weights (Lower RMSE = Higher Weight)**")
+        weight_df = pd.DataFrame([
+            {"Model": k, "RMSE": rmse_values.get(k, np.nan), "Weight": v, "Weight %": v * 100}
+            for k, v in weights.items()
+        ]).sort_values("Weight", ascending=False)
 
-        if cfg["hyb_lstm_ann_param_mode"] == "Automatic":
-            st.caption("No training yet — placeholders for search settings.")
-            c1, c2 = st.columns(2)
-            with c1:
-                cfg["hyb2_lstm_search_method"] = st.selectbox(
-                    "Search method", ["Grid (bounded)", "Random", "Bayesian (planned)"],
-                    index=["Grid (bounded)", "Random", "Bayesian (planned)"].index(cfg.get("hyb2_lstm_search_method","Grid (bounded)")),
-                    key="hyb_lstm_ann_search_method_select"
+        st.dataframe(
+            weight_df.style.format({
+                "RMSE": "{:.4f}",
+                "Weight": "{:.4f}",
+                "Weight %": "{:.2f}%"
+            }).background_gradient(cmap='RdYlGn_r', subset=['RMSE'])
+             .background_gradient(cmap='YlGn', subset=['Weight %']),
+            use_container_width=True,
+            height=200
+        )
+
+    else:  # Manual weights
+        st.markdown("**🎛️ Set Custom Weights**")
+        st.caption("Weights will be automatically normalized to sum to 1.0")
+
+        cols = st.columns(len(available_models))
+        manual_weights = {}
+
+        for idx, model_name in enumerate(available_models.keys()):
+            with cols[idx]:
+                manual_weights[model_name] = st.slider(
+                    f"{model_name}",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=1.0 / len(available_models),
+                    step=0.05,
+                    key=f"weight_{model_name}"
                 )
-            with c2:
-                cfg["split_ratio"] = st.slider("Train/Validation split ratio", 0.50, 0.95, float(cfg.get("split_ratio",0.80)), 0.01, key="hyb_lstm_ann_split_ratio")
 
-            st.markdown("**Bounds (placeholders)**")
-            c1, c2 = st.columns(2)
-            with c1: cfg["hyb2_lstm_max_units"] = int(st.number_input("LSTM max units", 8, 1024, int(cfg.get("hyb2_lstm_max_units",256)), step=8))
-            with c2:
-                cfg["hyb2_ann_max_layers"]  = int(st.number_input("ANN max layers", 1, 8, int(cfg.get("hyb2_ann_max_layers",4))))
-                cfg["hyb2_ann_max_neurons"] = int(st.number_input("ANN max neurons", 8, 1024, int(cfg.get("hyb2_ann_max_neurons",256)), step=8))
+        # Normalize weights
+        total_weight = sum(manual_weights.values())
+        if total_weight > 0:
+            weights = {k: v / total_weight for k, v in manual_weights.items()}
         else:
-            st.caption("Manual hyperparameters (placeholders).")
-            c1, c2, c3 = st.columns(3)
-            with c1: cfg["hyb2_lstm_units"] = int(st.number_input("LSTM hidden units", 8, 1024, int(cfg.get("hyb2_lstm_units",64)), step=8))
-            with c2: cfg["hyb2_ann_layers"] = int(st.number_input("ANN hidden layers", 1, 8, int(cfg.get("hyb2_ann_layers",2))))
-            with c3: cfg["hyb2_ann_neurons"] = int(st.number_input("ANN neurons per layer", 4, 1024, int(cfg.get("hyb2_ann_neurons",64)), step=4))
-            cfg["hyb2_ann_activation"] = st.selectbox(
-                "ANN activation", ["relu", "tanh", "sigmoid"],
-                index=["relu","tanh","sigmoid"].index(cfg.get("hyb2_ann_activation","relu"))
+            equal_weight = 1.0 / len(available_models)
+            weights = {k: equal_weight for k in available_models.keys()}
+
+        # Show normalized weights
+        st.info(f"ℹ️ Normalized weights: {' | '.join([f'{k}: {v:.3f} ({v*100:.1f}%)' for k, v in weights.items()])}")
+
+    # Create Ensemble Button
+    st.divider()
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        create_ensemble = st.button(
+            "🚀 Create Weighted Ensemble",
+            type="primary",
+            use_container_width=True,
+            help="Combine models with selected weights"
+        )
+
+    if create_ensemble:
+        with st.spinner("Creating weighted ensemble..."):
+            try:
+                # Extract predictions from each model (for first target horizon as example)
+                ensemble_predictions = []
+                ensemble_actuals = []
+                model_predictions_dict = {}
+
+                # Get horizon 1 data from each model
+                horizon = 1
+
+                for model_name, model_results in available_models.items():
+                    per_h = model_results.get("per_h", {})
+
+                    if horizon in per_h:
+                        h_data = per_h[horizon]
+                        forecast = h_data.get("forecast")
+                        actual = h_data.get("y_test")
+
+                        if forecast is not None and actual is not None:
+                            model_predictions_dict[model_name] = {
+                                "forecast": forecast,
+                                "actual": actual,
+                                "weight": weights.get(model_name, 0)
+                            }
+
+                            if len(ensemble_actuals) == 0:
+                                ensemble_actuals = actual
+
+                # Combine predictions with weights
+                if model_predictions_dict:
+                    # Ensure all forecasts have same length
+                    min_length = min(len(d["forecast"]) for d in model_predictions_dict.values())
+
+                    ensemble_forecast = np.zeros(min_length)
+                    for model_name, data in model_predictions_dict.items():
+                        forecast_trimmed = data["forecast"][:min_length]
+                        ensemble_forecast += forecast_trimmed * data["weight"]
+
+                    # Trim actual to match
+                    ensemble_actuals = ensemble_actuals[:min_length]
+
+                    # Calculate ensemble metrics directly
+                    from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+                    mae = mean_absolute_error(ensemble_actuals, ensemble_forecast)
+                    rmse = np.sqrt(mean_squared_error(ensemble_actuals, ensemble_forecast))
+
+                    # Calculate MAPE
+                    mape = np.mean(np.abs((ensemble_actuals - ensemble_forecast) / ensemble_actuals)) * 100
+
+                    # Calculate Accuracy (1 - MAPE/100)
+                    accuracy = max(0, 100 - mape)
+
+                    ensemble_metrics = {
+                        "MAE": mae,
+                        "RMSE": rmse,
+                        "MAPE": mape,
+                        "Accuracy": accuracy
+                    }
+
+                    # Store ensemble results in session state
+                    st.session_state["ensemble_results"] = {
+                        "predictions": ensemble_forecast,
+                        "actuals": ensemble_actuals,
+                        "metrics": ensemble_metrics,
+                        "weights": weights,
+                        "models": list(available_models.keys()),
+                        "model_predictions": model_predictions_dict
+                    }
+
+                    st.success("✅ **Ensemble Created Successfully!**")
+
+                    # Display ensemble metrics
+                    st.markdown("### 🏆 Ensemble Performance")
+
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAE", ensemble_metrics["MAE"], "", PRIMARY_COLOR),
+                            use_container_width=True,
+                            key="ensemble_mae"
+                        )
+                    with col2:
+                        st.plotly_chart(
+                            _create_kpi_indicator("RMSE", ensemble_metrics["RMSE"], "", SECONDARY_COLOR),
+                            use_container_width=True,
+                            key="ensemble_rmse"
+                        )
+                    with col3:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAPE", ensemble_metrics["MAPE"], "%", WARNING_COLOR),
+                            use_container_width=True,
+                            key="ensemble_mape"
+                        )
+                    with col4:
+                        st.plotly_chart(
+                            _create_kpi_indicator("Accuracy", ensemble_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                            use_container_width=True,
+                            key="ensemble_accuracy"
+                        )
+
+                    # Comparison with individual models
+                    st.markdown("### 📊 Ensemble vs Individual Models")
+
+                    comparison_data = []
+                    for info in model_info:
+                        comparison_data.append({
+                            "Model": info["Model"],
+                            "Type": "Individual",
+                            "MAE": info["MAE"],
+                            "RMSE": info["RMSE"],
+                            "MAPE": info["MAPE"],
+                            "Accuracy": info["Accuracy"],
+                        })
+
+                    # Add ensemble
+                    comparison_data.append({
+                        "Model": "Weighted Ensemble",
+                        "Type": "Ensemble",
+                        "MAE": ensemble_metrics["MAE"],
+                        "RMSE": ensemble_metrics["RMSE"],
+                        "MAPE": ensemble_metrics["MAPE"],
+                        "Accuracy": ensemble_metrics["Accuracy"],
+                    })
+
+                    comparison_df = pd.DataFrame(comparison_data)
+
+                    st.dataframe(
+                        comparison_df.style.format({
+                            "MAE": "{:.4f}",
+                            "RMSE": "{:.4f}",
+                            "MAPE": "{:.2f}",
+                            "Accuracy": "{:.2f}"
+                        }).apply(lambda x: ['background-color: rgba(34, 197, 94, 0.2)' if v == "Ensemble" else '' for v in x], subset=['Type'], axis=0)
+                         .background_gradient(cmap='RdYlGn_r', subset=['RMSE']),
+                        use_container_width=True,
+                        height=300
+                    )
+
+                    # Forecast visualization
+                    st.markdown("### 📈 Ensemble Forecast vs Actuals (Horizon 1)")
+
+                    fig = go.Figure()
+
+                    # Actual values
+                    fig.add_trace(go.Scatter(
+                        y=ensemble_actuals,
+                        mode='lines+markers',
+                        name='Actual',
+                        line=dict(color=PRIMARY_COLOR, width=2.5),
+                        marker=dict(size=5, symbol='circle'),
+                    ))
+
+                    # Ensemble forecast
+                    fig.add_trace(go.Scatter(
+                        y=ensemble_forecast,
+                        mode='lines+markers',
+                        name='Ensemble Forecast',
+                        line=dict(color=SUCCESS_COLOR, width=2.5, dash='dash'),
+                        marker=dict(size=5, symbol='diamond'),
+                    ))
+
+                    # Individual model forecasts
+                    colors = [SECONDARY_COLOR, WARNING_COLOR, DANGER_COLOR, "#9333EA"]
+                    for idx, (model_name, data) in enumerate(model_predictions_dict.items()):
+                        fig.add_trace(go.Scatter(
+                            y=data["forecast"][:min_length],
+                            mode='lines',
+                            name=f'{model_name} (w={data["weight"]:.2f})',
+                            line=dict(color=colors[idx % len(colors)], width=1.5, dash='dot'),
+                            opacity=0.6
+                        ))
+
+                    fig.update_layout(
+                        xaxis_title="Time Step",
+                        yaxis_title="Target Value",
+                        hovermode='x unified',
+                        plot_bgcolor='rgba(15, 23, 42, 0.95)',
+                        paper_bgcolor='rgba(15, 23, 42, 0.8)',
+                        font=dict(color=TEXT_COLOR, size=11),
+                        height=500,
+                        legend=dict(
+                            orientation="v",
+                            yanchor="top",
+                            y=1,
+                            xanchor="right",
+                            x=1.15,
+                            bgcolor='rgba(15, 23, 42, 0.8)',
+                            bordercolor=PRIMARY_COLOR,
+                            borderwidth=1
+                        ),
+                        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+                        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True, key="ensemble_forecast_plot")
+
+                else:
+                    st.error("❌ Could not extract predictions from models. Please ensure models are properly trained.")
+
+            except Exception as e:
+                st.error(f"❌ **Ensemble Creation Failed**\n\n{str(e)}")
+                import traceback
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
+
+    # Show existing ensemble if available
+    elif "ensemble_results" in st.session_state:
+        st.info("ℹ️ **Previous ensemble results available.** Click 'Create Weighted Ensemble' to generate new results with current settings.")
+
+        ensemble_data = st.session_state["ensemble_results"]
+        ensemble_metrics = ensemble_data["metrics"]
+
+        st.markdown("### 🏆 Previous Ensemble Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", ensemble_metrics["MAE"], "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="prev_ensemble_mae"
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", ensemble_metrics["RMSE"], "", SECONDARY_COLOR),
+                use_container_width=True,
+                key="prev_ensemble_rmse"
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", ensemble_metrics["MAPE"], "%", WARNING_COLOR),
+                use_container_width=True,
+                key="prev_ensemble_mape"
+            )
+        with col4:
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", ensemble_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                use_container_width=True,
+                key="prev_ensemble_accuracy"
             )
 
-    # ---------------- LSTM-SARIMAX ----------------
+
+# -----------------------------------------------------------------------------
+# FFT Decomposition Helper Functions
+# -----------------------------------------------------------------------------
+def _extract_fft_cycles(y: pd.Series, top_k: int=5, detrend_mean: bool=True) -> pd.DataFrame:
+    """
+    Extract dominant frequency components using FFT.
+    Returns DataFrame with cycle information: period_days, amplitude, frequency.
+    """
+    # Ensure daily frequency and interpolate
+    y = y.asfreq("D").interpolate(method="time", limit_direction="both")
+    sig = y.values.astype(float)
+
+    if detrend_mean:
+        sig = sig - np.nanmean(sig)
+
+    # Perform FFT
+    fft_vals = np.fft.rfft(sig)
+    freqs = np.fft.rfftfreq(len(sig), d=1.0)
+
+    # Filter out zero frequency
+    valid = freqs > 0
+    freqs = freqs[valid]
+    amps = np.abs(fft_vals[valid])
+
+    if len(freqs) == 0:
+        return pd.DataFrame(columns=["period_days", "amplitude", "frequency"])
+
+    # Get top K frequencies
+    k = max(1, min(top_k, len(freqs)))
+    idx = np.argpartition(amps, -k)[-k:]
+    idx = idx[np.argsort(amps[idx])[::-1]]
+
+    periods = 1.0 / freqs[idx]
+    amplitudes = amps[idx]
+    frequencies = freqs[idx]
+
+    out = pd.DataFrame({
+        "period_days": periods,
+        "amplitude": amplitudes,
+        "frequency": frequencies
+    })
+
+    return out.sort_values("amplitude", ascending=False).reset_index(drop=True)
+
+
+def _fft_decompose(ts: pd.Series, top_k: int=3) -> dict:
+    """
+    Decompose time series using FFT into:
+    - Trend: Low-frequency component (moving average)
+    - Seasonal components: Top K frequency components
+    - Residual: What's left after removing trend and seasonal
+
+    Returns dict with 'trend', 'seasonal' (dict of components), 'residual', 'cycles_info'
+    """
+    # Extract dominant cycles
+    cycles_df = _extract_fft_cycles(ts, top_k=top_k, detrend_mean=True)
+
+    if cycles_df.empty:
+        # Fallback: just return mean as trend
+        trend = pd.Series(np.full(len(ts), ts.mean()), index=ts.index)
+        residual = ts - trend
+        return {
+            "trend": trend.values,
+            "seasonal": {},
+            "residual": residual.values,
+            "cycles_info": cycles_df,
+            "seasonal_combined": np.zeros(len(ts))
+        }
+
+    # Calculate trend as low-pass filter (moving average)
+    window = max(7, int(cycles_df["period_days"].max() // 2))
+    if window % 2 == 0:
+        window += 1
+    trend = ts.rolling(window=window, center=True, min_periods=1).mean()
+
+    # Detrend signal
+    detrended = ts - trend
+
+    # Extract seasonal components using inverse FFT
+    sig = detrended.values.astype(float)
+    fft_vals = np.fft.rfft(sig)
+    freqs = np.fft.rfftfreq(len(sig), d=1.0)
+
+    # Create mask for seasonal components (keep only top K frequencies)
+    seasonal_mask = np.zeros(len(fft_vals), dtype=bool)
+    seasonal_components = {}
+
+    for idx, row in cycles_df.iterrows():
+        freq = row["frequency"]
+        period = row["period_days"]
+
+        # Find closest frequency in FFT
+        freq_idx = np.argmin(np.abs(freqs - freq))
+        seasonal_mask[freq_idx] = True
+
+        # Extract this component
+        component_fft = np.zeros_like(fft_vals)
+        component_fft[freq_idx] = fft_vals[freq_idx]
+        component_signal = np.fft.irfft(component_fft, n=len(sig))
+
+        seasonal_components[f"seasonal_{int(period)}d"] = component_signal
+
+    # Combined seasonal component
+    seasonal_fft = fft_vals * seasonal_mask
+    seasonal_combined = np.fft.irfft(seasonal_fft, n=len(sig))
+
+    # Residual
+    residual = sig - seasonal_combined
+
+    return {
+        "trend": trend.values,
+        "seasonal": seasonal_components,
+        "seasonal_combined": seasonal_combined,
+        "residual": residual,
+        "cycles_info": cycles_df
+    }
+
+
+def _fft_multiscale_decompose(ts: pd.Series, low_cutoff: int=30, high_cutoff: int=7) -> dict:
+    """
+    4-Component FFT Multi-Scale Decomposition.
+
+    Separates time series into 4 frequency bands:
+    1. Trend: Very low frequency (DC + smooth moving average)
+    2. Low-Frequency Seasonal: Periods >= low_cutoff (monthly, quarterly, yearly)
+    3. High-Frequency Seasonal: Periods <= high_cutoff (daily, weekly)
+    4. Residual: Mid-frequency + noise
+
+    Args:
+        ts: Time series to decompose
+        low_cutoff: Minimum period (days) for low-frequency seasonal
+        high_cutoff: Maximum period (days) for high-frequency seasonal
+
+    Returns:
+        dict with 'trend', 'low_freq_seasonal', 'high_freq_seasonal', 'residual', 'cycles_info'
+    """
+    # Extract all dominant cycles
+    cycles_df = _extract_fft_cycles(ts, top_k=20, detrend_mean=True)
+
+    if cycles_df.empty:
+        # Fallback
+        trend = pd.Series(np.full(len(ts), ts.mean()), index=ts.index)
+        return {
+            "trend": trend.values,
+            "low_freq_seasonal": np.zeros(len(ts)),
+            "high_freq_seasonal": np.zeros(len(ts)),
+            "residual": (ts - trend).values,
+            "cycles_info": cycles_df,
+            "low_freq_cycles": pd.DataFrame(),
+            "high_freq_cycles": pd.DataFrame()
+        }
+
+    # Calculate trend as moving average
+    window = max(7, int(low_cutoff * 2))
+    if window % 2 == 0:
+        window += 1
+    trend = ts.rolling(window=window, center=True, min_periods=1).mean()
+
+    # Detrend signal
+    detrended = ts - trend
+
+    # Perform FFT on detrended signal
+    sig = detrended.values.astype(float)
+    fft_vals = np.fft.rfft(sig)
+    freqs = np.fft.rfftfreq(len(sig), d=1.0)
+
+    # Separate cycles into low-freq and high-freq
+    low_freq_mask = np.zeros(len(fft_vals), dtype=bool)
+    high_freq_mask = np.zeros(len(fft_vals), dtype=bool)
+
+    low_freq_cycles = []
+    high_freq_cycles = []
+
+    for idx, row in cycles_df.iterrows():
+        freq = row["frequency"]
+        period = row["period_days"]
+
+        # Find closest frequency in FFT
+        freq_idx = np.argmin(np.abs(freqs - freq))
+
+        if period >= low_cutoff:
+            # Low-frequency seasonal (monthly, quarterly, yearly)
+            low_freq_mask[freq_idx] = True
+            low_freq_cycles.append(row)
+        elif period <= high_cutoff:
+            # High-frequency seasonal (daily, weekly)
+            high_freq_mask[freq_idx] = True
+            high_freq_cycles.append(row)
+
+    # Extract low-frequency seasonal component
+    low_freq_fft = fft_vals * low_freq_mask
+    low_freq_seasonal = np.fft.irfft(low_freq_fft, n=len(sig))
+
+    # Extract high-frequency seasonal component
+    high_freq_fft = fft_vals * high_freq_mask
+    high_freq_seasonal = np.fft.irfft(high_freq_fft, n=len(sig))
+
+    # Residual: everything else (mid-frequency + noise)
+    residual = sig - low_freq_seasonal - high_freq_seasonal
+
+    # Convert cycles lists to DataFrames
+    low_freq_cycles_df = pd.DataFrame(low_freq_cycles) if low_freq_cycles else pd.DataFrame(columns=cycles_df.columns)
+    high_freq_cycles_df = pd.DataFrame(high_freq_cycles) if high_freq_cycles else pd.DataFrame(columns=cycles_df.columns)
+
+    return {
+        "trend": trend.values,
+        "low_freq_seasonal": low_freq_seasonal,
+        "high_freq_seasonal": high_freq_seasonal,
+        "residual": residual,
+        "cycles_info": cycles_df,
+        "low_freq_cycles": low_freq_cycles_df,
+        "high_freq_cycles": high_freq_cycles_df
+    }
+
+
+def _page_hybrid_decomposition():
+    """Decomposition + Ensemble: Break time series into Trend, Seasonal, and Residual components."""
+
+    # Decomposition Ensemble Header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+            <h2 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                🔬 Decomposition + Ensemble
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                Decompose time series into Trend, Seasonal, and Residual components, model each separately, then combine
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Get selected dataset (original, Variant A, or Variant B)
+    fused_data = _get_hybrid_dataset()
+    selected_dataset_name = st.session_state.get("hybrid_selected_dataset", "📊 Original Dataset")
+
+    # Show dataset info
+    st.info(f"🎨 **Using dataset**: {selected_dataset_name} | **Features**: {len(fused_data.columns)} columns | **Samples**: {len(fused_data)} rows")
+
+    if fused_data is None or (isinstance(fused_data, pd.DataFrame) and fused_data.empty):
+        st.warning(
+            """
+            ⚠️ **No Fused Data Available**
+
+            You need to load and fuse data before using Decomposition + Ensemble.
+
+            **Steps:**
+            1. Go to **Data Hub** (Page 02) to load Patient, Weather, and Calendar data
+            2. Go to **Data Preparation Studio** (Page 03) to fuse the datasets
+            3. Return here to decompose and model your time series
+            """
+        )
+        return
+
+    # Info box explaining the approach
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 146, 60, 0.1));
+                    border-left: 4px solid {WARNING_COLOR};
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);'>
+            <h3 style='color: {WARNING_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.2rem; font-weight: 700;'>
+                💡 How It Works
+            </h3>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9; line-height: 1.6;'>
+                <strong>1. STL Decomposition:</strong> Breaks your time series into 3 components<br>
+                <strong>2. Component Modeling:</strong> Trains specialized models on each component<br>
+                &nbsp;&nbsp;&nbsp;• <strong>Trend</strong> → XGBoost (smooth patterns)<br>
+                &nbsp;&nbsp;&nbsp;• <strong>Seasonal</strong> → SARIMAX (cyclic patterns)<br>
+                &nbsp;&nbsp;&nbsp;• <strong>Residual</strong> → LSTM (complex non-linear patterns)<br>
+                <strong>3. Reconstruction:</strong> Combines all forecasts (Trend + Seasonal + Residual = Final)
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Configuration section
+    st.markdown("### ⚙️ Configuration")
+
+    # Initialize default values
+    seasonal_period = 7  # Default for classical mode
+    top_k_freq = 3  # Default for FFT mode
+
+    # Decomposition method selection
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.1));
+                    border-left: 4px solid #8B5CF6;
+                    padding: 1rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;'>
+            <h4 style='color: #8B5CF6; margin: 0 0 0.5rem 0; font-size: 1.1rem;'>
+                🔬 Decomposition Method
+            </h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    decomp_method = st.radio(
+        "Choose decomposition approach",
+        options=[
+            "📊 Classical (Seasonal Decomposition)",
+            "🌊 FFT Basic (Frequency-Based)",
+            "🎯 FFT Multi-Scale (4-Model Architecture)"
+        ],
+        index=0,
+        help="Classical: Trend+Seasonal+Residual (3 models) | FFT Basic: Auto-detect frequencies (3 models) | FFT Multi-Scale: Separate frequency bands (4 models with ANN)"
+    )
+
+    use_fft = "FFT" in decomp_method
+    use_multiscale = "Multi-Scale" in decomp_method
+
+    st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+
+    if use_multiscale:
+        # FFT Multi-Scale specific configuration
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            target_col = st.selectbox(
+                "Target Column",
+                options=[col for col in fused_data.columns if col not in ["Date", "datetime"]],
+                index=0 if "Target_1" not in fused_data.columns else list(fused_data.columns).index("Target_1") if "Target_1" in fused_data.columns else 0,
+                help="The time series column to decompose and forecast"
+            )
+
+        with col2:
+            low_freq_cutoff = st.slider(
+                "Low-Freq Cutoff (days)",
+                min_value=15,
+                max_value=90,
+                value=30,
+                help="Periods >= this are Low-Frequency (SARIMAX). E.g., monthly, quarterly"
+            )
+
+        with col3:
+            high_freq_cutoff = st.slider(
+                "High-Freq Cutoff (days)",
+                min_value=2,
+                max_value=14,
+                value=7,
+                help="Periods <= this are High-Frequency (ANN). E.g., daily, weekly"
+            )
+
+        with col4:
+            test_size = st.slider(
+                "Test Set Size (%)",
+                min_value=10,
+                max_value=40,
+                value=20,
+                step=5,
+                help="Percentage of data to use for testing"
+            )
+
+        st.info("ℹ️ **Multi-Scale Mode**: 4 components → Trend (XGBoost) + Low-freq Seasonal (SARIMAX) + High-freq Seasonal (ANN) + Residual (LSTM)")
+
+    elif use_fft:
+        # FFT-specific configuration
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            target_col = st.selectbox(
+                "Target Column",
+                options=[col for col in fused_data.columns if col not in ["Date", "datetime"]],
+                index=0 if "Target_1" not in fused_data.columns else list(fused_data.columns).index("Target_1") if "Target_1" in fused_data.columns else 0,
+                help="The time series column to decompose and forecast"
+            )
+
+        with col2:
+            top_k_freq = st.slider(
+                "Top K Frequencies",
+                min_value=1,
+                max_value=10,
+                value=3,
+                help="Number of dominant frequency components to extract"
+            )
+
+        with col3:
+            test_size = st.slider(
+                "Test Set Size (%)",
+                min_value=10,
+                max_value=40,
+                value=20,
+                step=5,
+                help="Percentage of data to use for testing"
+            )
+
+        st.info("ℹ️ **FFT Mode**: Will automatically detect and extract the strongest frequency patterns from your data")
+
     else:
-        cfg["hyb_lstm_sarimax_param_mode"] = "Automatic" if "Automatic" in mode else "Manual"
-        with st.expander("🔗 Strategy (placeholder)", expanded=True):
-            st.write("• SARIMAX: seasonality & exogenous; LSTM: nonlinear patterns")
-            st.write("• Combine via residuals or stacked features")
+        # Classical decomposition configuration
+        col1, col2, col3 = st.columns(3)
 
-        if cfg["hyb_lstm_sarimax_param_mode"] == "Automatic":
-            st.caption("No training yet — placeholders for search settings.")
-            c1, c2 = st.columns(2)
-            with c1:
-                cfg["hyb3_lstm_search_method"] = st.selectbox(
-                    "LSTM search method", ["Grid (bounded)", "Random", "Bayesian (planned)"],
-                    index=["Grid (bounded)", "Random", "Bayesian (planned)"].index(cfg.get("hyb3_lstm_search_method","Grid (bounded)"))
+        with col1:
+            target_col = st.selectbox(
+                "Target Column",
+                options=[col for col in fused_data.columns if col not in ["Date", "datetime"]],
+                index=0 if "Target_1" not in fused_data.columns else list(fused_data.columns).index("Target_1") if "Target_1" in fused_data.columns else 0,
+                help="The time series column to decompose and forecast"
+            )
+
+        with col2:
+            seasonal_period = st.number_input(
+                "Seasonal Period (must be odd)",
+                min_value=3,
+                max_value=365,
+                value=7,
+                step=2,
+                help="Period of seasonality - must be odd number (e.g., 7 for weekly, 31 for monthly)"
+            )
+
+            # Ensure odd number for seasonal_decompose
+            if seasonal_period % 2 == 0:
+                seasonal_period += 1
+                st.caption(f"⚠️ Adjusted to {seasonal_period} (requires odd numbers)")
+
+        with col3:
+            test_size = st.slider(
+                "Test Set Size (%)",
+                min_value=10,
+                max_value=40,
+                value=20,
+                step=5,
+                help="Percentage of data to use for testing"
+            )
+
+    st.divider()
+
+    # Train button
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        train_decomp = st.button(
+            "🚀 Train Decomposition Ensemble",
+            type="primary",
+            use_container_width=True,
+            help="Decompose, train specialized models, and combine forecasts"
+        )
+
+    if train_decomp:
+        with st.spinner("🔬 Decomposing time series and training component models..."):
+            try:
+                # Import required libraries
+                from statsmodels.tsa.seasonal import STL
+                from xgboost import XGBRegressor
+                from sklearn.preprocessing import StandardScaler
+                from sklearn.metrics import mean_absolute_error, mean_squared_error
+                import tensorflow as tf
+                from tensorflow import keras
+                from tensorflow.keras import layers
+
+                # Prepare data
+                df = fused_data.copy()
+                if "Date" not in df.columns and "datetime" in df.columns:
+                    df["Date"] = pd.to_datetime(df["datetime"])
+                elif "Date" in df.columns:
+                    df["Date"] = pd.to_datetime(df["Date"])
+
+                df = df.sort_values("Date").reset_index(drop=True)
+
+                # Create proper time series with DatetimeIndex
+                df = df.set_index("Date")
+                ts = df[target_col]
+
+                # Ensure daily frequency and interpolate any gaps (following EDA approach)
+                ts = ts.asfreq("D").interpolate(method="time", limit_direction="both")
+
+                # Train/test split
+                split_idx = int(len(ts) * (1 - test_size / 100))
+                ts_train = ts.iloc[:split_idx]
+                ts_test = ts.iloc[split_idx:]
+
+                st.info(f"📊 Data split: {len(ts_train)} train samples, {len(ts_test)} test samples")
+
+                # Branch based on decomposition method
+                if use_multiscale:
+                    # ========== FFT MULTI-SCALE DECOMPOSITION PATH (4 components) ==========
+                    st.markdown("### 🎯 Step 1: FFT Multi-Scale Decomposition")
+                    progress_bar = st.progress(0, text="Analyzing multi-scale frequency components...")
+
+                    # Apply FFT multi-scale decomposition
+                    decomp_result = _fft_multiscale_decompose(ts_train, low_cutoff=low_freq_cutoff, high_cutoff=high_freq_cutoff)
+
+                    trend_train = decomp_result["trend"]
+                    low_freq_seasonal_train = decomp_result["low_freq_seasonal"]
+                    high_freq_seasonal_train = decomp_result["high_freq_seasonal"]
+                    residual_train = decomp_result["residual"]
+                    cycles_info = decomp_result["cycles_info"]
+                    low_freq_cycles = decomp_result["low_freq_cycles"]
+                    high_freq_cycles = decomp_result["high_freq_cycles"]
+
+                    # Store the index for later use
+                    train_index = ts_train.index
+
+                    progress_bar.progress(20, text="Multi-scale FFT decomposition complete ✓")
+
+                    # Show detected cycles in both bands
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.markdown(f"#### 🌊 Low-Frequency Components (≥{low_freq_cutoff} days)")
+                        if not low_freq_cycles.empty:
+                            low_display = low_freq_cycles.copy()
+                            low_display["period_days"] = low_display["period_days"].round(2)
+                            low_display["amplitude"] = low_display["amplitude"].round(4)
+                            st.dataframe(low_display, use_container_width=True, hide_index=True, height=150)
+
+                            interpretations = []
+                            for _, row in low_freq_cycles.iterrows():
+                                period = row["period_days"]
+                                if 28 <= period <= 31:
+                                    interpretations.append(f"📆 Monthly (~{period:.1f}d)")
+                                elif 89 <= period <= 93:
+                                    interpretations.append(f"📈 Quarterly (~{period:.1f}d)")
+                                elif 360 <= period <= 370:
+                                    interpretations.append(f"🌍 Yearly (~{period:.1f}d)")
+                                else:
+                                    interpretations.append(f"🔄 {period:.1f}d cycle")
+                            st.success("**Patterns:** " + " | ".join(interpretations))
+                        else:
+                            st.info("No low-frequency patterns detected")
+
+                    with col2:
+                        st.markdown(f"#### 📅 High-Frequency Components (≤{high_freq_cutoff} days)")
+                        if not high_freq_cycles.empty:
+                            high_display = high_freq_cycles.copy()
+                            high_display["period_days"] = high_display["period_days"].round(2)
+                            high_display["amplitude"] = high_display["amplitude"].round(4)
+                            st.dataframe(high_display, use_container_width=True, hide_index=True, height=150)
+
+                            interpretations = []
+                            for _, row in high_freq_cycles.iterrows():
+                                period = row["period_days"]
+                                if 6 <= period <= 8:
+                                    interpretations.append(f"📅 Weekly (~{period:.1f}d)")
+                                else:
+                                    interpretations.append(f"🔄 {period:.1f}d cycle")
+                            st.success("**Patterns:** " + " | ".join(interpretations))
+                        else:
+                            st.info("No high-frequency patterns detected")
+
+                    # Visualize multi-scale decomposition
+                    fig_decomp = go.Figure()
+
+                    ts_train_clean = ts_train.dropna()
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=ts_train_clean.values,
+                        mode='lines',
+                        name='Original',
+                        line=dict(color=PRIMARY_COLOR, width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=trend_train,
+                        mode='lines',
+                        name='Trend',
+                        line=dict(color=SUCCESS_COLOR, width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=low_freq_seasonal_train,
+                        mode='lines',
+                        name=f'Low-Freq Seasonal (≥{low_freq_cutoff}d)',
+                        line=dict(color='#F59E0B', width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=high_freq_seasonal_train,
+                        mode='lines',
+                        name=f'High-Freq Seasonal (≤{high_freq_cutoff}d)',
+                        line=dict(color='#8B5CF6', width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=residual_train,
+                        mode='lines',
+                        name='Residual',
+                        line=dict(color=SECONDARY_COLOR, width=1.5)
+                    ))
+
+                    fig_decomp.update_layout(
+                        title="FFT Multi-Scale Decomposition (4 Components)",
+                        xaxis_title="Date",
+                        yaxis_title="Value",
+                        hovermode='x unified',
+                        plot_bgcolor='rgba(15, 23, 42, 0.95)',
+                        paper_bgcolor='rgba(15, 23, 42, 0.8)',
+                        font=dict(color=TEXT_COLOR, size=11),
+                        height=450,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+
+                    st.plotly_chart(fig_decomp, use_container_width=True, key="multiscale_decomposition_plot")
+
+                    # Mark that we're using 4-component mode
+                    use_4_components = True
+
+                elif use_fft:
+                    # ========== FFT BASIC DECOMPOSITION PATH (3 components) ==========
+                    st.markdown("### 🌊 Step 1: FFT Basic Decomposition")
+                    progress_bar = st.progress(0, text="Analyzing frequency components...")
+
+                    # Apply FFT decomposition
+                    decomp_result = _fft_decompose(ts_train, top_k=top_k_freq)
+
+                    trend_train = decomp_result["trend"]
+                    seasonal_train = decomp_result["seasonal_combined"]
+                    residual_train = decomp_result["residual"]
+                    cycles_info = decomp_result["cycles_info"]
+
+                    # Store the index for later use
+                    train_index = ts_train.index
+
+                    progress_bar.progress(20, text="FFT decomposition complete ✓")
+
+                    # Mark that we're using 3-component mode
+                    use_4_components = False
+
+                    # Show detected cycles
+                    if not cycles_info.empty:
+                        st.markdown("#### 🔍 Detected Frequency Components")
+                        cycles_display = cycles_info.copy()
+                        cycles_display["period_days"] = cycles_display["period_days"].round(2)
+                        cycles_display["amplitude"] = cycles_display["amplitude"].round(4)
+                        st.dataframe(cycles_display, use_container_width=True, hide_index=True)
+
+                        # Interpret cycles
+                        interpretations = []
+                        for _, row in cycles_info.iterrows():
+                            period = row["period_days"]
+                            if 6 <= period <= 8:
+                                interpretations.append(f"📅 **Weekly pattern** (~{period:.1f} days)")
+                            elif 28 <= period <= 31:
+                                interpretations.append(f"📆 **Monthly pattern** (~{period:.1f} days)")
+                            elif 89 <= period <= 93:
+                                interpretations.append(f"📈 **Quarterly pattern** (~{period:.1f} days)")
+                            elif 360 <= period <= 370:
+                                interpretations.append(f"🌍 **Yearly pattern** (~{period:.1f} days)")
+                            else:
+                                interpretations.append(f"🔄 **{period:.1f}-day cycle**")
+
+                        st.success("**Identified patterns:** " + " | ".join(interpretations))
+
+                    # Visualize FFT decomposition
+                    fig_decomp = go.Figure()
+
+                    ts_train_clean = ts_train.dropna()
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=ts_train_clean.values,
+                        mode='lines',
+                        name='Original',
+                        line=dict(color=PRIMARY_COLOR, width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=trend_train,
+                        mode='lines',
+                        name='Trend (Low-freq)',
+                        line=dict(color=SUCCESS_COLOR, width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=seasonal_train,
+                        mode='lines',
+                        name=f'Seasonal (Top {top_k_freq} freqs)',
+                        line=dict(color=WARNING_COLOR, width=2)
+                    ))
+
+                    fig_decomp.add_trace(go.Scatter(
+                        x=train_index,
+                        y=residual_train,
+                        mode='lines',
+                        name='Residual',
+                        line=dict(color=SECONDARY_COLOR, width=1.5)
+                    ))
+
+                    fig_decomp.update_layout(
+                        title="FFT-Based Time Series Decomposition (Training Data)",
+                        xaxis_title="Date",
+                        yaxis_title="Value",
+                        hovermode='x unified',
+                        plot_bgcolor='rgba(15, 23, 42, 0.95)',
+                        paper_bgcolor='rgba(15, 23, 42, 0.8)',
+                        font=dict(color=TEXT_COLOR, size=11),
+                        height=400,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+
+                    st.plotly_chart(fig_decomp, use_container_width=True, key="fft_decomposition_plot")
+
+                else:
+                    # ========== CLASSICAL DECOMPOSITION PATH ==========
+                    # Ensure seasonal_period is odd
+                    if seasonal_period % 2 == 0:
+                        seasonal_period += 1
+                        st.info(f"ℹ️ Adjusted seasonal period to {seasonal_period} (requires odd numbers)")
+
+                    # Validate data for decomposition
+                    min_required_points = 2 * seasonal_period + 1
+                    if len(ts_train.dropna()) < min_required_points:
+                        st.error(
+                            f"""
+                            ❌ **Insufficient Data for Decomposition**
+
+                            - **Training samples (non-null):** {len(ts_train.dropna())}
+                            - **Minimum required:** {min_required_points} (2 × seasonal period + 1)
+                        - **Seasonal period:** {seasonal_period}
+
+                        **Solutions:**
+                        1. Reduce test set size to get more training data
+                        2. Use a smaller seasonal period
+                        3. Load more historical data
+                        """
+                    )
+                    return
+
+                # ========== STEP 1: STL Decomposition ==========
+                st.markdown("### 📐 Step 1: STL Decomposition")
+
+                progress_bar = st.progress(0, text="Decomposing time series...")
+
+                # Apply STL decomposition on training data (use dropna like in EDA)
+                try:
+                    from statsmodels.tsa.seasonal import seasonal_decompose
+
+                    # Use seasonal_decompose instead of STL (more robust, same as EDA page)
+                    result = seasonal_decompose(
+                        ts_train.dropna(),
+                        model='additive',
+                        period=int(seasonal_period),
+                        extrapolate_trend='freq'
+                    )
+
+                    trend_train = result.trend.values
+                    seasonal_train = result.seasonal.values
+                    residual_train = result.resid.values
+
+                    # Store the index for later use
+                    train_index = ts_train.dropna().index
+
+                except Exception as e:
+                    st.error(f"❌ Decomposition failed: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                    return
+
+                progress_bar.progress(20, text="Decomposition complete ✓")
+
+                # Visualize decomposition
+                fig_decomp = go.Figure()
+
+                ts_train_clean = ts_train.dropna()
+
+                fig_decomp.add_trace(go.Scatter(
+                    x=train_index,
+                    y=ts_train_clean.values,
+                    mode='lines',
+                    name='Original',
+                    line=dict(color=PRIMARY_COLOR, width=2)
+                ))
+
+                fig_decomp.add_trace(go.Scatter(
+                    x=train_index,
+                    y=trend_train,
+                    mode='lines',
+                    name='Trend',
+                    line=dict(color=SUCCESS_COLOR, width=2)
+                ))
+
+                fig_decomp.add_trace(go.Scatter(
+                    x=train_index,
+                    y=seasonal_train,
+                    mode='lines',
+                    name='Seasonal',
+                    line=dict(color=WARNING_COLOR, width=2)
+                ))
+
+                fig_decomp.add_trace(go.Scatter(
+                    x=train_index,
+                    y=residual_train,
+                    mode='lines',
+                    name='Residual',
+                    line=dict(color=SECONDARY_COLOR, width=1.5)
+                ))
+
+                fig_decomp.update_layout(
+                    title="Time Series Decomposition (Training Data)",
+                    xaxis_title="Date",
+                    yaxis_title="Value",
+                    hovermode='x unified',
+                    plot_bgcolor='rgba(15, 23, 42, 0.95)',
+                    paper_bgcolor='rgba(15, 23, 42, 0.8)',
+                    font=dict(color=TEXT_COLOR, size=11),
+                    height=400,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
-            with c2:
-                cfg["split_ratio"] = st.slider("Train/Validation split ratio", 0.50, 0.95, float(cfg.get("split_ratio",0.80)), 0.01, key="hyb_lstm_sarimax_split_ratio")
 
-            st.markdown("**Bounds (placeholders)**")
-            c1, c2, c3, c4 = st.columns(4)
-            with c1: cfg["hyb3_lstm_max_units"] = int(st.number_input("LSTM max units", 8, 1024, int(cfg.get("hyb3_lstm_max_units",256)), step=8))
-            with c2: cfg["hyb3_max_p"] = int(st.number_input("SARIMAX max p", 0, 10, int(cfg.get("hyb3_max_p",5))))
-            with c3: cfg["hyb3_max_d"] = int(st.number_input("SARIMAX max d", 0, 3, int(cfg.get("hyb3_max_d",2))))
-            with c4: cfg["hyb3_max_q"] = int(st.number_input("SARIMAX max q", 0, 10, int(cfg.get("hyb3_max_q",5))))
+                st.plotly_chart(fig_decomp, use_container_width=True, key="decomposition_plot")
 
-            c1, c2, c3, c4 = st.columns(4)
-            with c1: cfg["hyb3_max_P"] = int(st.number_input("SARIMAX max P", 0, 5, int(cfg.get("hyb3_max_P",2))))
-            with c2: cfg["hyb3_max_D"] = int(st.number_input("SARIMAX max D", 0, 2, int(cfg.get("hyb3_max_D",1))))
-            with c3: cfg["hyb3_max_Q"] = int(st.number_input("SARIMAX max Q", 0, 5, int(cfg.get("hyb3_max_Q",2))))
-            with c4: cfg["hyb3_seasonal_period"] = int(st.number_input("Seasonal period (s)", 1, 365, int(cfg.get("hyb3_seasonal_period",7))))
+                # ========== STEP 2: Train XGBoost on Trend ==========
+                st.markdown("### 🌳 Step 2: Train XGBoost on Trend")
 
-            st.markdown("**Exogenous (X) features (placeholder)**")
-            st.multiselect("Select exogenous columns", options=[], key="hyb3_exog_auto")
-            cfg["hyb3_exogenous_cols"] = st.session_state.get("hyb3_exog_auto", [])
+                progress_bar.progress(30, text="Training XGBoost on Trend component...")
+
+                # Create features for trend (time index, lags)
+                def create_trend_features(series, lookback=14):
+                    X_list = []
+                    y_list = []
+                    for i in range(lookback, len(series)):
+                        X_list.append([
+                            i,  # time index
+                            series[i-1], series[i-7], series[i-14] if i >= 14 else series[0]
+                        ])
+                        y_list.append(series[i])
+                    return np.array(X_list), np.array(y_list)
+
+                X_trend, y_trend = create_trend_features(trend_train)
+
+                # Train XGBoost
+                xgb_trend = XGBRegressor(
+                    n_estimators=100,
+                    max_depth=5,
+                    learning_rate=0.1,
+                    random_state=42
+                )
+                xgb_trend.fit(X_trend, y_trend)
+
+                # Forecast trend for test period
+                trend_forecast = []
+                last_trend_vals = list(trend_train[-14:])
+
+                for i in range(len(ts_test)):
+                    time_idx = len(trend_train) + i
+                    features = np.array([[
+                        time_idx,
+                        last_trend_vals[-1],
+                        last_trend_vals[-7] if len(last_trend_vals) >= 7 else last_trend_vals[0],
+                        last_trend_vals[-14] if len(last_trend_vals) >= 14 else last_trend_vals[0]
+                    ]])
+                    pred = xgb_trend.predict(features)[0]
+                    trend_forecast.append(pred)
+                    last_trend_vals.append(pred)
+
+                trend_forecast = np.array(trend_forecast)
+
+                progress_bar.progress(50, text="XGBoost training complete ✓")
+
+                # ========== STEP 3: Train SARIMAX on Seasonal ==========
+                st.markdown("### 📊 Step 3: Train SARIMAX on Seasonal")
+
+                progress_bar.progress(60, text="Training SARIMAX on Seasonal component...")
+
+                try:
+                    from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+                    # Train SARIMAX on seasonal component
+                    sarimax_seasonal = SARIMAX(
+                        seasonal_train,
+                        order=(1, 0, 1),
+                        seasonal_order=(1, 0, 1, seasonal_period),
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                    )
+                    sarimax_fit = sarimax_seasonal.fit(disp=False)
+
+                    # Forecast seasonal component
+                    seasonal_forecast = sarimax_fit.forecast(steps=len(ts_test))
+
+                    progress_bar.progress(70, text="SARIMAX training complete ✓")
+
+                except Exception as e:
+                    st.warning(f"⚠️ SARIMAX failed, using mean seasonal pattern: {str(e)}")
+                    # Fallback: repeat seasonal pattern
+                    seasonal_forecast = np.tile(seasonal_train[-seasonal_period:], int(np.ceil(len(ts_test) / seasonal_period)))[:len(ts_test)]
+                    progress_bar.progress(70, text="Using fallback seasonal forecast ✓")
+
+                # ========== STEP 3b (Multi-Scale Only): Train ANN on High-Frequency Seasonal ==========
+                if use_4_components:
+                    st.markdown("### 🎨 Step 3b: Train ANN on High-Frequency Seasonal")
+
+                    progress_bar.progress(75, text="Training ANN on High-frequency component...")
+
+                    # Create features for high-freq seasonal (time index, lags)
+                    def create_seasonal_features(series, lookback=7):
+                        X_list = []
+                        y_list = []
+                        for i in range(lookback, len(series)):
+                            X_list.append([
+                                i % high_freq_cutoff,  # cyclic time feature
+                                series[i-1], series[i-3], series[i-7] if i >= 7 else series[0]
+                            ])
+                            y_list.append(series[i])
+                        return np.array(X_list), np.array(y_list)
+
+                    X_high_freq, y_high_freq = create_seasonal_features(high_freq_seasonal_train)
+
+                    # Build ANN model
+                    ann_high_freq = keras.Sequential([
+                        layers.Dense(64, activation='relu', input_shape=(X_high_freq.shape[1],)),
+                        layers.Dropout(0.2),
+                        layers.Dense(32, activation='relu'),
+                        layers.Dropout(0.1),
+                        layers.Dense(1)
+                    ])
+                    ann_high_freq.compile(optimizer=keras.optimizers.Adam(0.001), loss='mse')
+
+                    # Train ANN
+                    ann_high_freq.fit(X_high_freq, y_high_freq, epochs=30, batch_size=16, verbose=0)
+
+                    # Forecast high-frequency seasonal component
+                    high_freq_forecast = []
+                    last_high_freq_vals = list(high_freq_seasonal_train[-7:])
+
+                    for i in range(len(ts_test)):
+                        time_idx = len(high_freq_seasonal_train) + i
+                        features = np.array([[
+                            time_idx % high_freq_cutoff,
+                            last_high_freq_vals[-1],
+                            last_high_freq_vals[-3] if len(last_high_freq_vals) >= 3 else last_high_freq_vals[0],
+                            last_high_freq_vals[-7] if len(last_high_freq_vals) >= 7 else last_high_freq_vals[0]
+                        ]])
+                        pred = ann_high_freq.predict(features, verbose=0)[0, 0]
+                        high_freq_forecast.append(pred)
+                        last_high_freq_vals.append(pred)
+
+                    high_freq_forecast = np.array(high_freq_forecast)
+
+                    progress_bar.progress(80, text="ANN training complete ✓")
+
+                    # Update step numbers for 4-component mode
+                    lstm_step_num = "4"
+                    combine_step_num = "5"
+                    lstm_progress = 85
+                    combine_progress = 95
+                else:
+                    # 3-component mode: no ANN, use seasonal_train directly
+                    high_freq_forecast = None  # Not used in 3-component mode
+                    lstm_step_num = "4"
+                    combine_step_num = "5"
+                    lstm_progress = 80
+                    combine_progress = 95
+
+                # ========== STEP 4/5: Train LSTM on Residual ==========
+                st.markdown(f"### 🧠 Step {lstm_step_num}: Train LSTM on Residual")
+
+                progress_bar.progress(lstm_progress, text="Training LSTM on Residual component...")
+
+                # Create sequences for LSTM
+                def create_lstm_sequences(series, lookback=14):
+                    X_list = []
+                    y_list = []
+                    for i in range(lookback, len(series)):
+                        X_list.append(series[i-lookback:i])
+                        y_list.append(series[i])
+                    return np.array(X_list), np.array(y_list)
+
+                lookback = min(14, len(residual_train) // 3)
+                X_residual, y_residual = create_lstm_sequences(residual_train, lookback)
+                X_residual = X_residual.reshape((X_residual.shape[0], X_residual.shape[1], 1))
+
+                # Build LSTM model
+                lstm_residual = keras.Sequential([
+                    layers.LSTM(50, activation='relu', input_shape=(lookback, 1)),
+                    layers.Dropout(0.1),
+                    layers.Dense(1)
+                ])
+                lstm_residual.compile(optimizer=keras.optimizers.Adam(0.001), loss='mse')
+
+                # Train LSTM
+                lstm_residual.fit(X_residual, y_residual, epochs=20, batch_size=16, verbose=0)
+
+                # Forecast residual
+                residual_forecast = []
+                last_residual_vals = list(residual_train[-lookback:])
+
+                for i in range(len(ts_test)):
+                    X_input = np.array(last_residual_vals[-lookback:]).reshape((1, lookback, 1))
+                    pred = lstm_residual.predict(X_input, verbose=0)[0, 0]
+                    residual_forecast.append(pred)
+                    last_residual_vals.append(pred)
+
+                residual_forecast = np.array(residual_forecast)
+
+                progress_bar.progress(combine_progress - 5, text="LSTM training complete ✓")
+
+                # ========== STEP 5: Combine Forecasts ==========
+                st.markdown("### 🎯 Step 5: Combine Component Forecasts")
+
+                progress_bar.progress(combine_progress, text="Combining forecasts...")
+
+                # Final ensemble forecast
+                if use_4_components:
+                    # 4-component architecture: Trend + Low-Freq Seasonal + High-Freq Seasonal + Residual
+                    final_forecast = trend_forecast + seasonal_forecast + high_freq_forecast + residual_forecast
+                    st.info(f"🎯 **4-Component Ensemble**: Combining Trend (XGBoost) + Low-Freq Seasonal (SARIMAX) + High-Freq Seasonal (ANN) + Residual (LSTM)")
+                else:
+                    # 3-component architecture: Trend + Seasonal + Residual
+                    final_forecast = trend_forecast + seasonal_forecast + residual_forecast
+                    st.info(f"🎯 **3-Component Ensemble**: Combining Trend (XGBoost) + Seasonal (SARIMAX) + Residual (LSTM)")
+
+                # Calculate metrics (using ts_test values)
+                y_test_values = ts_test.values
+                mae = mean_absolute_error(y_test_values, final_forecast)
+                rmse = np.sqrt(mean_squared_error(y_test_values, final_forecast))
+                mape = np.mean(np.abs((y_test_values - final_forecast) / y_test_values)) * 100
+                accuracy = max(0, 100 - mape)
+
+                decomp_metrics = {
+                    "MAE": mae,
+                    "RMSE": rmse,
+                    "MAPE": mape,
+                    "Accuracy": accuracy
+                }
+
+                # Store results in session state
+                results_dict = {
+                    "forecast": final_forecast,
+                    "actuals": y_test_values,
+                    "trend_forecast": trend_forecast,
+                    "seasonal_forecast": seasonal_forecast,
+                    "residual_forecast": residual_forecast,
+                    "metrics": decomp_metrics,
+                    "target_col": target_col,
+                    "dates_test": ts_test.index,
+                    "use_4_components": use_4_components
+                }
+
+                # Add high-frequency forecast if in 4-component mode
+                if use_4_components:
+                    results_dict["high_freq_forecast"] = high_freq_forecast
+
+                st.session_state["decomposition_results"] = results_dict
+
+                progress_bar.progress(100, text="Training complete! ✅")
+
+                st.success("✅ **Decomposition Ensemble Trained Successfully!**")
+
+                # Display metrics
+                st.markdown("### 🏆 Ensemble Performance")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAE", decomp_metrics["MAE"], "", PRIMARY_COLOR),
+                        use_container_width=True,
+                        key="decomp_mae"
+                    )
+                with col2:
+                    st.plotly_chart(
+                        _create_kpi_indicator("RMSE", decomp_metrics["RMSE"], "", SECONDARY_COLOR),
+                        use_container_width=True,
+                        key="decomp_rmse"
+                    )
+                with col3:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAPE", decomp_metrics["MAPE"], "%", WARNING_COLOR),
+                        use_container_width=True,
+                        key="decomp_mape"
+                    )
+                with col4:
+                    st.plotly_chart(
+                        _create_kpi_indicator("Accuracy", decomp_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                        use_container_width=True,
+                        key="decomp_accuracy"
+                    )
+
+                # Visualize component contributions
+                st.markdown("### 📊 Component Contributions to Final Forecast")
+
+                fig_components = go.Figure()
+
+                # Use test index for x-axis (dates)
+                test_dates = ts_test.index
+
+                fig_components.add_trace(go.Scatter(
+                    x=test_dates,
+                    y=y_test_values,
+                    mode='lines+markers',
+                    name='Actual',
+                    line=dict(color=PRIMARY_COLOR, width=3),
+                    marker=dict(size=5)
+                ))
+
+                fig_components.add_trace(go.Scatter(
+                    x=test_dates,
+                    y=final_forecast,
+                    mode='lines+markers',
+                    name='Final Forecast',
+                    line=dict(color=SUCCESS_COLOR, width=3, dash='dash'),
+                    marker=dict(size=5, symbol='diamond')
+                ))
+
+                fig_components.add_trace(go.Scatter(
+                    x=test_dates,
+                    y=trend_forecast,
+                    mode='lines',
+                    name='Trend Component',
+                    line=dict(color='#10B981', width=2, dash='dot'),
+                    opacity=0.7
+                ))
+
+                # Add seasonal component (low-freq in 4-component mode)
+                seasonal_label = 'Low-Freq Seasonal' if use_4_components else 'Seasonal Component'
+                fig_components.add_trace(go.Scatter(
+                    x=test_dates,
+                    y=seasonal_forecast,
+                    mode='lines',
+                    name=seasonal_label,
+                    line=dict(color=WARNING_COLOR, width=2, dash='dot'),
+                    opacity=0.7
+                ))
+
+                # Add high-frequency component if in 4-component mode
+                if use_4_components:
+                    fig_components.add_trace(go.Scatter(
+                        x=test_dates,
+                        y=high_freq_forecast,
+                        mode='lines',
+                        name='High-Freq Seasonal',
+                        line=dict(color='#A78BFA', width=2, dash='dot'),  # Purple color for high-freq
+                        opacity=0.7
+                    ))
+
+                fig_components.add_trace(go.Scatter(
+                    x=test_dates,
+                    y=residual_forecast,
+                    mode='lines',
+                    name='Residual Component',
+                    line=dict(color=SECONDARY_COLOR, width=2, dash='dot'),
+                    opacity=0.7
+                ))
+
+                fig_components.update_layout(
+                    xaxis_title="Date",
+                    yaxis_title="Value",
+                    hovermode='x unified',
+                    plot_bgcolor='rgba(15, 23, 42, 0.95)',
+                    paper_bgcolor='rgba(15, 23, 42, 0.8)',
+                    font=dict(color=TEXT_COLOR, size=11),
+                    height=500,
+                    legend=dict(
+                        orientation="v",
+                        yanchor="top",
+                        y=1,
+                        xanchor="right",
+                        x=1.15,
+                        bgcolor='rgba(15, 23, 42, 0.8)',
+                        bordercolor=PRIMARY_COLOR,
+                        borderwidth=1
+                    ),
+                    xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+                )
+
+                st.plotly_chart(fig_components, use_container_width=True, key="component_forecast_plot")
+
+                # Component statistics
+                st.markdown("### 📈 Component Statistics")
+
+                if use_4_components:
+                    # 4-component statistics
+                    component_stats = pd.DataFrame({
+                        "Component": ["Trend", "Low-Freq Seasonal", "High-Freq Seasonal", "Residual", "Combined"],
+                        "Mean": [
+                            np.mean(trend_forecast),
+                            np.mean(seasonal_forecast),
+                            np.mean(high_freq_forecast),
+                            np.mean(residual_forecast),
+                            np.mean(final_forecast)
+                        ],
+                        "Std Dev": [
+                            np.std(trend_forecast),
+                            np.std(seasonal_forecast),
+                            np.std(high_freq_forecast),
+                            np.std(residual_forecast),
+                            np.std(final_forecast)
+                        ],
+                        "Min": [
+                            np.min(trend_forecast),
+                            np.min(seasonal_forecast),
+                            np.min(high_freq_forecast),
+                            np.min(residual_forecast),
+                            np.min(final_forecast)
+                        ],
+                        "Max": [
+                            np.max(trend_forecast),
+                            np.max(seasonal_forecast),
+                            np.max(high_freq_forecast),
+                            np.max(residual_forecast),
+                            np.max(final_forecast)
+                        ]
+                    })
+                else:
+                    # 3-component statistics
+                    component_stats = pd.DataFrame({
+                        "Component": ["Trend", "Seasonal", "Residual", "Combined"],
+                        "Mean": [
+                            np.mean(trend_forecast),
+                            np.mean(seasonal_forecast),
+                            np.mean(residual_forecast),
+                            np.mean(final_forecast)
+                        ],
+                        "Std Dev": [
+                            np.std(trend_forecast),
+                            np.std(seasonal_forecast),
+                            np.std(residual_forecast),
+                            np.std(final_forecast)
+                        ],
+                        "Min": [
+                            np.min(trend_forecast),
+                            np.min(seasonal_forecast),
+                            np.min(residual_forecast),
+                            np.min(final_forecast)
+                        ],
+                        "Max": [
+                            np.max(trend_forecast),
+                            np.max(seasonal_forecast),
+                            np.max(residual_forecast),
+                            np.max(final_forecast)
+                        ]
+                    })
+
+                st.dataframe(
+                    component_stats.style.format({
+                        "Mean": "{:.4f}",
+                        "Std Dev": "{:.4f}",
+                        "Min": "{:.4f}",
+                        "Max": "{:.4f}"
+                    }).background_gradient(cmap='Blues', subset=['Mean', 'Std Dev']),
+                    use_container_width=True,
+                    height=200
+                )
+
+            except Exception as e:
+                st.error(f"❌ **Decomposition Ensemble Training Failed**\n\n{str(e)}")
+                import traceback
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
+
+    # Show existing results if available
+    elif "decomposition_results" in st.session_state:
+        st.info("ℹ️ **Previous decomposition results available.** Click 'Train Decomposition Ensemble' to generate new results.")
+
+        decomp_data = st.session_state["decomposition_results"]
+        decomp_metrics = decomp_data["metrics"]
+
+        st.markdown("### 🏆 Previous Decomposition Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", decomp_metrics["MAE"], "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="prev_decomp_mae"
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", decomp_metrics["RMSE"], "", SECONDARY_COLOR),
+                use_container_width=True,
+                key="prev_decomp_rmse"
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", decomp_metrics["MAPE"], "%", WARNING_COLOR),
+                use_container_width=True,
+                key="prev_decomp_mape"
+            )
+        with col4:
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", decomp_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                use_container_width=True,
+                key="prev_decomp_accuracy"
+            )
+
+
+def _page_hybrid_stacking():
+    """Stacking Ensemble with meta-learning to optimally combine base models."""
+
+    # Stacking Ensemble Header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+            <h2 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                🔗 Stacking Ensemble
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                Meta-model learns optimal combination of base models through two-level architecture
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Explanation box
+    st.markdown(
+        f"""
+        <div style='background: rgba(59, 130, 246, 0.1);
+                    border: 1px solid rgba(59, 130, 246, 0.3);
+                    padding: 1rem;
+                    border-radius: 8px;
+                    margin-bottom: 1.5rem;'>
+            <h4 style='color: {PRIMARY_COLOR}; margin-top: 0;'>📚 How Stacking Works</h4>
+            <ul style='color: {TEXT_COLOR}; margin-bottom: 0;'>
+                <li><strong>Level 0 (Base Models):</strong> SARIMAX, XGBoost, LSTM, and ANN make independent predictions</li>
+                <li><strong>Out-of-Fold Training:</strong> Base models generate predictions on validation folds (prevents data leakage)</li>
+                <li><strong>Level 1 (Meta-Model):</strong> Learns optimal combination strategy from base model predictions</li>
+                <li><strong>Final Prediction:</strong> Meta-model combines base predictions adaptively</li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Get selected dataset (original, Variant A, or Variant B)
+    fused_data = _get_hybrid_dataset()
+    selected_dataset_name = st.session_state.get("hybrid_selected_dataset", "📊 Original Dataset")
+
+    # Show dataset info
+    st.info(f"🎨 **Using dataset**: {selected_dataset_name} | **Features**: {len(fused_data.columns)} columns | **Samples**: {len(fused_data)} rows")
+
+    if fused_data is None or (isinstance(fused_data, pd.DataFrame) and fused_data.empty):
+        st.warning("⚠️ **No data available.** Please complete the Data Ingestion and Preprocessing steps first.")
+        return
+
+    # Configuration Section
+    st.markdown("### ⚙️ Configuration")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        target_col = st.selectbox(
+            "Target Column",
+            options=[col for col in fused_data.columns if col not in ["Date", "datetime"]],
+            index=0 if "Target_1" not in fused_data.columns else list(fused_data.columns).index("Target_1")
+        )
+
+    with col2:
+        test_size = st.slider(
+            "Test Size (%)",
+            min_value=10,
+            max_value=40,
+            value=20,
+            step=5,
+            help="Percentage of data for final testing"
+        )
+
+    with col3:
+        n_cv_splits = st.slider(
+            "CV Splits",
+            min_value=3,
+            max_value=10,
+            value=5,
+            step=1,
+            help="Number of time series cross-validation splits for out-of-fold predictions"
+        )
+
+    with col4:
+        meta_model_type = st.selectbox(
+            "Meta-Model",
+            options=["Ridge Regression", "Lasso Regression", "XGBoost"],
+            index=0,
+            help="Ridge: Simple linear (recommended) | Lasso: Feature selection | XGBoost: Non-linear"
+        )
+
+    # Train button
+    if st.button("🚀 Train Stacking Ensemble", type="primary", use_container_width=True):
+        try:
+            # Import required libraries
+            from statsmodels.tsa.statespace.sarimax import SARIMAX
+            from xgboost import XGBRegressor
+            from tensorflow import keras
+            from tensorflow.keras import layers
+            from sklearn.metrics import mean_absolute_error, mean_squared_error
+            from sklearn.model_selection import TimeSeriesSplit
+            from sklearn.linear_model import Ridge, Lasso
+
+            # Prepare data
+            if "Date" not in fused_data.columns:
+                st.error("❌ **Error**: 'Date' column not found in data.")
+                return
+
+            df = fused_data.copy()
+            if not pd.api.types.is_datetime64_any_dtype(df["Date"]):
+                df["Date"] = pd.to_datetime(df["Date"])
+
+            df = df.set_index("Date")
+            ts = df[target_col]
+
+            # Ensure daily frequency and interpolate
+            ts = ts.asfreq("D").interpolate(method="time", limit_direction="both")
+
+            # Train-test split
+            test_size_samples = int(len(ts) * (test_size / 100))
+            ts_train = ts.iloc[:-test_size_samples]
+            ts_test = ts.iloc[-test_size_samples:]
+
+            st.markdown(f"**Data Split**: {len(ts_train)} training samples, {len(ts_test)} test samples")
+
+            # Progress tracking
+            progress_bar = st.progress(0, text="Initializing stacking ensemble...")
+
+            # ========== STEP 1: Generate Out-of-Fold Predictions ==========
+            st.markdown("### 🔄 Step 1: Generate Out-of-Fold (OOF) Predictions")
+            st.info("Training base models on cross-validation folds to generate OOF predictions (prevents data leakage)")
+
+            progress_bar.progress(5, text="Setting up time series cross-validation...")
+
+            tscv = TimeSeriesSplit(n_splits=n_cv_splits)
+
+            # Initialize OOF prediction arrays
+            oof_sarimax = np.full(len(ts_train), np.nan)
+            oof_xgb = np.full(len(ts_train), np.nan)
+            oof_lstm = np.full(len(ts_train), np.nan)
+            oof_ann = np.full(len(ts_train), np.nan)
+
+            fold_num = 0
+            for train_idx, val_idx in tscv.split(ts_train):
+                fold_num += 1
+                progress_pct = 5 + (fold_num / n_cv_splits) * 60  # 5% to 65%
+                progress_bar.progress(int(progress_pct), text=f"Training base models on fold {fold_num}/{n_cv_splits}...")
+
+                # Split data for this fold
+                train_fold = ts_train.iloc[train_idx]
+                val_fold = ts_train.iloc[val_idx]
+
+                # === SARIMAX ===
+                try:
+                    sarimax_model = SARIMAX(
+                        train_fold,
+                        order=(1, 1, 1),
+                        seasonal_order=(1, 0, 1, 7),
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                    ).fit(disp=False)
+                    oof_sarimax[val_idx] = sarimax_model.forecast(steps=len(val_idx)).values
+                except Exception as e:
+                    st.warning(f"⚠️ SARIMAX failed on fold {fold_num}: {str(e)}")
+                    oof_sarimax[val_idx] = np.mean(train_fold)
+
+                # === XGBoost ===
+                try:
+                    # Create lagged features
+                    def create_lag_features(series, n_lags=7):
+                        X_list, y_list = [], []
+                        for i in range(n_lags, len(series)):
+                            X_list.append([series[i-j] for j in range(1, n_lags+1)])
+                            y_list.append(series[i])
+                        return np.array(X_list), np.array(y_list)
+
+                    X_train_xgb, y_train_xgb = create_lag_features(train_fold.values, n_lags=7)
+                    xgb_model = XGBRegressor(n_estimators=100, max_depth=3, learning_rate=0.1, random_state=42)
+                    xgb_model.fit(X_train_xgb, y_train_xgb, verbose=0)
+
+                    # Predict on validation fold
+                    for i, idx in enumerate(val_idx):
+                        if idx >= 7:  # Need at least 7 previous values
+                            X_pred = ts_train.iloc[idx-7:idx].values.reshape(1, -1)
+                            oof_xgb[idx] = xgb_model.predict(X_pred)[0]
+                        else:
+                            oof_xgb[idx] = np.mean(train_fold)
+                except Exception as e:
+                    st.warning(f"⚠️ XGBoost failed on fold {fold_num}: {str(e)}")
+                    oof_xgb[val_idx] = np.mean(train_fold)
+
+                # === LSTM ===
+                try:
+                    def create_lstm_sequences(series, lookback=14):
+                        X_list, y_list = [], []
+                        for i in range(lookback, len(series)):
+                            X_list.append(series[i-lookback:i])
+                            y_list.append(series[i])
+                        return np.array(X_list), np.array(y_list)
+
+                    lookback = min(14, len(train_fold) // 3)
+                    X_train_lstm, y_train_lstm = create_lstm_sequences(train_fold.values, lookback)
+                    X_train_lstm = X_train_lstm.reshape((X_train_lstm.shape[0], X_train_lstm.shape[1], 1))
+
+                    lstm_model = keras.Sequential([
+                        layers.LSTM(32, activation='relu', input_shape=(lookback, 1)),
+                        layers.Dense(1)
+                    ])
+                    lstm_model.compile(optimizer=keras.optimizers.Adam(0.001), loss='mse')
+                    lstm_model.fit(X_train_lstm, y_train_lstm, epochs=15, batch_size=16, verbose=0)
+
+                    # Predict on validation fold
+                    for i, idx in enumerate(val_idx):
+                        if idx >= lookback:
+                            X_pred = ts_train.iloc[idx-lookback:idx].values.reshape((1, lookback, 1))
+                            oof_lstm[idx] = lstm_model.predict(X_pred, verbose=0)[0, 0]
+                        else:
+                            oof_lstm[idx] = np.mean(train_fold)
+                except Exception as e:
+                    st.warning(f"⚠️ LSTM failed on fold {fold_num}: {str(e)}")
+                    oof_lstm[val_idx] = np.mean(train_fold)
+
+                # === ANN ===
+                try:
+                    X_train_ann, y_train_ann = create_lag_features(train_fold.values, n_lags=7)
+
+                    ann_model = keras.Sequential([
+                        layers.Dense(32, activation='relu', input_shape=(7,)),
+                        layers.Dropout(0.2),
+                        layers.Dense(16, activation='relu'),
+                        layers.Dense(1)
+                    ])
+                    ann_model.compile(optimizer=keras.optimizers.Adam(0.001), loss='mse')
+                    ann_model.fit(X_train_ann, y_train_ann, epochs=15, batch_size=16, verbose=0)
+
+                    # Predict on validation fold
+                    for i, idx in enumerate(val_idx):
+                        if idx >= 7:
+                            X_pred = ts_train.iloc[idx-7:idx].values.reshape(1, -1)
+                            oof_ann[idx] = ann_model.predict(X_pred, verbose=0)[0, 0]
+                        else:
+                            oof_ann[idx] = np.mean(train_fold)
+                except Exception as e:
+                    st.warning(f"⚠️ ANN failed on fold {fold_num}: {str(e)}")
+                    oof_ann[val_idx] = np.mean(train_fold)
+
+            progress_bar.progress(65, text="OOF predictions generated ✓")
+
+            # Display OOF statistics
+            st.markdown("#### 📊 Out-of-Fold Performance")
+
+            # Remove NaN values for metrics
+            valid_mask = ~(np.isnan(oof_sarimax) | np.isnan(oof_xgb) | np.isnan(oof_lstm) | np.isnan(oof_ann))
+            y_train_valid = ts_train.values[valid_mask]
+            oof_sarimax_valid = oof_sarimax[valid_mask]
+            oof_xgb_valid = oof_xgb[valid_mask]
+            oof_lstm_valid = oof_lstm[valid_mask]
+            oof_ann_valid = oof_ann[valid_mask]
+
+            oof_metrics = []
+            for name, preds in [("SARIMAX", oof_sarimax_valid), ("XGBoost", oof_xgb_valid),
+                               ("LSTM", oof_lstm_valid), ("ANN", oof_ann_valid)]:
+                if len(preds) > 0:
+                    mae = mean_absolute_error(y_train_valid, preds)
+                    rmse = np.sqrt(mean_squared_error(y_train_valid, preds))
+                    mape = np.mean(np.abs((y_train_valid - preds) / y_train_valid)) * 100
+                    oof_metrics.append({"Model": name, "MAE": mae, "RMSE": rmse, "MAPE": mape})
+
+            oof_df = pd.DataFrame(oof_metrics)
+            st.dataframe(
+                oof_df.style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "MAPE": "{:.2f}%"})
+                           .background_gradient(cmap='RdYlGn_r', subset=['MAE', 'RMSE', 'MAPE']),
+                use_container_width=True,
+                height=200
+            )
+
+            # ========== STEP 2: Train Meta-Model ==========
+            st.markdown("### 🧠 Step 2: Train Meta-Model")
+            st.info(f"Training {meta_model_type} to learn optimal combination of base model predictions")
+
+            progress_bar.progress(70, text="Training meta-model...")
+
+            # Prepare meta-model features (OOF predictions as features)
+            X_meta = np.column_stack([oof_sarimax_valid, oof_xgb_valid, oof_lstm_valid, oof_ann_valid])
+            y_meta = y_train_valid
+
+            # Train meta-model
+            if meta_model_type == "Ridge Regression":
+                meta_model = Ridge(alpha=1.0)
+            elif meta_model_type == "Lasso Regression":
+                meta_model = Lasso(alpha=0.01, max_iter=5000)
+            else:  # XGBoost
+                meta_model = XGBRegressor(n_estimators=50, max_depth=2, learning_rate=0.1, random_state=42)
+
+            meta_model.fit(X_meta, y_meta)
+
+            # Display meta-model weights/importances
+            if hasattr(meta_model, 'coef_'):
+                weights = meta_model.coef_
+                intercept = meta_model.intercept_
+                st.markdown("#### 🎯 Learned Meta-Model Weights")
+
+                weights_df = pd.DataFrame({
+                    "Base Model": ["SARIMAX", "XGBoost", "LSTM", "ANN"],
+                    "Weight": weights,
+                    "Abs Weight": np.abs(weights)
+                })
+
+                # Normalize weights for percentage
+                total_abs_weight = np.sum(np.abs(weights))
+                weights_df["Contribution %"] = (weights_df["Abs Weight"] / total_abs_weight * 100) if total_abs_weight > 0 else 0
+
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.dataframe(
+                        weights_df.style.format({"Weight": "{:.4f}", "Abs Weight": "{:.4f}", "Contribution %": "{:.2f}%"})
+                                     .background_gradient(cmap='Blues', subset=['Abs Weight']),
+                        use_container_width=True,
+                        height=200
+                    )
+                with col2:
+                    st.metric("Intercept", f"{intercept:.4f}")
+                    st.caption("Meta-model equation: y = w₁×SARIMAX + w₂×XGB + w₃×LSTM + w₄×ANN + b")
+            elif hasattr(meta_model, 'feature_importances_'):
+                importances = meta_model.feature_importances_
+                st.markdown("#### 🎯 Meta-Model Feature Importances")
+
+                imp_df = pd.DataFrame({
+                    "Base Model": ["SARIMAX", "XGBoost", "LSTM", "ANN"],
+                    "Importance": importances,
+                    "Contribution %": importances * 100
+                })
+
+                st.dataframe(
+                    imp_df.style.format({"Importance": "{:.4f}", "Contribution %": "{:.2f}%"})
+                                 .background_gradient(cmap='Greens', subset=['Importance']),
+                    use_container_width=True,
+                    height=200
+                )
+
+            progress_bar.progress(80, text="Meta-model trained ✓")
+
+            # ========== STEP 3: Train Final Base Models & Generate Predictions ==========
+            st.markdown("### 🎯 Step 3: Generate Final Stacked Predictions")
+            st.info("Training base models on full training set and generating test predictions")
+
+            progress_bar.progress(85, text="Training final base models...")
+
+            # Train final SARIMAX
+            sarimax_final = SARIMAX(
+                ts_train,
+                order=(1, 1, 1),
+                seasonal_order=(1, 0, 1, 7),
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            ).fit(disp=False)
+            sarimax_forecast = sarimax_final.forecast(steps=len(ts_test)).values
+
+            # Train final XGBoost
+            X_train_xgb_final, y_train_xgb_final = create_lag_features(ts_train.values, n_lags=7)
+            xgb_final = XGBRegressor(n_estimators=100, max_depth=3, learning_rate=0.1, random_state=42)
+            xgb_final.fit(X_train_xgb_final, y_train_xgb_final, verbose=0)
+
+            xgb_forecast = []
+            last_vals = list(ts_train.values[-7:])
+            for i in range(len(ts_test)):
+                X_pred = np.array(last_vals[-7:]).reshape(1, -1)
+                pred = xgb_final.predict(X_pred)[0]
+                xgb_forecast.append(pred)
+                last_vals.append(pred)
+            xgb_forecast = np.array(xgb_forecast)
+
+            progress_bar.progress(90, text="Training LSTM and ANN...")
+
+            # Train final LSTM
+            lookback = min(14, len(ts_train) // 3)
+            X_train_lstm_final, y_train_lstm_final = create_lstm_sequences(ts_train.values, lookback)
+            X_train_lstm_final = X_train_lstm_final.reshape((X_train_lstm_final.shape[0], X_train_lstm_final.shape[1], 1))
+
+            lstm_final = keras.Sequential([
+                layers.LSTM(32, activation='relu', input_shape=(lookback, 1)),
+                layers.Dense(1)
+            ])
+            lstm_final.compile(optimizer=keras.optimizers.Adam(0.001), loss='mse')
+            lstm_final.fit(X_train_lstm_final, y_train_lstm_final, epochs=20, batch_size=16, verbose=0)
+
+            lstm_forecast = []
+            last_lstm_vals = list(ts_train.values[-lookback:])
+            for i in range(len(ts_test)):
+                X_pred = np.array(last_lstm_vals[-lookback:]).reshape((1, lookback, 1))
+                pred = lstm_final.predict(X_pred, verbose=0)[0, 0]
+                lstm_forecast.append(pred)
+                last_lstm_vals.append(pred)
+            lstm_forecast = np.array(lstm_forecast)
+
+            # Train final ANN
+            X_train_ann_final, y_train_ann_final = create_lag_features(ts_train.values, n_lags=7)
+
+            ann_final = keras.Sequential([
+                layers.Dense(32, activation='relu', input_shape=(7,)),
+                layers.Dropout(0.2),
+                layers.Dense(16, activation='relu'),
+                layers.Dense(1)
+            ])
+            ann_final.compile(optimizer=keras.optimizers.Adam(0.001), loss='mse')
+            ann_final.fit(X_train_ann_final, y_train_ann_final, epochs=20, batch_size=16, verbose=0)
+
+            ann_forecast = []
+            last_ann_vals = list(ts_train.values[-7:])
+            for i in range(len(ts_test)):
+                X_pred = np.array(last_ann_vals[-7:]).reshape(1, -1)
+                pred = ann_final.predict(X_pred, verbose=0)[0, 0]
+                ann_forecast.append(pred)
+                last_ann_vals.append(pred)
+            ann_forecast = np.array(ann_forecast)
+
+            progress_bar.progress(95, text="Generating stacked predictions...")
+
+            # Meta-model combines base predictions
+            X_test_meta = np.column_stack([sarimax_forecast, xgb_forecast, lstm_forecast, ann_forecast])
+            final_stacked_forecast = meta_model.predict(X_test_meta)
+
+            # Calculate metrics
+            y_test_values = ts_test.values
+            mae = mean_absolute_error(y_test_values, final_stacked_forecast)
+            rmse = np.sqrt(mean_squared_error(y_test_values, final_stacked_forecast))
+            mape = np.mean(np.abs((y_test_values - final_stacked_forecast) / y_test_values)) * 100
+            accuracy = max(0, 100 - mape)
+
+            stacking_metrics = {
+                "MAE": mae,
+                "RMSE": rmse,
+                "MAPE": mape,
+                "Accuracy": accuracy
+            }
+
+            # Store results in session state
+            st.session_state["stacking_results"] = {
+                "forecast": final_stacked_forecast,
+                "actuals": y_test_values,
+                "sarimax_forecast": sarimax_forecast,
+                "xgb_forecast": xgb_forecast,
+                "lstm_forecast": lstm_forecast,
+                "ann_forecast": ann_forecast,
+                "metrics": stacking_metrics,
+                "meta_model_type": meta_model_type,
+                "target_col": target_col,
+                "dates_test": ts_test.index
+            }
+
+            progress_bar.progress(100, text="Training complete! ✅")
+
+            st.success("✅ **Stacking Ensemble Trained Successfully!**")
+
+            # Display metrics
+            st.markdown("### 🏆 Stacking Ensemble Performance")
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.plotly_chart(
+                    _create_kpi_indicator("MAE", stacking_metrics["MAE"], "", PRIMARY_COLOR),
+                    use_container_width=True,
+                    key="stacking_mae"
+                )
+            with col2:
+                st.plotly_chart(
+                    _create_kpi_indicator("RMSE", stacking_metrics["RMSE"], "", SECONDARY_COLOR),
+                    use_container_width=True,
+                    key="stacking_rmse"
+                )
+            with col3:
+                st.plotly_chart(
+                    _create_kpi_indicator("MAPE", stacking_metrics["MAPE"], "%", WARNING_COLOR),
+                    use_container_width=True,
+                    key="stacking_mape"
+                )
+            with col4:
+                st.plotly_chart(
+                    _create_kpi_indicator("Accuracy", stacking_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                    use_container_width=True,
+                    key="stacking_accuracy"
+                )
+
+            # Visualize predictions
+            st.markdown("### 📊 Stacked Forecast vs Actuals")
+
+            fig = go.Figure()
+
+            test_dates = ts_test.index
+
+            fig.add_trace(go.Scatter(
+                x=test_dates,
+                y=y_test_values,
+                mode='lines+markers',
+                name='Actual',
+                line=dict(color=PRIMARY_COLOR, width=3),
+                marker=dict(size=6)
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=test_dates,
+                y=final_stacked_forecast,
+                mode='lines+markers',
+                name='Stacked Forecast (Meta-Model)',
+                line=dict(color=SUCCESS_COLOR, width=3, dash='dash'),
+                marker=dict(size=6, symbol='diamond')
+            ))
+
+            # Add base model predictions (with lower opacity)
+            for name, forecast, color in [
+                ("SARIMAX", sarimax_forecast, '#F59E0B'),
+                ("XGBoost", xgb_forecast, '#10B981'),
+                ("LSTM", lstm_forecast, '#8B5CF6'),
+                ("ANN", ann_forecast, '#EC4899')
+            ]:
+                fig.add_trace(go.Scatter(
+                    x=test_dates,
+                    y=forecast,
+                    mode='lines',
+                    name=f'{name} (Base)',
+                    line=dict(color=color, width=1, dash='dot'),
+                    opacity=0.5
+                ))
+
+            fig.update_layout(
+                xaxis_title="Date",
+                yaxis_title="Value",
+                hovermode='x unified',
+                plot_bgcolor='rgba(15, 23, 42, 0.95)',
+                paper_bgcolor='rgba(15, 23, 42, 0.8)',
+                font=dict(color=TEXT_COLOR, size=11),
+                height=500,
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=1,
+                    xanchor="right",
+                    x=1.15,
+                    bgcolor='rgba(15, 23, 42, 0.8)',
+                    bordercolor=PRIMARY_COLOR,
+                    borderwidth=1
+                ),
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+            )
+
+            st.plotly_chart(fig, use_container_width=True, key="stacking_forecast_plot")
+
+            # Base model comparison
+            st.markdown("### 📈 Base Models vs Stacked Performance")
+
+            base_metrics = []
+            for name, forecast in [
+                ("SARIMAX", sarimax_forecast),
+                ("XGBoost", xgb_forecast),
+                ("LSTM", lstm_forecast),
+                ("ANN", ann_forecast),
+                ("**Stacked**", final_stacked_forecast)
+            ]:
+                mae_base = mean_absolute_error(y_test_values, forecast)
+                rmse_base = np.sqrt(mean_squared_error(y_test_values, forecast))
+                mape_base = np.mean(np.abs((y_test_values - forecast) / y_test_values)) * 100
+                base_metrics.append({
+                    "Model": name,
+                    "MAE": mae_base,
+                    "RMSE": rmse_base,
+                    "MAPE": mape_base,
+                    "Accuracy": max(0, 100 - mape_base)
+                })
+
+            comparison_df = pd.DataFrame(base_metrics)
+            st.dataframe(
+                comparison_df.style.format({
+                    "MAE": "{:.4f}",
+                    "RMSE": "{:.4f}",
+                    "MAPE": "{:.2f}%",
+                    "Accuracy": "{:.2f}%"
+                }).background_gradient(cmap='RdYlGn_r', subset=['MAE', 'RMSE', 'MAPE'])
+                  .background_gradient(cmap='Greens', subset=['Accuracy']),
+                use_container_width=True,
+                height=250
+            )
+
+        except Exception as e:
+            st.error(f"❌ **Stacking Ensemble Training Failed**\n\n{str(e)}")
+            import traceback
+            with st.expander("🔍 Error Details"):
+                st.code(traceback.format_exc())
+
+    # Show existing results if available
+    elif "stacking_results" in st.session_state:
+        st.info("ℹ️ **Previous stacking results available.** Click 'Train Stacking Ensemble' to generate new results.")
+
+        stacking_data = st.session_state["stacking_results"]
+        stacking_metrics = stacking_data["metrics"]
+
+        st.markdown("### 🏆 Previous Stacking Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", stacking_metrics["MAE"], "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="prev_stacking_mae"
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", stacking_metrics["RMSE"], "", SECONDARY_COLOR),
+                use_container_width=True,
+                key="prev_stacking_rmse"
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", stacking_metrics["MAPE"], "%", WARNING_COLOR),
+                use_container_width=True,
+                key="prev_stacking_mape"
+            )
+        with col4:
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", stacking_metrics["Accuracy"], "%", SUCCESS_COLOR),
+                use_container_width=True,
+                key="prev_stacking_accuracy"
+            )
+
+
+def _page_hybrid_lstm_sarimax():
+    """LSTM-SARIMAX Hybrid: Two-stage model with LSTM + SARIMAX residual correction."""
+
+    # LSTM-SARIMAX Hybrid Header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(79, 70, 229, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);'>
+            <h2 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(99, 102, 241, 0.5);'>
+                🧠 LSTM-SARIMAX Hybrid
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                <strong>Stage 1:</strong> LSTM learns primary time-series signal | <strong>Stage 2:</strong> SARIMAX corrects residuals
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Get selected dataset
+    fused_data = _get_hybrid_dataset()
+    selected_dataset_name = st.session_state.get("hybrid_selected_dataset", "📊 Original Dataset")
+
+    if fused_data is None or fused_data.empty:
+        st.warning("⚠️ No data available. Please load and process data first.")
+        return
+
+    # Show dataset info
+    st.info(f"🎨 **Using dataset**: {selected_dataset_name} | **Features**: {len(fused_data.columns)} columns | **Samples**: {len(fused_data)} rows")
+
+    # Configuration Section
+    st.markdown("### ⚙️ Configuration")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🧠 Stage 1: LSTM")
+        lookback = st.slider("Lookback Window", min_value=7, max_value=60, value=14, step=1, help="Number of past time steps for LSTM sequences")
+        lstm_units = st.slider("LSTM Units", min_value=16, max_value=256, value=50, step=16, help="Number of LSTM neurons")
+        lstm_dropout = st.slider("Dropout Rate", min_value=0.0, max_value=0.5, value=0.1, step=0.05, help="Dropout for regularization")
+        lstm_epochs = st.slider("Training Epochs", min_value=5, max_value=100, value=20, step=5, help="Number of training iterations")
+        lstm_batch_size = st.selectbox("Batch Size", options=[8, 16, 32, 64], index=1, help="Samples per training batch")
+
+    with col2:
+        st.markdown("#### 📊 Stage 2: SARIMAX")
+        st.markdown("**ARIMA Order (p, d, q)**")
+        sarimax_p = st.slider("p (AR order)", min_value=0, max_value=5, value=1, step=1)
+        sarimax_d = st.slider("d (Differencing)", min_value=0, max_value=2, value=1, step=1)
+        sarimax_q = st.slider("q (MA order)", min_value=0, max_value=5, value=1, step=1)
+
+        st.markdown("**Seasonal Order (P, D, Q, s)**")
+        seasonal_p = st.slider("P (Seasonal AR)", min_value=0, max_value=2, value=1, step=1)
+        seasonal_d = st.slider("D (Seasonal Diff)", min_value=0, max_value=1, value=0, step=1)
+        seasonal_q = st.slider("Q (Seasonal MA)", min_value=0, max_value=2, value=1, step=1)
+        seasonal_s = st.slider("s (Seasonal Period)", min_value=4, max_value=52, value=7, step=1, help="7 for weekly, 12 for monthly")
+
+        use_exog = st.checkbox("Use Exogenous Features in SARIMAX", value=True, help="Include tabular features in SARIMAX stage")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        # Filter for numeric columns only (exclude datetime columns)
+        numeric_cols = [col for col in fused_data.select_dtypes(include=[np.number]).columns if col != "Date"]
+        if not numeric_cols:
+            st.error("❌ No numeric columns found in the dataset. Please check your data.")
+            return
+        target_col = st.selectbox("Target Variable", options=numeric_cols, index=0)
+    with col4:
+        eval_tail_size = st.slider("Evaluation Set Size", min_value=0.10, max_value=0.30, value=0.15, step=0.05, help="Fraction of data for final evaluation")
+
+    oof_splits = st.slider("Out-of-Fold Splits", min_value=2, max_value=10, value=4, step=1, help="Number of time-series cross-validation splits")
+
+    # Build Configuration Dictionary
+    config = {
+        "random_state": 42,
+        "features": {
+            "lags": [7, 14, 21],
+            "rolls": [7, 14, 21],
+        },
+        "eval": {"tail_size": eval_tail_size},
+        "oof_splits": oof_splits,
+        "stage1": {
+            "lookback": lookback,
+            "units": lstm_units,
+            "dropout": lstm_dropout,
+            "epochs": lstm_epochs,
+            "batch_size": lstm_batch_size,
+            "lr": 0.001,
+        },
+        "stage2": {
+            "order": [sarimax_p, sarimax_d, sarimax_q],
+            "seasonal_order": [seasonal_p, seasonal_d, seasonal_q, seasonal_s],
+            "use_exog": use_exog,
+        },
+    }
+
+    # Training Button
+    if st.button("🚀 Train LSTM-SARIMAX Hybrid", type="primary", use_container_width=True):
+        with st.spinner("🔄 Training LSTM-SARIMAX hybrid model... This may take several minutes."):
+            try:
+                # Import the hybrid model
+                from app_core.models.ml.lstm_sarimax import LSTMSARIMAXHybrid
+
+                # Initialize and train
+                hybrid_model = LSTMSARIMAXHybrid()
+                artifacts = hybrid_model.fit(fused_data, target=target_col, config=config)
+
+                # Store results in session state
+                st.session_state["lstm_sarimax_results"] = {
+                    "artifacts": artifacts,
+                    "config": config,
+                    "dataset_name": selected_dataset_name,
+                }
+
+                st.success("✅ **LSTM-SARIMAX Hybrid trained successfully!**")
+
+                # Display Metrics
+                st.markdown("### 🏆 Hybrid Model Performance")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAE", artifacts.metrics.get("MAE", 0), "", PRIMARY_COLOR),
+                        use_container_width=True,
+                        key="lstm_sarimax_mae"
+                    )
+                with col2:
+                    st.plotly_chart(
+                        _create_kpi_indicator("RMSE", artifacts.metrics.get("RMSE", 0), "", SECONDARY_COLOR),
+                        use_container_width=True,
+                        key="lstm_sarimax_rmse"
+                    )
+                with col3:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAPE", artifacts.metrics.get("MAPE", 0), "%", WARNING_COLOR),
+                        use_container_width=True,
+                        key="lstm_sarimax_mape"
+                    )
+                with col4:
+                    accuracy = artifacts.metrics.get("Accuracy", max(0, 100 - artifacts.metrics.get("MAPE", 100)))
+                    st.plotly_chart(
+                        _create_kpi_indicator("Accuracy", accuracy, "%", SUCCESS_COLOR),
+                        use_container_width=True,
+                        key="lstm_sarimax_accuracy"
+                    )
+
+                # Show artifacts paths
+                with st.expander("📁 Model Artifacts"):
+                    st.markdown(f"**Stage 1 (LSTM):** `{artifacts.stage1_path}`")
+                    st.markdown(f"**Stage 2 (SARIMAX):** `{artifacts.stage2_path}`")
+                    st.markdown(f"**Scaler:** `{artifacts.scaler_path}`")
+
+            except ImportError as ie:
+                st.error(f"❌ **Import Error**: {str(ie)}\n\nPlease ensure statsmodels and TensorFlow are installed.")
+            except Exception as e:
+                st.error(f"❌ **Training Failed**\n\n{str(e)}")
+                import traceback
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
+
+    # Show existing results if available
+    elif "lstm_sarimax_results" in st.session_state:
+        st.info("ℹ️ **Previous LSTM-SARIMAX results available.** Click 'Train LSTM-SARIMAX Hybrid' to generate new results.")
+
+        results = st.session_state["lstm_sarimax_results"]
+        artifacts = results["artifacts"]
+
+        st.markdown("### 🏆 Previous Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", artifacts.metrics.get("MAE", 0), "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="prev_lstm_sarimax_mae"
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", artifacts.metrics.get("RMSE", 0), "", SECONDARY_COLOR),
+                use_container_width=True,
+                key="prev_lstm_sarimax_rmse"
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", artifacts.metrics.get("MAPE", 0), "%", WARNING_COLOR),
+                use_container_width=True,
+                key="prev_lstm_sarimax_mape"
+            )
+        with col4:
+            accuracy = artifacts.metrics.get("Accuracy", max(0, 100 - artifacts.metrics.get("MAPE", 100)))
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", accuracy, "%", SUCCESS_COLOR),
+                use_container_width=True,
+                key="prev_lstm_sarimax_accuracy"
+            )
+
+
+def _page_hybrid_lstm_xgb():
+    """LSTM-XGBoost Hybrid: Two-stage model with LSTM + XGBoost residual correction."""
+
+    # LSTM-XGBoost Hybrid Header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(219, 39, 119, 0.1));
+                    border-left: 4px solid #ec4899;
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(236, 72, 153, 0.2);'>
+            <h2 style='color: #ec4899; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(236, 72, 153, 0.5);'>
+                🚀 LSTM-XGBoost Hybrid
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                <strong>Stage 1:</strong> LSTM learns primary time-series signal | <strong>Stage 2:</strong> XGBoost corrects residuals
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Get selected dataset
+    fused_data = _get_hybrid_dataset()
+    selected_dataset_name = st.session_state.get("hybrid_selected_dataset", "📊 Original Dataset")
+
+    if fused_data is None or fused_data.empty:
+        st.warning("⚠️ No data available. Please load and process data first.")
+        return
+
+    # Show dataset info
+    st.info(f"🎨 **Using dataset**: {selected_dataset_name} | **Features**: {len(fused_data.columns)} columns | **Samples**: {len(fused_data)} rows")
+
+    # Configuration Section
+    st.markdown("### ⚙️ Configuration")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🧠 Stage 1: LSTM")
+        lookback = st.slider("Lookback Window", min_value=7, max_value=60, value=14, step=1, help="Number of past time steps for LSTM sequences", key="xgb_lookback")
+        lstm_units = st.slider("LSTM Units", min_value=16, max_value=256, value=50, step=16, help="Number of LSTM neurons", key="xgb_units")
+        lstm_dropout = st.slider("Dropout Rate", min_value=0.0, max_value=0.5, value=0.1, step=0.05, help="Dropout for regularization", key="xgb_dropout")
+        lstm_epochs = st.slider("Training Epochs", min_value=5, max_value=100, value=20, step=5, help="Number of training iterations", key="xgb_epochs")
+        lstm_batch_size = st.selectbox("Batch Size", options=[8, 16, 32, 64], index=1, help="Samples per training batch", key="xgb_batch")
+
+    with col2:
+        st.markdown("#### 🌳 Stage 2: XGBoost")
+        n_estimators = st.slider("Number of Trees", min_value=50, max_value=500, value=100, step=50, help="Number of boosting rounds")
+        max_depth = st.slider("Max Tree Depth", min_value=3, max_value=10, value=5, step=1, help="Maximum depth of each tree")
+        learning_rate = st.slider("Learning Rate", min_value=0.01, max_value=0.3, value=0.1, step=0.01, help="Step size for boosting")
+        early_stopping = st.slider("Early Stopping Rounds", min_value=5, max_value=50, value=10, step=5, help="Stop if no improvement")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        # Filter for numeric columns only (exclude datetime columns)
+        numeric_cols = [col for col in fused_data.select_dtypes(include=[np.number]).columns if col != "Date"]
+        if not numeric_cols:
+            st.error("❌ No numeric columns found in the dataset. Please check your data.")
+            return
+        target_col = st.selectbox("Target Variable", options=numeric_cols, index=0, key="xgb_target")
+    with col4:
+        eval_tail_size = st.slider("Evaluation Set Size", min_value=0.10, max_value=0.30, value=0.15, step=0.05, help="Fraction of data for final evaluation", key="xgb_eval")
+
+    oof_splits = st.slider("Out-of-Fold Splits", min_value=2, max_value=10, value=4, step=1, help="Number of time-series cross-validation splits", key="xgb_oof")
+
+    # Build Configuration Dictionary
+    config = {
+        "random_state": 42,
+        "features": {
+            "lags": [7, 14, 21],
+            "rolls": [7, 14, 21],
+        },
+        "eval": {"tail_size": eval_tail_size},
+        "oof_splits": oof_splits,
+        "stage1": {
+            "lookback": lookback,
+            "units": lstm_units,
+            "dropout": lstm_dropout,
+            "epochs": lstm_epochs,
+            "batch_size": lstm_batch_size,
+            "lr": 0.001,
+        },
+        "stage2": {
+            "n_estimators": n_estimators,
+            "max_depth": max_depth,
+            "learning_rate": learning_rate,
+            "early_stopping_rounds": early_stopping,
+        },
+    }
+
+    # Training Button
+    if st.button("🚀 Train LSTM-XGBoost Hybrid", type="primary", use_container_width=True):
+        with st.spinner("🔄 Training LSTM-XGBoost hybrid model... This may take several minutes."):
+            try:
+                # Import the hybrid model
+                from app_core.models.ml.lstm_xgb import LSTMXGBHybrid
+
+                # Initialize and train
+                hybrid_model = LSTMXGBHybrid()
+                artifacts = hybrid_model.fit(fused_data, target=target_col, config=config)
+
+                # Store results in session state
+                st.session_state["lstm_xgb_results"] = {
+                    "artifacts": artifacts,
+                    "config": config,
+                    "dataset_name": selected_dataset_name,
+                }
+
+                st.success("✅ **LSTM-XGBoost Hybrid trained successfully!**")
+
+                # Display Metrics
+                st.markdown("### 🏆 Hybrid Model Performance")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAE", artifacts.metrics.get("MAE", 0), "", PRIMARY_COLOR),
+                        use_container_width=True,
+                        key="lstm_xgb_mae"
+                    )
+                with col2:
+                    st.plotly_chart(
+                        _create_kpi_indicator("RMSE", artifacts.metrics.get("RMSE", 0), "", SECONDARY_COLOR),
+                        use_container_width=True,
+                        key="lstm_xgb_rmse"
+                    )
+                with col3:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAPE", artifacts.metrics.get("MAPE", 0), "%", WARNING_COLOR),
+                        use_container_width=True,
+                        key="lstm_xgb_mape"
+                    )
+                with col4:
+                    accuracy = artifacts.metrics.get("Accuracy", max(0, 100 - artifacts.metrics.get("MAPE", 100)))
+                    st.plotly_chart(
+                        _create_kpi_indicator("Accuracy", accuracy, "%", SUCCESS_COLOR),
+                        use_container_width=True,
+                        key="lstm_xgb_accuracy"
+                    )
+
+                # Show artifacts paths
+                with st.expander("📁 Model Artifacts"):
+                    st.markdown(f"**Stage 1 (LSTM):** `{artifacts.stage1_path}`")
+                    st.markdown(f"**Stage 2 (XGBoost):** `{artifacts.stage2_path}`")
+                    st.markdown(f"**Scaler:** `{artifacts.scaler_path}`")
+
+            except ImportError as ie:
+                st.error(f"❌ **Import Error**: {str(ie)}\n\nPlease ensure XGBoost and TensorFlow are installed.")
+            except Exception as e:
+                st.error(f"❌ **Training Failed**\n\n{str(e)}")
+                import traceback
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
+
+    # Show existing results if available
+    elif "lstm_xgb_results" in st.session_state:
+        st.info("ℹ️ **Previous LSTM-XGBoost results available.** Click 'Train LSTM-XGBoost Hybrid' to generate new results.")
+
+        results = st.session_state["lstm_xgb_results"]
+        artifacts = results["artifacts"]
+
+        st.markdown("### 🏆 Previous Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", artifacts.metrics.get("MAE", 0), "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="prev_lstm_xgb_mae"
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", artifacts.metrics.get("RMSE", 0), "", SECONDARY_COLOR),
+                use_container_width=True,
+                key="prev_lstm_xgb_rmse"
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", artifacts.metrics.get("MAPE", 0), "%", WARNING_COLOR),
+                use_container_width=True,
+                key="prev_lstm_xgb_mape"
+            )
+        with col4:
+            accuracy = artifacts.metrics.get("Accuracy", max(0, 100 - artifacts.metrics.get("MAPE", 100)))
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", accuracy, "%", SUCCESS_COLOR),
+                use_container_width=True,
+                key="prev_lstm_xgb_accuracy"
+            )
+
+
+def _page_hybrid_lstm_ann():
+    """LSTM-ANN Hybrid: Two-stage model with LSTM + ANN residual correction."""
+
+    # LSTM-ANN Hybrid Header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(147, 51, 234, 0.1));
+                    border-left: 4px solid #a855f7;
+                    padding: 1.25rem;
+                    border-radius: 12px;
+                    margin-bottom: 1.5rem;
+                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
+            <h2 style='color: #a855f7; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
+                🎯 LSTM-ANN Hybrid
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                <strong>Stage 1:</strong> LSTM learns primary time-series signal | <strong>Stage 2:</strong> ANN neural network corrects residuals
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Get selected dataset
+    fused_data = _get_hybrid_dataset()
+    selected_dataset_name = st.session_state.get("hybrid_selected_dataset", "📊 Original Dataset")
+
+    if fused_data is None or fused_data.empty:
+        st.warning("⚠️ No data available. Please load and process data first.")
+        return
+
+    # Show dataset info
+    st.info(f"🎨 **Using dataset**: {selected_dataset_name} | **Features**: {len(fused_data.columns)} columns | **Samples**: {len(fused_data)} rows")
+
+    # Configuration Section
+    st.markdown("### ⚙️ Configuration")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🧠 Stage 1: LSTM")
+        lookback = st.slider("Lookback Window", min_value=7, max_value=60, value=14, step=1, help="Number of past time steps for LSTM sequences", key="ann_lookback")
+        lstm_units = st.slider("LSTM Units", min_value=16, max_value=256, value=50, step=16, help="Number of LSTM neurons", key="ann_units")
+        lstm_dropout = st.slider("Dropout Rate", min_value=0.0, max_value=0.5, value=0.1, step=0.05, help="Dropout for regularization", key="ann_dropout")
+        lstm_epochs = st.slider("Training Epochs", min_value=5, max_value=100, value=20, step=5, help="Number of training iterations", key="ann_epochs")
+        lstm_batch_size = st.selectbox("Batch Size", options=[8, 16, 32, 64], index=1, help="Samples per training batch", key="ann_batch")
+
+    with col2:
+        st.markdown("#### 🧬 Stage 2: ANN (Feedforward Neural Network)")
+        st.markdown("**Network Architecture**")
+
+        # ANN Layer Configuration
+        layer1_units = st.slider("Layer 1 Units", min_value=16, max_value=256, value=64, step=16, help="Neurons in first hidden layer")
+        layer2_units = st.slider("Layer 2 Units", min_value=16, max_value=128, value=32, step=16, help="Neurons in second hidden layer")
+
+        ann_dropout = st.slider("ANN Dropout Rate", min_value=0.0, max_value=0.5, value=0.2, step=0.05, help="Dropout for ANN regularization", key="ann_dropout2")
+        ann_epochs = st.slider("ANN Training Epochs", min_value=10, max_value=200, value=50, step=10, help="Number of ANN training iterations")
+        ann_batch_size = st.selectbox("ANN Batch Size", options=[8, 16, 32, 64], index=1, help="Samples per ANN training batch", key="ann_batch2")
+        ann_patience = st.slider("Early Stopping Patience", min_value=3, max_value=20, value=5, step=1, help="Stop if no improvement for N epochs")
+        ann_lr = st.slider("ANN Learning Rate", min_value=0.0001, max_value=0.01, value=0.001, step=0.0001, format="%.4f", help="Step size for ANN optimization")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        # Filter for numeric columns only (exclude datetime columns)
+        numeric_cols = [col for col in fused_data.select_dtypes(include=[np.number]).columns if col != "Date"]
+        if not numeric_cols:
+            st.error("❌ No numeric columns found in the dataset. Please check your data.")
+            return
+        target_col = st.selectbox("Target Variable", options=numeric_cols, index=0, key="ann_target")
+    with col4:
+        eval_tail_size = st.slider("Evaluation Set Size", min_value=0.10, max_value=0.30, value=0.15, step=0.05, help="Fraction of data for final evaluation", key="ann_eval")
+
+    oof_splits = st.slider("Out-of-Fold Splits", min_value=2, max_value=10, value=4, step=1, help="Number of time-series cross-validation splits", key="ann_oof")
+
+    # Build Configuration Dictionary
+    config = {
+        "random_state": 42,
+        "features": {
+            "lags": [7, 14, 21],
+            "rolls": [7, 14, 21],
+        },
+        "eval": {"tail_size": eval_tail_size},
+        "oof_splits": oof_splits,
+        "stage1": {
+            "lookback": lookback,
+            "units": lstm_units,
+            "dropout": lstm_dropout,
+            "epochs": lstm_epochs,
+            "batch_size": lstm_batch_size,
+            "lr": 0.001,
+        },
+        "stage2": {
+            "layers": [layer1_units, layer2_units],
+            "dropout": ann_dropout,
+            "lr": ann_lr,
+            "epochs": ann_epochs,
+            "batch_size": ann_batch_size,
+            "patience": ann_patience,
+        },
+    }
+
+    # Training Button
+    if st.button("🚀 Train LSTM-ANN Hybrid", type="primary", use_container_width=True):
+        with st.spinner("🔄 Training LSTM-ANN hybrid model... This may take several minutes."):
+            try:
+                # Import the hybrid model
+                from app_core.models.ml.lstm_ann import LSTMANNHybrid
+
+                # Initialize and train
+                hybrid_model = LSTMANNHybrid()
+                artifacts = hybrid_model.fit(fused_data, target=target_col, config=config)
+
+                # Store results in session state
+                st.session_state["lstm_ann_results"] = {
+                    "artifacts": artifacts,
+                    "config": config,
+                    "dataset_name": selected_dataset_name,
+                }
+
+                st.success("✅ **LSTM-ANN Hybrid trained successfully!**")
+
+                # Display Metrics
+                st.markdown("### 🏆 Hybrid Model Performance")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAE", artifacts.metrics.get("MAE", 0), "", PRIMARY_COLOR),
+                        use_container_width=True,
+                        key="lstm_ann_mae"
+                    )
+                with col2:
+                    st.plotly_chart(
+                        _create_kpi_indicator("RMSE", artifacts.metrics.get("RMSE", 0), "", SECONDARY_COLOR),
+                        use_container_width=True,
+                        key="lstm_ann_rmse"
+                    )
+                with col3:
+                    st.plotly_chart(
+                        _create_kpi_indicator("MAPE", artifacts.metrics.get("MAPE", 0), "%", WARNING_COLOR),
+                        use_container_width=True,
+                        key="lstm_ann_mape"
+                    )
+                with col4:
+                    accuracy = artifacts.metrics.get("Accuracy", max(0, 100 - artifacts.metrics.get("MAPE", 100)))
+                    st.plotly_chart(
+                        _create_kpi_indicator("Accuracy", accuracy, "%", SUCCESS_COLOR),
+                        use_container_width=True,
+                        key="lstm_ann_accuracy"
+                    )
+
+                # Show artifacts paths
+                with st.expander("📁 Model Artifacts"):
+                    st.markdown(f"**Stage 1 (LSTM):** `{artifacts.stage1_path}`")
+                    st.markdown(f"**Stage 2 (ANN):** `{artifacts.stage2_path}`")
+                    st.markdown(f"**Scaler:** `{artifacts.scaler_path}`")
+
+            except ImportError as ie:
+                st.error(f"❌ **Import Error**: {str(ie)}\n\nPlease ensure TensorFlow/Keras is installed.")
+            except Exception as e:
+                st.error(f"❌ **Training Failed**\n\n{str(e)}")
+                import traceback
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
+
+    # Show existing results if available
+    elif "lstm_ann_results" in st.session_state:
+        st.info("ℹ️ **Previous LSTM-ANN results available.** Click 'Train LSTM-ANN Hybrid' to generate new results.")
+
+        results = st.session_state["lstm_ann_results"]
+        artifacts = results["artifacts"]
+
+        st.markdown("### 🏆 Previous Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.plotly_chart(
+                _create_kpi_indicator("MAE", artifacts.metrics.get("MAE", 0), "", PRIMARY_COLOR),
+                use_container_width=True,
+                key="prev_lstm_ann_mae"
+            )
+        with col2:
+            st.plotly_chart(
+                _create_kpi_indicator("RMSE", artifacts.metrics.get("RMSE", 0), "", SECONDARY_COLOR),
+                use_container_width=True,
+                key="prev_lstm_ann_rmse"
+            )
+        with col3:
+            st.plotly_chart(
+                _create_kpi_indicator("MAPE", artifacts.metrics.get("MAPE", 0), "%", WARNING_COLOR),
+                use_container_width=True,
+                key="prev_lstm_ann_mape"
+            )
+        with col4:
+            accuracy = artifacts.metrics.get("Accuracy", max(0, 100 - artifacts.metrics.get("MAPE", 100)))
+            st.plotly_chart(
+                _create_kpi_indicator("Accuracy", accuracy, "%", SUCCESS_COLOR),
+                use_container_width=True,
+                key="prev_lstm_ann_accuracy"
+            )
+
+
+def page_classification():
+    """Classification page for predicting patient arrival reasons."""
+
+    # Import sklearn modules (lazy import to avoid issues if not installed)
+    try:
+        from sklearn.model_selection import train_test_split
+        from sklearn.preprocessing import LabelEncoder, StandardScaler
+        from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.metrics import (
+            accuracy_score, precision_score, recall_score, f1_score,
+            classification_report, confusion_matrix
+        )
+    except ImportError:
+        st.error("❌ **sklearn not installed.** Please install scikit-learn to use classification features.")
+        return
+
+    # Initialize session state for classification
+    if "classification_data" not in st.session_state:
+        st.session_state.classification_data = None
+    if "classification_model" not in st.session_state:
+        st.session_state.classification_model = None
+    if "classification_results" not in st.session_state:
+        st.session_state.classification_results = None
+    if "label_encoder" not in st.session_state:
+        st.session_state.label_encoder = None
+    if "feature_scaler" not in st.session_state:
+        st.session_state.feature_scaler = None
+
+    # Classification header
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
+                    border-left: 4px solid #A855F7;
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
+            <h2 style='color: #A855F7; margin: 0 0 0.5rem 0; font-size: 1.8rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
+                🎯 Patient Arrival Reason Classification
+            </h2>
+            <p style='margin: 0; color: {TEXT_COLOR}; opacity: 0.9;'>
+                Predict and analyze reasons for patient arrivals using advanced machine learning classification models
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Tabs for classification
+    class_tab1, class_tab2, class_tab3, class_tab4 = st.tabs([
+        "📊 Data Upload",
+        "🤖 Model Training",
+        "📈 Results & Metrics",
+        "🔮 Prediction"
+    ])
+
+    # ========== TAB 1: Data Upload ==========
+    with class_tab1:
+        st.markdown("### 📊 Data Upload")
+        st.info("Upload dataset with patient arrival reasons for classification")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            uploaded_file = st.file_uploader(
+                "Choose CSV file",
+                type=["csv"],
+                key="classification_upload_mh"
+            )
+
+            if uploaded_file is not None:
+                try:
+                    df = pd.read_csv(uploaded_file)
+                    st.session_state.classification_data = df
+
+                    st.success(f"✅ Data loaded successfully! Shape: {df.shape}")
+
+                    st.markdown("#### Data Preview")
+                    st.dataframe(df.head(10), use_container_width=True)
+
+                    st.markdown("#### Column Information")
+                    col_info = pd.DataFrame({
+                        'Column': df.columns,
+                        'Type': df.dtypes.values,
+                        'Non-Null': df.count().values,
+                        'Null': df.isnull().sum().values
+                    })
+                    st.dataframe(col_info, use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"Error loading data: {str(e)}")
+
+        with col2:
+            if st.session_state.classification_data is not None:
+                df = st.session_state.classification_data
+
+                st.markdown("### Dataset Statistics")
+                st.metric("Total Records", f"{len(df):,}")
+                st.metric("Features", len(df.columns))
+                st.metric("Missing Values", f"{df.isnull().sum().sum():,}")
+
+                # Show unique values for categorical columns
+                st.markdown("### Categorical Columns")
+                cat_cols = df.select_dtypes(include=['object']).columns
+                for col in cat_cols[:5]:  # Show first 5
+                    unique_count = df[col].nunique()
+                    st.metric(col, unique_count, delta="unique values")
+
+    # ========== TAB 2: Model Training ==========
+    with class_tab2:
+        st.markdown("### 🤖 Model Training")
+
+        if st.session_state.classification_data is None:
+            st.warning("⚠️ Please upload data in the Data Upload tab first.")
         else:
-            st.caption("Manual hyperparameters (placeholders).")
-            c1, c2 = st.columns(2)
-            with c1: cfg["hyb3_lstm_units"] = int(st.number_input("LSTM hidden units", 8, 1024, int(cfg.get("hyb3_lstm_units",64)), step=8))
-            with c2:
-                st.markdown("**SARIMAX orders**")
-                r1, r2, r3 = st.columns(3)
-                with r1:
-                    p = st.number_input("p", 0, 10, int(cfg.get("hyb3_sarimax_order",(1,0,0))[0]), key="hyb3_p")
-                with r2:
-                    d = st.number_input("d", 0, 3, int(cfg.get("hyb3_sarimax_order",(1,0,0))[1]), key="hyb3_d")
-                with r3:
-                    q = st.number_input("q", 0, 10, int(cfg.get("hyb3_sarimax_order",(1,0,0))[2]), key="hyb3_q")
-                cfg["hyb3_sarimax_order"] = (int(p), int(d), int(q))
+            df = st.session_state.classification_data.copy()
 
-            s1, s2, s3, s4 = st.columns(4)
-            so = cfg.get("hyb3_sarimax_seasonal_order", (0,0,0,0))
-            with s1: P = st.number_input("P", 0, 5, int(so[0]), key="hyb3_P")
-            with s2: D = st.number_input("D", 0, 2, int(so[1]), key="hyb3_D")
-            with s3: Q = st.number_input("Q", 0, 5, int(so[2]), key="hyb3_Q")
-            with s4:
-                s = st.number_input("s (period)", 1, 365, int(cfg.get("hyb3_seasonal_period",7)), key="hyb3_seasonal_period")
-            cfg["hyb3_sarimax_seasonal_order"] = (int(P), int(D), int(Q), int(s))
-            cfg["hyb3_seasonal_period"] = int(s)
+            col1, col2 = st.columns([1, 1])
 
-            st.markdown("**Exogenous (X) features (placeholder)**")
-            st.multiselect("Select exogenous columns", options=[], key="hyb3_exog_manual")
-            cfg["hyb3_exogenous_cols"] = st.session_state.get("hyb3_exog_manual", [])
+            with col1:
+                st.markdown("#### Configuration")
 
-    target_feature_placeholders(prefix="hybrid")
-    c1, c2 = st.columns(2)
-    with c1: st.button(f"🚀 Train {cfg['hybrid_choice']} (placeholder)", key="hybrid_train_button")
-    with c2: st.button(f"🧪 Test {cfg['hybrid_choice']} (placeholder)", key="hybrid_test_button")
-    debug_panel()
+                # Select target column
+                target_col = st.selectbox(
+                    "Select Target Column (Reason)",
+                    options=df.columns.tolist(),
+                    help="Column containing the reason categories"
+                )
+
+                # Select feature columns
+                available_features = [col for col in df.columns if col != target_col]
+                feature_cols = st.multiselect(
+                    "Select Feature Columns",
+                    options=available_features,
+                    default=available_features[:min(10, len(available_features))],
+                    help="Columns to use as predictors"
+                )
+
+                # Model selection
+                model_type = st.selectbox(
+                    "Select Classification Model",
+                    options=[
+                        "Random Forest",
+                        "Gradient Boosting",
+                        "Logistic Regression"
+                    ]
+                )
+
+                # Train/test split
+                test_size = st.slider(
+                    "Test Set Size (%)",
+                    min_value=10,
+                    max_value=40,
+                    value=20,
+                    step=5
+                ) / 100
+
+                random_state = st.number_input(
+                    "Random State (for reproducibility)",
+                    min_value=0,
+                    max_value=1000,
+                    value=42
+                )
+
+            with col2:
+                st.markdown("#### Model Hyperparameters")
+
+                if model_type == "Random Forest":
+                    n_estimators = st.slider("Number of Trees", 10, 500, 100, 10)
+                    max_depth = st.slider("Max Depth", 3, 50, 10, 1)
+                    min_samples_split = st.slider("Min Samples Split", 2, 20, 2, 1)
+
+                elif model_type == "Gradient Boosting":
+                    n_estimators = st.slider("Number of Estimators", 10, 500, 100, 10)
+                    learning_rate = st.slider("Learning Rate", 0.01, 1.0, 0.1, 0.01)
+                    max_depth = st.slider("Max Depth", 3, 20, 3, 1)
+
+                elif model_type == "Logistic Regression":
+                    C = st.slider("Regularization (C)", 0.01, 10.0, 1.0, 0.1)
+                    max_iter = st.slider("Max Iterations", 100, 2000, 1000, 100)
+
+            st.markdown("---")
+
+            # Train button
+            if st.button("🚀 Train Classification Model", type="primary", use_container_width=True):
+                if not feature_cols:
+                    st.error("Please select at least one feature column!")
+                else:
+                    with st.spinner("Training model..."):
+                        try:
+                            # Prepare data
+                            X = df[feature_cols].copy()
+                            y = df[target_col].copy()
+
+                            # Handle missing values
+                            X = X.fillna(X.mean(numeric_only=True))
+                            for col in X.select_dtypes(include=['object']).columns:
+                                X[col] = X[col].fillna(X[col].mode()[0] if not X[col].mode().empty else "Unknown")
+
+                            # Encode categorical features
+                            for col in X.select_dtypes(include=['object']).columns:
+                                le = LabelEncoder()
+                                X[col] = le.fit_transform(X[col].astype(str))
+
+                            # Encode target
+                            label_encoder = LabelEncoder()
+                            y_encoded = label_encoder.fit_transform(y)
+                            st.session_state.label_encoder = label_encoder
+
+                            # Split data
+                            X_train, X_test, y_train, y_test = train_test_split(
+                                X, y_encoded, test_size=test_size, random_state=int(random_state), stratify=y_encoded
+                            )
+
+                            # Scale features
+                            scaler = StandardScaler()
+                            X_train_scaled = scaler.fit_transform(X_train)
+                            X_test_scaled = scaler.transform(X_test)
+                            st.session_state.feature_scaler = scaler
+
+                            # Train model
+                            if model_type == "Random Forest":
+                                model = RandomForestClassifier(
+                                    n_estimators=n_estimators,
+                                    max_depth=max_depth,
+                                    min_samples_split=min_samples_split,
+                                    random_state=int(random_state),
+                                    n_jobs=-1
+                                )
+                            elif model_type == "Gradient Boosting":
+                                model = GradientBoostingClassifier(
+                                    n_estimators=n_estimators,
+                                    learning_rate=learning_rate,
+                                    max_depth=max_depth,
+                                    random_state=int(random_state)
+                                )
+                            else:  # Logistic Regression
+                                model = LogisticRegression(
+                                    C=C,
+                                    max_iter=max_iter,
+                                    random_state=int(random_state),
+                                    multi_class='multinomial'
+                                )
+
+                            model.fit(X_train_scaled, y_train)
+
+                            # Make predictions
+                            y_train_pred = model.predict(X_train_scaled)
+                            y_test_pred = model.predict(X_test_scaled)
+
+                            # Calculate metrics
+                            train_accuracy = accuracy_score(y_train, y_train_pred)
+                            test_accuracy = accuracy_score(y_test, y_test_pred)
+
+                            # Multi-class metrics (weighted average)
+                            precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
+                            recall = recall_score(y_test, y_test_pred, average='weighted', zero_division=0)
+                            f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
+
+                            # Confusion matrix
+                            cm = confusion_matrix(y_test, y_test_pred)
+
+                            # Classification report
+                            report = classification_report(
+                                y_test, y_test_pred,
+                                target_names=label_encoder.classes_,
+                                output_dict=True,
+                                zero_division=0
+                            )
+
+                            # Feature importance
+                            if hasattr(model, 'feature_importances_'):
+                                feature_importance = pd.DataFrame({
+                                    'Feature': feature_cols,
+                                    'Importance': model.feature_importances_
+                                }).sort_values('Importance', ascending=False)
+                            else:
+                                feature_importance = None
+
+                            # Store results
+                            st.session_state.classification_model = model
+                            st.session_state.classification_results = {
+                                'model_type': model_type,
+                                'train_accuracy': train_accuracy,
+                                'test_accuracy': test_accuracy,
+                                'precision': precision,
+                                'recall': recall,
+                                'f1_score': f1,
+                                'confusion_matrix': cm,
+                                'classification_report': report,
+                                'feature_importance': feature_importance,
+                                'feature_cols': feature_cols,
+                                'target_col': target_col,
+                                'classes': label_encoder.classes_.tolist(),
+                                'X_test': X_test,
+                                'y_test': y_test,
+                                'y_test_pred': y_test_pred,
+                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            }
+
+                            st.success(f"✅ Model trained successfully! Test Accuracy: {test_accuracy:.2%}")
+                            st.balloons()
+
+                        except Exception as e:
+                            st.error(f"Error training model: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
+
+    # ========== TAB 3: Results & Metrics ==========
+    with class_tab3:
+        st.markdown("### 📈 Results & Metrics")
+
+        if st.session_state.classification_results is None:
+            st.warning("⚠️ Please train a model first in the Model Training tab.")
+        else:
+            results = st.session_state.classification_results
+
+            # Metrics cards
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Test Accuracy", f"{results['test_accuracy']:.2%}")
+            with col2:
+                st.metric("Precision", f"{results['precision']:.2%}")
+            with col3:
+                st.metric("Recall", f"{results['recall']:.2%}")
+            with col4:
+                st.metric("F1 Score", f"{results['f1_score']:.2%}")
+
+            st.markdown("---")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Confusion Matrix
+                st.markdown("#### Confusion Matrix")
+                cm = results['confusion_matrix']
+                classes = results['classes']
+
+                fig_cm = go.Figure(data=go.Heatmap(
+                    z=cm,
+                    x=classes,
+                    y=classes,
+                    colorscale='Blues',
+                    text=cm,
+                    texttemplate='%{text}',
+                    textfont={"size": 12},
+                    hoverongaps=False
+                ))
+
+                fig_cm.update_layout(
+                    xaxis_title="Predicted",
+                    yaxis_title="Actual",
+                    height=500,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color=TEXT_COLOR)
+                )
+
+                st.plotly_chart(fig_cm, use_container_width=True)
+
+            with col2:
+                # Classification Report
+                st.markdown("#### Classification Report by Class")
+
+                report_df = pd.DataFrame(results['classification_report']).T
+                report_df = report_df[report_df.index.isin(classes)]
+                report_df = report_df[['precision', 'recall', 'f1-score', 'support']]
+                report_df = report_df.round(3)
+
+                st.dataframe(report_df, use_container_width=True)
+
+                # Bar chart of F1 scores by class
+                fig_f1 = px.bar(
+                    x=report_df.index,
+                    y=report_df['f1-score'],
+                    labels={'x': 'Class', 'y': 'F1 Score'},
+                    title='F1 Score by Class',
+                    color=report_df['f1-score'],
+                    color_continuous_scale='Viridis'
+                )
+
+                fig_f1.update_layout(
+                    height=300,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color=TEXT_COLOR),
+                    showlegend=False
+                )
+
+                st.plotly_chart(fig_f1, use_container_width=True)
+
+            # Feature Importance
+            if results['feature_importance'] is not None:
+                st.markdown("---")
+                st.markdown("#### Feature Importance")
+
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    fig_imp = px.bar(
+                        results['feature_importance'].head(15),
+                        x='Importance',
+                        y='Feature',
+                        orientation='h',
+                        title='Top 15 Most Important Features',
+                        color='Importance',
+                        color_continuous_scale='Plasma'
+                    )
+
+                    fig_imp.update_layout(
+                        height=500,
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color=TEXT_COLOR),
+                        yaxis={'categoryorder': 'total ascending'}
+                    )
+
+                    st.plotly_chart(fig_imp, use_container_width=True)
+
+                with col2:
+                    st.markdown("**Top 10 Features**")
+                    st.dataframe(
+                        results['feature_importance'].head(10),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+            # Model info
+            st.markdown("---")
+            st.markdown("#### Model Information")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.info(f"**Model Type:** {results['model_type']}")
+            with col2:
+                st.info(f"**Number of Classes:** {len(results['classes'])}")
+            with col3:
+                st.info(f"**Trained:** {results['timestamp']}")
+
+            # Download model
+            st.markdown("---")
+            if st.button("💾 Save Classification Model", use_container_width=True):
+                try:
+                    # Create artifacts directory
+                    artifacts_dir = Path("pipeline_artifacts/classification")
+                    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Save model
+                    model_path = artifacts_dir / f"model_{results['model_type'].replace(' ', '_')}.pkl"
+                    joblib.dump(st.session_state.classification_model, model_path)
+
+                    # Save label encoder
+                    encoder_path = artifacts_dir / "label_encoder.pkl"
+                    joblib.dump(st.session_state.label_encoder, encoder_path)
+
+                    # Save scaler
+                    scaler_path = artifacts_dir / "scaler.pkl"
+                    joblib.dump(st.session_state.feature_scaler, scaler_path)
+
+                    st.success(f"✅ Model saved to {artifacts_dir}")
+                except Exception as e:
+                    st.error(f"Error saving model: {str(e)}")
+
+    # ========== TAB 4: Prediction ==========
+    with class_tab4:
+        st.markdown("### 🔮 Prediction")
+
+        if st.session_state.classification_model is None:
+            st.warning("⚠️ Please train a model first in the Model Training tab.")
+        else:
+            results = st.session_state.classification_results
+            model = st.session_state.classification_model
+
+            prediction_mode = st.radio(
+                "Prediction Mode",
+                options=["Single Prediction", "Batch Prediction"],
+                horizontal=True
+            )
+
+            if prediction_mode == "Single Prediction":
+                st.markdown("#### Enter Feature Values")
+
+                # Create input fields for each feature
+                feature_values = {}
+                cols = st.columns(3)
+
+                for idx, feature in enumerate(results['feature_cols']):
+                    with cols[idx % 3]:
+                        feature_values[feature] = st.number_input(
+                            feature,
+                            value=0.0,
+                            format="%.2f",
+                            key=f"class_feat_{feature}"
+                        )
+
+                if st.button("🎯 Predict Reason", type="primary", use_container_width=True):
+                    try:
+                        # Prepare input
+                        input_df = pd.DataFrame([feature_values])
+                        input_scaled = st.session_state.feature_scaler.transform(input_df)
+
+                        # Make prediction
+                        prediction = model.predict(input_scaled)[0]
+                        prediction_proba = model.predict_proba(input_scaled)[0]
+
+                        # Decode prediction
+                        predicted_class = st.session_state.label_encoder.inverse_transform([prediction])[0]
+
+                        # Display result
+                        st.markdown("---")
+                        st.success(f"### 🎯 Predicted Reason: **{predicted_class}**")
+
+                        # Probability distribution
+                        st.markdown("#### Prediction Probabilities")
+                        proba_df = pd.DataFrame({
+                            'Reason': results['classes'],
+                            'Probability': prediction_proba
+                        }).sort_values('Probability', ascending=False)
+
+                        fig_proba = px.bar(
+                            proba_df,
+                            x='Reason',
+                            y='Probability',
+                            title='Prediction Confidence by Class',
+                            color='Probability',
+                            color_continuous_scale='Turbo'
+                        )
+
+                        fig_proba.update_layout(
+                            height=400,
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color=TEXT_COLOR)
+                        )
+
+                        st.plotly_chart(fig_proba, use_container_width=True)
+
+                    except Exception as e:
+                        st.error(f"Error making prediction: {str(e)}")
+
+            else:  # Batch Prediction
+                st.markdown("#### Upload Data for Batch Prediction")
+
+                batch_file = st.file_uploader(
+                    "Choose CSV file with same features",
+                    type=["csv"],
+                    key="batch_prediction_class"
+                )
+
+                if batch_file is not None:
+                    try:
+                        batch_df = pd.read_csv(batch_file)
+
+                        # Validate features
+                        missing_features = set(results['feature_cols']) - set(batch_df.columns)
+                        if missing_features:
+                            st.error(f"Missing features: {missing_features}")
+                        else:
+                            X_batch = batch_df[results['feature_cols']].copy()
+
+                            # Handle missing values
+                            X_batch = X_batch.fillna(X_batch.mean(numeric_only=True))
+                            for col in X_batch.select_dtypes(include=['object']).columns:
+                                X_batch[col] = X_batch[col].fillna(X_batch[col].mode()[0] if not X_batch[col].mode().empty else "Unknown")
+
+                            # Encode categorical features
+                            for col in X_batch.select_dtypes(include=['object']).columns:
+                                le = LabelEncoder()
+                                X_batch[col] = le.fit_transform(X_batch[col].astype(str))
+
+                            # Scale and predict
+                            X_batch_scaled = st.session_state.feature_scaler.transform(X_batch)
+                            predictions = model.predict(X_batch_scaled)
+                            predictions_proba = model.predict_proba(X_batch_scaled)
+
+                            # Decode predictions
+                            predicted_classes = st.session_state.label_encoder.inverse_transform(predictions)
+
+                            # Add predictions to dataframe
+                            batch_df['Predicted_Reason'] = predicted_classes
+                            batch_df['Prediction_Confidence'] = predictions_proba.max(axis=1)
+
+                            st.success(f"✅ Predictions made for {len(batch_df)} records!")
+
+                            # Display results
+                            st.dataframe(batch_df, use_container_width=True)
+
+                            # Distribution of predictions
+                            st.markdown("#### Prediction Distribution")
+                            pred_dist = pd.DataFrame(predicted_classes, columns=['Predicted_Reason'])
+                            fig_dist = px.pie(
+                                pred_dist,
+                                names='Predicted_Reason',
+                                title='Distribution of Predicted Reasons'
+                            )
+
+                            fig_dist.update_layout(
+                                height=400,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                font=dict(color=TEXT_COLOR)
+                            )
+
+                            st.plotly_chart(fig_dist, use_container_width=True)
+
+                            # Download predictions
+                            csv = batch_df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Predictions",
+                                data=csv,
+                                file_name=f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+
+                    except Exception as e:
+                        st.error(f"Error processing batch predictions: {str(e)}")
+
 
 # -----------------------------------------------------------------------------
 # Tab Navigation
 # -----------------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📏 Benchmarks",
     "🧮 Machine Learning",
     "🔬 Hyperparameter Tuning",
-    "🧬 Hybrid Models"
+    "🧬 Hybrid Models",
+    "🎯 Classification"
 ])
 
 with tab1:
@@ -2318,3 +7715,6 @@ with tab3:
 
 with tab4:
     page_hybrid()
+
+with tab5:
+    page_classification()

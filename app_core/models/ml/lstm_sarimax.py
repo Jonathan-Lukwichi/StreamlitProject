@@ -50,15 +50,17 @@ class LSTMSARIMAXHybrid(BaseHybridModel):
         """Prepares the full feature set for both model stages."""
         # TODO: Make date_col configurable or auto-detected
         date_col = "Date"
-        
+
+        # Keep Date column for time-based splitting
+        date_series = df[date_col]
         cal_feats = build_calendar_features(df, date_col)
         lag_feats = make_lags(df, target, config["lags"], config["rolls"])
-        
-        X_tab = pd.concat([cal_feats, lag_feats], axis=1)
+
+        X_tab = pd.concat([date_series, cal_feats, lag_feats], axis=1)
         y = df[target]
 
         full_df = pd.concat([X_tab, y], axis=1).dropna()
-        
+
         return full_df.drop(columns=[target]), full_df[target]
 
     def fit(self, df: pd.DataFrame, target: str, config: Dict[str, Any]) -> HybridArtifacts:
@@ -67,18 +69,21 @@ class LSTMSARIMAXHybrid(BaseHybridModel):
 
         # 1. Prepare features and split data
         X_tab, y = self._build_features(df, target, config["features"])
-        # Use date_col=None to use the DataFrame's index for time-based splitting
-        df_train, df_eval = train_test_split_time(pd.concat([X_tab, y], axis=1), date_col=None, test_size=config["eval"]["tail_size"], val_size=0)
-        
-        X_train_tab, y_train = df_train.drop(columns=y.name), df_train[y.name]
-        X_eval_tab, y_eval = df_eval.drop(columns=y.name), df_eval[y.name]
+        # Use Date column for time-based splitting
+        df_train, _, df_eval = train_test_split_time(pd.concat([X_tab, y], axis=1), date_col="Date", test_size=config["eval"]["tail_size"], val_size=0)
+
+        # Drop Date column after splitting (not needed for model training)
+        X_train_tab = df_train.drop(columns=[y.name, "Date"])
+        y_train = df_train[y.name]
+        X_eval_tab = df_eval.drop(columns=[y.name, "Date"])
+        y_eval = df_eval[y.name]
 
         scaler = StandardScaler().fit(X_train_tab)
         X_train_scaled = pd.DataFrame(scaler.transform(X_train_tab), index=X_train_tab.index, columns=X_train_tab.columns)
 
         # 2. Stage 1: Get LSTM Out-of-Fold (OOF) predictions
         def _lstm_fitter(X_fold, y_fold, cfg):
-            lstm_cfg = cfg["stage1"]
+            # cfg already contains the stage1 config (unpacked in oof_config below)
             # Convert to DataFrame for build_supervised_sequences
             if not isinstance(X_fold, pd.DataFrame):
                 X_fold = pd.DataFrame(X_fold)
@@ -89,11 +94,11 @@ class LSTMSARIMAXHybrid(BaseHybridModel):
                 pd.concat([X_fold, y_fold], axis=1),
                 list(X_fold.columns),
                 y_fold.name,
-                lstm_cfg["lookback"]
+                cfg["lookback"]
             )
-            model_cfg = {**lstm_cfg, "n_features": X_fold.shape[1]}
+            model_cfg = {**cfg, "n_features": X_fold.shape[1]}
             model = build_lstm_model(model_cfg)
-            model.fit(X_seq, y_seq, epochs=lstm_cfg["epochs"], batch_size=lstm_cfg["batch_size"], verbose=0)
+            model.fit(X_seq, y_seq, epochs=cfg["epochs"], batch_size=cfg["batch_size"], verbose=0)
             return model
 
         oof_config = {**config["stage1"], "use_sequences": True}

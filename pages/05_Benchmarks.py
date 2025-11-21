@@ -1112,7 +1112,7 @@ def run_arima_multihorizon(
     order: tuple[int,int,int] | None = None,
     auto_select: bool = True,
     cv_strategy: str = "expanding",
-    search_mode: str = "hybrid",  # "aic_only", "hybrid", or "pmdarima_oos"
+    search_mode: str = "aic_only",  # "aic_only" (fast), "hybrid" (slow but accurate), or "pmdarima_oos"
 ) -> dict:
     """Train independent univariate ARIMA models for Target_1..Target_H."""
     rows, per_h, ok = [], {}, []
@@ -1960,6 +1960,7 @@ def page_benchmarks():
                         use_all_features=(len(exog_vars) == 0),
                         include_dow_ohe=True,
                         selected_features=exog_vars if exog_vars else None,
+                        search_mode="aic_only",  # Fast AIC-only search (4-5x faster than hybrid)
                     )
                     if order is not None and seasonal_order is not None:
                         kwargs.update(dict(order=order, seasonal_order=seasonal_order))

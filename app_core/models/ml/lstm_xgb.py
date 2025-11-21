@@ -43,17 +43,19 @@ class LSTMXGBHybrid(BaseHybridModel):
         """Prepares the full feature set for both model stages."""
         # TODO: Make date_col configurable or auto-detected
         date_col = "Date"
-        
+
+        # Keep Date column for time-based splitting
+        date_series = df[date_col]
         # Create tabular features (calendar, lags, rolls)
         cal_feats = build_calendar_features(df, date_col)
         lag_feats = make_lags(df, target, config["lags"], config["rolls"])
-        
-        X_tab = pd.concat([cal_feats, lag_feats], axis=1)
+
+        X_tab = pd.concat([date_series, cal_feats, lag_feats], axis=1)
         y = df[target]
 
         # Align data by dropping NaNs created by lags/rolls
         full_df = pd.concat([X_tab, y], axis=1).dropna()
-        
+
         return full_df.drop(columns=[target]), full_df[target]
 
     def fit(self, df: pd.DataFrame, target: str, config: Dict[str, Any]) -> HybridArtifacts:
@@ -64,11 +66,14 @@ class LSTMXGBHybrid(BaseHybridModel):
 
         # 1. Prepare features and split data for training vs. final evaluation
         X_tab, y = self._build_features(df, target, config["features"])
-        # Use date_col=None to use the DataFrame's index for time-based splitting
-        df_train, df_eval = train_test_split_time(pd.concat([X_tab, y], axis=1), date_col=None, test_size=config["eval"]["tail_size"], val_size=0)
-        
-        X_train_tab, y_train = df_train.drop(columns=y.name), df_train[y.name]
-        X_eval_tab, y_eval = df_eval.drop(columns=y.name), df_eval[y.name]
+        # Use Date column for time-based splitting
+        df_train, _, df_eval = train_test_split_time(pd.concat([X_tab, y], axis=1), date_col="Date", test_size=config["eval"]["tail_size"], val_size=0)
+
+        # Drop Date column after splitting (not needed for model training)
+        X_train_tab = df_train.drop(columns=[y.name, "Date"])
+        y_train = df_train[y.name]
+        X_eval_tab = df_eval.drop(columns=[y.name, "Date"])
+        y_eval = df_eval[y.name]
 
         # Scale tabular features
         scaler = StandardScaler().fit(X_train_tab)
@@ -78,7 +83,7 @@ class LSTMXGBHybrid(BaseHybridModel):
         # This function trains an LSTM on expanding windows of the data
         def _lstm_fitter(X_fold, y_fold, cfg):
             """A helper function to train an LSTM for one fold of the OOF."""
-            lstm_cfg = cfg["stage1"]
+            # cfg already contains the stage1 config (unpacked in oof_config below)
             # Convert to DataFrame for build_supervised_sequences
             if not isinstance(X_fold, pd.DataFrame):
                 X_fold = pd.DataFrame(X_fold)
@@ -89,12 +94,12 @@ class LSTMXGBHybrid(BaseHybridModel):
                 pd.concat([X_fold, y_fold], axis=1),
                 list(X_fold.columns),
                 y_fold.name,
-                lstm_cfg["lookback"]
+                cfg["lookback"]
             )
 
-            model_cfg = {**lstm_cfg, "n_features": X_fold.shape[1]}
+            model_cfg = {**cfg, "n_features": X_fold.shape[1]}
             model = build_lstm_model(model_cfg)
-            model.fit(X_seq, y_seq, epochs=lstm_cfg["epochs"], batch_size=lstm_cfg["batch_size"], verbose=0)
+            model.fit(X_seq, y_seq, epochs=cfg["epochs"], batch_size=cfg["batch_size"], verbose=0)
             return model
 
         oof_config = {**config["stage1"], "use_sequences": True}
@@ -110,10 +115,13 @@ class LSTMXGBHybrid(BaseHybridModel):
         residuals = y_train.loc[oof_preds.index] - oof_preds
         X_resid_train = X_train_scaled.loc[residuals.index]
 
-        # Split residual data for early stopping
-        X_res_tr, X_res_val, y_res_tr, y_res_val = train_test_split_time(
-            pd.concat([X_resid_train, residuals.rename("resid")], axis=1), date_col=None, test_size=0.2, val_size=0
-        )
+        # Split residual data for early stopping (simple time-based split)
+        resid_df = pd.concat([X_resid_train, residuals.rename("resid")], axis=1)
+        split_idx = int(len(resid_df) * 0.8)
+        X_res_tr = resid_df.iloc[:split_idx]
+        y_res_tr = X_res_tr[["resid"]]
+        X_res_val = resid_df.iloc[split_idx:]
+        y_res_val = X_res_val[["resid"]]
 
         xgb_cfg = config["stage2"]
         stage2_model = XGBRegressor(
