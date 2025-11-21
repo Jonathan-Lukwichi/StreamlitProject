@@ -388,12 +388,22 @@ def page_dashboard():
     <div class="sparkle sparkle-4"></div>
     """, unsafe_allow_html=True)
 
+    # Dynamic dataset detection - automatically counts all available datasets
+    EXPECTED_DATASETS = {
+        "patient": "patient_data",
+        "weather": "weather_data",
+        "calendar": "calendar_data",
+        "reason": "reason_data",
+    }
+
+    # Count loaded datasets dynamically
     datasets_loaded = sum([
-        bool(st.session_state.get("patient_loaded")),
-        bool(st.session_state.get("weather_loaded")),
-        bool(st.session_state.get("calendar_loaded")),
+        bool(st.session_state.get(key) is not None and
+             not getattr(st.session_state.get(key), "empty", True))
+        for key in EXPECTED_DATASETS.values()
     ])
-    system_active = bool(st.session_state.get("patient_loaded"))
+    total_datasets = len(EXPECTED_DATASETS)
+    system_active = bool(st.session_state.get("patient_data") is not None)
 
     # Compact Hero Header
     st.markdown(
@@ -1369,7 +1379,7 @@ def page_dashboard():
                 f"""
                 <div class='dashboard-kpi-card' style='text-align: center; padding: 1.25rem 1rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(59, 130, 246, 0.25);'>
                   <span class='kpi-label' style='margin-bottom: 0.5rem;'>Datasets Loaded</span>
-                  <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/3</div>
+                  <div class='kpi-value' style='font-size: 2rem; margin: 0.5rem 0;'>{datasets_loaded}/{total_datasets}</div>
                   <div style='
                       width: 100%;
                       height: 5px;
@@ -1379,7 +1389,7 @@ def page_dashboard():
                       margin-top: 0.25rem;
                   '>
                     <div style='
-                        width: {(datasets_loaded/3)*100}%;
+                        width: {(datasets_loaded/total_datasets)*100 if total_datasets > 0 else 0}%;
                         height: 100%;
                         background: linear-gradient(90deg, #3b82f6, #22d3ee);
                         transition: width 0.5s ease;
