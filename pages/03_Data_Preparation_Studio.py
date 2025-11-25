@@ -18,6 +18,14 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
+# ============================================================================
+# AUTHENTICATION CHECK - ADMIN ONLY
+# ============================================================================
+from app_core.auth.authentication import require_admin_access
+from app_core.auth.navigation import configure_sidebar_navigation, add_logout_button
+require_admin_access()
+configure_sidebar_navigation()
+
 try:
     from app_core.state.session import init_state
 except Exception:
@@ -241,8 +249,8 @@ def _harmonize_day_of_week_and_ed(df: pd.DataFrame) -> pd.DataFrame:
 # ---------- CACHED PROCESSORS ---------------------------------------------------
 @st.cache_data(show_spinner=False)
 def _run_fusion_cached(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calendar_df: pd.DataFrame, reason_df: pd.DataFrame = None):
-    merged, _ = fuse_data(patient_df, weather_df, calendar_df, reason_df)
-    return merged
+    merged, log = fuse_data(patient_df, weather_df, calendar_df, reason_df)
+    return merged, log
 
 @st.cache_data(show_spinner=False)
 def _preprocess_after_fusion_cached(merged_df: pd.DataFrame, n_lags: int, strict_drop: bool):
@@ -262,6 +270,7 @@ def _preprocess_after_fusion_cached(merged_df: pd.DataFrame, n_lags: int, strict
 
 # ---------- ANALYST-STYLE REPORTING --------------------------------------------
 def _render_preprocessed_info(proc: pd.DataFrame):
+    """Render comprehensive preprocessed dataset information using modern categorization."""
     n_rows, n_cols = proc.shape
     min_dt, max_dt = None, None
     if "datetime" in proc.columns and pd.api.types.is_datetime64_any_dtype(proc["datetime"]):
@@ -274,34 +283,173 @@ def _render_preprocessed_info(proc: pd.DataFrame):
         except Exception:
             pass
 
-    cols = list(proc.columns)
-    time_cols = _detect_time_columns(cols)
-    cal_cols  = _detect_calendar_columns([c for c in cols if c not in time_cols])
-    met_cols  = _detect_weather_columns([c for c in cols if c not in time_cols + cal_cols])
-    ed_lags   = _detect_ed_columns([c for c in cols if c not in time_cols + cal_cols + met_cols])
-    tgt_cols  = _detect_target_columns([c for c in cols if c not in time_cols + cal_cols + met_cols + ed_lags])
+    # Categorize columns using same logic as visual grouping
+    def categorize_columns(df):
+        """Categorize columns into meaningful groups for ML training."""
+        cols = list(df.columns)
+
+        date_cols = []
+        calendar_cols = []
+        weather_cols = []
+        current_reason_cols = []
+        past_arrivals_cols = []
+        past_reason_cols = []
+        future_arrivals_cols = []
+        future_reason_cols = []
+        other_cols = []
+
+        # Known reason column names (granular medical categories)
+        reason_keywords = [
+            'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
+            'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
+            'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
+            'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
+        ]
+
+        for col in cols:
+            col_lower = col.lower()
+
+            # Date columns
+            if col_lower in ['date', 'datetime', 'ds', 'timestamp']:
+                date_cols.append(col)
+
+            # Calendar features
+            elif col_lower in ['day_of_week', 'holiday', 'holiday_prev', 'is_weekend',
+                              'day_of_month', 'week_of_year', 'month', 'year']:
+                calendar_cols.append(col)
+
+            # Weather features
+            elif col_lower in ['average_temp', 'max_temp', 'average_wind', 'max_wind',
+                              'average_mslp', 'total_precipitation', 'moon_phase']:
+                weather_cols.append(col)
+
+            # Past arrivals features (ED_1, ED_2, etc.)
+            elif col_lower.startswith('ed_') and len(col_lower) > 3 and col_lower[3:].isdigit():
+                past_arrivals_cols.append(col)
+
+            # Future arrivals features (Target_1, Target_2, etc.)
+            elif col_lower.startswith('target_'):
+                future_arrivals_cols.append(col)
+
+            # Past reason features (asthma_lag_1, pneumonia_lag_1, etc.)
+            elif '_lag_' in col_lower and any(keyword in col_lower for keyword in reason_keywords):
+                past_reason_cols.append(col)
+
+            # Future reason features (asthma_1, pneumonia_1, etc.)
+            elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in reason_keywords):
+                future_reason_cols.append(col)
+
+            # Current reason features (asthma, pneumonia, etc. without suffixes)
+            elif any(col_lower == keyword for keyword in reason_keywords):
+                current_reason_cols.append(col)
+
+            # Other columns
+            else:
+                other_cols.append(col)
+
+        return {
+            'Date': date_cols,
+            'Calendar Features': calendar_cols,
+            'Weather Features': weather_cols,
+            'Current Reason Columns': current_reason_cols,
+            'Past Features (Arrivals)': past_arrivals_cols,
+            'Past Features (Reasons)': past_reason_cols,
+            'Future Features (Arrivals)': future_arrivals_cols,
+            'Future Features (Reasons)': future_reason_cols,
+            'Other': other_cols
+        }
+
+    categorized = categorize_columns(proc)
+
+    # Calculate summary stats
+    total_past_features = len(categorized['Past Features (Arrivals)']) + len(categorized['Past Features (Reasons)'])
+    total_future_features = len(categorized['Future Features (Arrivals)']) + len(categorized['Future Features (Reasons)'])
 
     miss = proc.isna().sum().sort_values(ascending=False)
     miss = miss[miss > 0].head(8)
 
+    # Dataset Overview
     st.markdown("**Dataset Overview**")
-    st.write(f"- Shape: **{n_rows:,} rows × {n_cols} columns**")
-    if min_dt is not None and max_dt is not None:
-        st.write(f"- Time coverage: **{min_dt.date()} → {max_dt.date()}**")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total Rows", f"{n_rows:,}")
+        st.metric("Total Columns", f"{n_cols}")
+    with col2:
+        if min_dt is not None and max_dt is not None:
+            st.write(f"**Time Coverage:**")
+            st.write(f"{min_dt.date()} → {max_dt.date()}")
 
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
+    # Column Families with visual grouping
     st.markdown("**Column Families**")
-    st.write(f"- Time: {', '.join(time_cols) if time_cols else '—'}")
-    st.write(f"- Calendar: {', '.join(cal_cols) if cal_cols else '—'}")
-    st.write(f"- Weather: {', '.join(met_cols) if met_cols else '—'}")
-    st.write(f"- ED features: {', '.join(ed_lags) if ed_lags else '—'}")
-    st.write(f"- Targets: {', '.join(tgt_cols) if tgt_cols else '—'}")
 
+    # Define colors and icons
+    category_colors = {
+        'Date': '#3B82F6',
+        'Calendar Features': '#8B5CF6',
+        'Weather Features': '#10B981',
+        'Current Reason Columns': '#F59E0B',
+        'Past Features (Arrivals)': '#06B6D4',
+        'Past Features (Reasons)': '#14B8A6',
+        'Future Features (Arrivals)': '#EF4444',
+        'Future Features (Reasons)': '#EC4899',
+        'Other': '#6B7280'
+    }
+
+    category_icons = {
+        'Date': '📅',
+        'Calendar Features': '🗓️',
+        'Weather Features': '🌤️',
+        'Current Reason Columns': '🏥',
+        'Past Features (Arrivals)': '⏮️',
+        'Past Features (Reasons)': '📋',
+        'Future Features (Arrivals)': '🎯',
+        'Future Features (Reasons)': '🔮',
+        'Other': '📦'
+    }
+
+    # Display categories with columns
+    for category, columns in categorized.items():
+        if columns:  # Only show categories that have columns
+            color = category_colors.get(category, '#6B7280')
+            icon = category_icons.get(category, '•')
+
+            with st.expander(f"{icon} **{category}** ({len(columns)} columns)", expanded=False):
+                cols_display = ", ".join([f"`{col}`" for col in columns])
+                st.markdown(
+                    f"""
+                    <div style='padding: 0.75rem; background: rgba(255,255,255,0.02); border-left: 3px solid {color}; border-radius: 4px; margin: 0.5rem 0;'>
+                        <div style='color: {color}; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.5rem;'>{category}</div>
+                        <div style='color: #CBD5E1; font-size: 0.8125rem; font-family: monospace;'>{cols_display}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📅 Date & Calendar", len(categorized['Date']) + len(categorized['Calendar Features']))
+    with col2:
+        st.metric("🌤️ Weather Features", len(categorized['Weather Features']))
+    with col3:
+        st.metric("⏮️ Past Features (Lag)", total_past_features)
+    with col4:
+        st.metric("🎯 Future Targets", total_future_features)
+
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
+    # Data Quality
     st.markdown("**Data Quality (quick look)**")
     if len(miss) > 0:
-        bullets = [f"- {c}: {int(miss[c])} missing" for c in miss.index]
-        st.write("\n".join(bullets))
+        st.warning(f"Found {len(miss)} columns with missing values:")
+        for c in miss.index:
+            st.write(f"- `{c}`: {int(miss[c])} missing ({100 * miss[c] / n_rows:.1f}%)")
     else:
-        st.write("- No major missingness detected (top columns).")
+        st.success("✅ No major missingness detected (top columns).")
 
 # ---------- UI HELPERS ----------------------------------------------------------
 def _dataset_badge(ok: bool, label: str):
@@ -400,6 +548,7 @@ def page_data_preparation_studio():
     apply_css()
     inject_sidebar_style()
     render_sidebar_brand()
+    add_logout_button()
 
     # Apply fluorescent effects + Custom Tab Styling
     st.markdown(f"""
@@ -790,15 +939,54 @@ def page_data_preparation_studio():
                 unsafe_allow_html=True,
             )
 
+        # Diagnostic: Show Date ranges for debugging
+        if all_ready:
+            with st.expander("🔍 Date Range Diagnostic", expanded=False):
+                st.markdown("**Date ranges in each dataset:**")
+
+                def show_date_info(df, name):
+                    time_col = _find_time_like_col(df)
+                    if time_col:
+                        try:
+                            dates = pd.to_datetime(df[time_col], errors='coerce')
+                            valid_dates = dates.dropna()
+                            if len(valid_dates) > 0:
+                                st.write(f"- **{name}**: {valid_dates.min().date()} to {valid_dates.max().date()} ({len(valid_dates):,} valid dates)")
+                            else:
+                                st.write(f"- **{name}**: ❌ No valid dates found in column '{time_col}'")
+                        except Exception as e:
+                            st.write(f"- **{name}**: ❌ Error parsing dates from '{time_col}': {e}")
+                    else:
+                        st.write(f"- **{name}**: ❌ No time column detected")
+
+                show_date_info(patient_df, "Patient Dataset")
+                show_date_info(weather_df, "Weather Dataset")
+                show_date_info(calendar_df, "Calendar Dataset")
+                show_date_info(reason_df, "Reason for Visit Dataset")
+
         do_merge = st.button("🔄 Merge Datasets Now", type="primary", use_container_width=True, disabled=not all_ready)
 
         if do_merge:
             prog = st.progress(0, text="Starting fusion…")
             try:
                 prog.progress(25, text="Aligning time keys…")
-                merged = _run_fusion_cached(patient_df, weather_df, calendar_df, reason_df)
+                merged, fusion_log = _run_fusion_cached(patient_df, weather_df, calendar_df, reason_df)
                 prog.progress(70, text="Validating fused frame…")
                 st.session_state["merged_data"] = merged if merged is not None and not merged.empty else None
+
+                # Display fusion log for diagnostics
+                with st.expander("📋 Fusion Process Log", expanded=(st.session_state["merged_data"] is None)):
+                    for log_msg in fusion_log:
+                        if log_msg.startswith("✅"):
+                            st.success(log_msg)
+                        elif log_msg.startswith("❌"):
+                            st.error(log_msg)
+                        elif log_msg.startswith("⚠️"):
+                            st.warning(log_msg)
+                        elif log_msg.startswith("ℹ️"):
+                            st.info(log_msg)
+                        else:
+                            st.write(log_msg)
 
                 if st.session_state["merged_data"] is not None:
                     prog.progress(100, text="Fusion complete ✓")
@@ -817,6 +1005,7 @@ def page_data_preparation_studio():
                 else:
                     prog.empty()
                     st.error("❌ Data fusion returned an empty result. Check joins/time keys.")
+                    st.warning("💡 **Tip**: Check the 'Fusion Process Log' above for detailed error messages, and expand the 'Date Range Diagnostic' to see if datasets have overlapping dates.")
             except Exception as e:
                 prog.empty()
                 st.error(f"❌ Fusion failed: {e}")
@@ -894,8 +1083,154 @@ def page_data_preparation_studio():
             proc = st.session_state.get("processed_df")
             if proc is not None and not getattr(proc, "empty", True):
                 st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-                st.markdown("**Processed Dataset Preview (First 30 rows)**")
+
+                # Categorize columns for visual grouping
+                def categorize_columns(df):
+                    """Categorize columns into meaningful groups for ML training."""
+                    cols = list(df.columns)
+
+                    date_cols = []
+                    calendar_cols = []
+                    weather_cols = []
+                    current_reason_cols = []
+                    past_arrivals_cols = []
+                    past_reason_cols = []
+                    future_arrivals_cols = []
+                    future_reason_cols = []
+                    other_cols = []
+
+                    # Known reason column names (granular medical categories)
+                    reason_keywords = [
+                        'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
+                        'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
+                        'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
+                        'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
+                    ]
+
+                    for col in cols:
+                        col_lower = col.lower()
+
+                        # Date columns
+                        if col_lower in ['date', 'datetime', 'ds', 'timestamp']:
+                            date_cols.append(col)
+
+                        # Calendar features
+                        elif col_lower in ['day_of_week', 'holiday', 'holiday_prev', 'is_weekend',
+                                          'day_of_month', 'week_of_year', 'month', 'year']:
+                            calendar_cols.append(col)
+
+                        # Weather features
+                        elif col_lower in ['average_temp', 'max_temp', 'average_wind', 'max_wind',
+                                          'average_mslp', 'total_precipitation', 'moon_phase']:
+                            weather_cols.append(col)
+
+                        # Past arrivals features (ED_1, ED_2, etc.)
+                        elif col_lower.startswith('ed_') and len(col_lower) > 3 and col_lower[3:].isdigit():
+                            past_arrivals_cols.append(col)
+
+                        # Future arrivals features (Target_1, Target_2, etc.)
+                        elif col_lower.startswith('target_'):
+                            future_arrivals_cols.append(col)
+
+                        # Past reason features (asthma_lag_1, pneumonia_lag_1, etc.)
+                        elif '_lag_' in col_lower and any(keyword in col_lower for keyword in reason_keywords):
+                            past_reason_cols.append(col)
+
+                        # Future reason features (asthma_1, pneumonia_1, etc.)
+                        elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in reason_keywords):
+                            future_reason_cols.append(col)
+
+                        # Current reason features (asthma, pneumonia, etc. without suffixes)
+                        elif any(col_lower == keyword for keyword in reason_keywords):
+                            current_reason_cols.append(col)
+
+                        # Other columns
+                        else:
+                            other_cols.append(col)
+
+                    return {
+                        'Date': date_cols,
+                        'Calendar Features': calendar_cols,
+                        'Weather Features': weather_cols,
+                        'Current Reason Columns': current_reason_cols,
+                        'Past Features (Arrivals)': past_arrivals_cols,
+                        'Past Features (Reasons)': past_reason_cols,
+                        'Future Features (Arrivals)': future_arrivals_cols,
+                        'Future Features (Reasons)': future_reason_cols,
+                        'Other': other_cols
+                    }
+
+                # Get categorized columns
+                categorized = categorize_columns(proc)
+
+                # Display column grouping visualization
+                st.markdown("**📊 Column Structure for Multi-Target ML Training**")
+                st.markdown("<div style='margin-bottom: 1rem; color: #94A3B8; font-size: 0.875rem;'>Columns are organized to optimize learning patterns across patient arrivals and visit reasons</div>", unsafe_allow_html=True)
+
+                # Create visual category display
+                category_colors = {
+                    'Date': '#3B82F6',  # Blue
+                    'Calendar Features': '#8B5CF6',  # Purple
+                    'Weather Features': '#10B981',  # Green
+                    'Current Reason Columns': '#F59E0B',  # Amber
+                    'Past Features (Arrivals)': '#06B6D4',  # Cyan
+                    'Past Features (Reasons)': '#14B8A6',  # Teal
+                    'Future Features (Arrivals)': '#EF4444',  # Red
+                    'Future Features (Reasons)': '#EC4899',  # Pink
+                    'Other': '#6B7280'  # Gray
+                }
+
+                category_icons = {
+                    'Date': '📅',
+                    'Calendar Features': '🗓️',
+                    'Weather Features': '🌤️',
+                    'Current Reason Columns': '🏥',
+                    'Past Features (Arrivals)': '⏮️',
+                    'Past Features (Reasons)': '📋',
+                    'Future Features (Arrivals)': '🎯',
+                    'Future Features (Reasons)': '🔮',
+                    'Other': '📦'
+                }
+
+                # Display categories with columns
+                for category, columns in categorized.items():
+                    if columns:  # Only show categories that have columns
+                        color = category_colors.get(category, '#6B7280')
+                        icon = category_icons.get(category, '•')
+
+                        with st.expander(f"{icon} **{category}** ({len(columns)} columns)", expanded=False):
+                            # Create a nicely formatted display of columns
+                            cols_display = ", ".join([f"`{col}`" for col in columns])
+                            st.markdown(
+                                f"""
+                                <div style='padding: 0.75rem; background: rgba(255,255,255,0.02); border-left: 3px solid {color}; border-radius: 4px; margin: 0.5rem 0;'>
+                                    <div style='color: {color}; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.5rem;'>{category}</div>
+                                    <div style='color: #CBD5E1; font-size: 0.8125rem; font-family: monospace;'>{cols_display}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+
+                # Summary metrics
+                total_past_features = len(categorized['Past Features (Arrivals)']) + len(categorized['Past Features (Reasons)'])
+                total_future_features = len(categorized['Future Features (Arrivals)']) + len(categorized['Future Features (Reasons)'])
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("📅 Date & Calendar", len(categorized['Date']) + len(categorized['Calendar Features']))
+                with col2:
+                    st.metric("🌤️ Weather Features", len(categorized['Weather Features']))
+                with col3:
+                    st.metric("⏮️ Past Features (Lag)", total_past_features)
+                with col4:
+                    st.metric("🎯 Future Targets", total_future_features)
+
+                # Dataset preview
+                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown("**Dataset Preview (First 30 rows)**")
                 st.dataframe(proc.head(30), use_container_width=True)
+
+                # Download button
                 csv = proc.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     label="📥 Download Processed CSV",
