@@ -1,5 +1,6 @@
 # Core Framework
 streamlit>=1.28.0
+streamlit-authenticator>=0.3.0
 
 # Data Manipulation & Analysis
 pandas>=2.0.0
