@@ -184,7 +184,8 @@ class SupabasePatientConnector(PatientAPIConnector):
             self.session.headers.update({
                 "apikey": self.config.api_key,
                 "Authorization": f"Bearer {self.config.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
             })
 
     def fetch_data(
@@ -193,12 +194,13 @@ class SupabasePatientConnector(PatientAPIConnector):
         end_date: datetime,
         **kwargs
     ) -> pd.DataFrame:
-        """Fetch from Supabase table"""
-        # Supabase uses PostgREST API
+        """Fetch from Supabase table with proper date range filtering"""
+        # Supabase uses PostgREST API with special filter syntax
         params = {
             "date": f"gte.{start_date.strftime('%Y-%m-%d')}",
             "date": f"lte.{end_date.strftime('%Y-%m-%d')}",
-            "order": "date.asc"
+            "order": "date.asc",
+            "select": "*"
         }
 
         response = self._make_request(
@@ -211,6 +213,10 @@ class SupabasePatientConnector(PatientAPIConnector):
             raise ValueError("Invalid Supabase response")
 
         raw_data = self._parse_response(response)
+
+        if len(raw_data) == 0:
+            raise ValueError(f"No data found in Supabase for date range {start_date.date()} to {end_date.date()}")
+
         return self.map_to_standard_schema(raw_data)
 
 
