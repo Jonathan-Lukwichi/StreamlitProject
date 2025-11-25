@@ -202,49 +202,93 @@ def _impute_numerics(df: pd.DataFrame, exclude: List[str]) -> pd.DataFrame:
 def _reorder_columns_for_training(df: pd.DataFrame, date_col: Optional[str] = None) -> pd.DataFrame:
     """
     Reorder columns for optimal ML training workflow:
-    1. Date column (if exists)
-    2. Current feature columns (weather, calendar, reason columns without suffixes)
-    3. Lag features (past values: ED_1, ED_2, ..., asthma_lag_1, etc.)
-    4. Target features (future values: Target_1, Target_2, ..., asthma_1, etc.)
+    1. Date columns (datetime, Date)
+    2. Calendar columns (day_of_week, holiday, is_weekend, month, year, etc.)
+    3. Weather columns (Average_Temp, Max_temp, Average_wind, etc.)
+    4. Past Features / Lag columns (ED_1, ED_2, asthma_lag_1, pneumonia_lag_1, etc.)
+    5. Future Targets (Target_1, Target_2, asthma_1, pneumonia_1, etc.)
 
-    This makes it clear what's past (lags) vs future (targets).
+    This structure helps ML models understand: Calendar → Weather → Past → Future
     """
     df = df.copy()
     all_cols = list(df.columns)
 
+    # Define known column categories
+    date_keywords = ['date', 'datetime', 'ds', 'timestamp']
+    calendar_keywords = ['day_of_week', 'holiday', 'holiday_prev', 'is_weekend',
+                        'day_of_month', 'week_of_year', 'month', 'year']
+    weather_keywords = ['average_temp', 'max_temp', 'average_wind', 'max_wind',
+                       'average_mslp', 'total_precipitation', 'moon_phase']
+
+    # Known reason column names (granular medical categories)
+    reason_keywords = [
+        'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
+        'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
+        'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
+        'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
+    ]
+
     # Categorize columns
     date_cols = []
-    current_cols = []
+    calendar_cols = []
+    weather_cols = []
     lag_cols = []
     target_cols = []
+    other_cols = []
 
     for col in all_cols:
         col_lower = col.lower()
 
-        # Date column
-        if date_col and col == date_col:
+        # 1. Date columns
+        if col_lower in date_keywords:
             date_cols.append(col)
 
-        # Lag features (past values) - any column with "_lag_" or ED_1, ED_2, etc.
-        elif "_lag_" in col_lower:
+        # 2. Calendar columns
+        elif col_lower in calendar_keywords:
+            calendar_cols.append(col)
+
+        # 3. Weather columns
+        elif col_lower in weather_keywords:
+            weather_cols.append(col)
+
+        # 4. Past Features / Lag columns (ED_1, ED_2, asthma_lag_1, etc.)
+        elif '_lag_' in col_lower:
             lag_cols.append(col)
-        elif col_lower.startswith("ed_") and len(col_lower) > 3 and col_lower[3:].isdigit():
+        elif col_lower.startswith('ed_') and len(col_lower) > 3 and col_lower[3:].isdigit():
             lag_cols.append(col)
 
-        # Target features (future values) - Target_1, Target_2, or reason_1, reason_2, etc.
-        elif col_lower.startswith("target_"):
+        # 5. Future Targets (Target_1, Target_2, asthma_1, pneumonia_1, etc.)
+        elif col_lower.startswith('target_'):
             target_cols.append(col)
-        elif "_" in col and col.split("_")[-1].isdigit():
+        elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in reason_keywords):
             # This catches columns like "asthma_1", "pneumonia_2", etc.
-            # But NOT "Average_Temp" or "Day_of_week" (which have non-digit after underscore)
             target_cols.append(col)
 
-        # Current features (everything else: weather, calendar, base reason columns)
-        else:
-            current_cols.append(col)
+        # Current reason columns (base columns without suffixes) - put with other
+        elif any(col_lower == keyword for keyword in reason_keywords):
+            other_cols.append(col)
 
-    # Reorder columns: Date -> Current -> Lags -> Targets
-    ordered_cols = date_cols + current_cols + lag_cols + target_cols
+        # Everything else
+        else:
+            other_cols.append(col)
+
+    # Sort within categories for consistency
+    def sort_by_number(cols):
+        """Sort columns by numeric suffix if present."""
+        def get_num(c):
+            parts = c.replace('_lag_', '_').split('_')
+            for p in reversed(parts):
+                if p.isdigit():
+                    return int(p)
+            return 0
+        return sorted(cols, key=get_num)
+
+    lag_cols = sort_by_number(lag_cols)
+    target_cols = sort_by_number(target_cols)
+
+    # Final order: Date → Calendar → Weather → Past (Lag) → Future (Targets)
+    # Note: "other_cols" includes current reason columns - place them before lags
+    ordered_cols = date_cols + calendar_cols + weather_cols + other_cols + lag_cols + target_cols
 
     # Ensure we haven't lost any columns
     if len(ordered_cols) != len(all_cols):
