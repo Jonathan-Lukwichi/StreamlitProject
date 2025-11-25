@@ -13,6 +13,14 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
+# ============================================================================
+# AUTHENTICATION CHECK - USER OR ADMIN
+# ============================================================================
+from app_core.auth.authentication import require_authentication
+from app_core.auth.navigation import configure_sidebar_navigation, add_logout_button
+require_authentication()
+configure_sidebar_navigation()
+
 st.set_page_config(
     page_title="Forecast - HealthForecast AI",
     page_icon="🔮",

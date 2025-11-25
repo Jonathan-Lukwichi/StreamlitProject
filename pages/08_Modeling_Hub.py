@@ -24,6 +24,14 @@ from app_core.ui.theme import (
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.plots import build_multihorizon_results_dashboard
 
+# ============================================================================
+# AUTHENTICATION CHECK - ADMIN ONLY
+# ============================================================================
+from app_core.auth.authentication import require_admin_access
+from app_core.auth.navigation import configure_sidebar_navigation, add_logout_button
+require_admin_access()
+configure_sidebar_navigation()
+
 st.set_page_config(
     page_title="Modeling Hub - HealthForecast AI",
     page_icon="🧠",

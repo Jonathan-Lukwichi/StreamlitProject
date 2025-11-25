@@ -42,7 +42,7 @@ The brand is automatically rendered at the top of the sidebar via:
 - `render_sidebar_brand()` - Renders the logo and text
 - `inject_brand_css()` - Applies Bolt/Raycast-inspired styling
 
-Both functions are called in `app.py` and will gracefully fall back if assets are missing.
+Both functions are called in `Welcome.py` and will gracefully fall back if assets are missing.
 
 ## Styling
 

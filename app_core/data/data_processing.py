@@ -199,6 +199,63 @@ def _impute_numerics(df: pd.DataFrame, exclude: List[str]) -> pd.DataFrame:
 # Public API
 # -------------------------------
 
+def _reorder_columns_for_training(df: pd.DataFrame, date_col: Optional[str] = None) -> pd.DataFrame:
+    """
+    Reorder columns for optimal ML training workflow:
+    1. Date column (if exists)
+    2. Current feature columns (weather, calendar, reason columns without suffixes)
+    3. Lag features (past values: ED_1, ED_2, ..., asthma_lag_1, etc.)
+    4. Target features (future values: Target_1, Target_2, ..., asthma_1, etc.)
+
+    This makes it clear what's past (lags) vs future (targets).
+    """
+    df = df.copy()
+    all_cols = list(df.columns)
+
+    # Categorize columns
+    date_cols = []
+    current_cols = []
+    lag_cols = []
+    target_cols = []
+
+    for col in all_cols:
+        col_lower = col.lower()
+
+        # Date column
+        if date_col and col == date_col:
+            date_cols.append(col)
+
+        # Lag features (past values) - any column with "_lag_" or ED_1, ED_2, etc.
+        elif "_lag_" in col_lower:
+            lag_cols.append(col)
+        elif col_lower.startswith("ed_") and len(col_lower) > 3 and col_lower[3:].isdigit():
+            lag_cols.append(col)
+
+        # Target features (future values) - Target_1, Target_2, or reason_1, reason_2, etc.
+        elif col_lower.startswith("target_"):
+            target_cols.append(col)
+        elif "_" in col and col.split("_")[-1].isdigit():
+            # This catches columns like "asthma_1", "pneumonia_2", etc.
+            # But NOT "Average_Temp" or "Day_of_week" (which have non-digit after underscore)
+            target_cols.append(col)
+
+        # Current features (everything else: weather, calendar, base reason columns)
+        else:
+            current_cols.append(col)
+
+    # Reorder columns: Date -> Current -> Lags -> Targets
+    ordered_cols = date_cols + current_cols + lag_cols + target_cols
+
+    # Ensure we haven't lost any columns
+    if len(ordered_cols) != len(all_cols):
+        missing = set(all_cols) - set(ordered_cols)
+        ordered_cols.extend(list(missing))
+
+    return df[ordered_cols]
+
+
+# -------------------------------
+
 def process_dataset(
     df: pd.DataFrame,
     n_lags: int = 7,
@@ -332,6 +389,10 @@ def process_dataset(
         df = df.dropna(subset=have_cols)
         report["dropped_rows"] = before_drop - len(df)
         report["steps"].append(f"drop_na_edges({report['dropped_rows']})")
+
+    # 10) Reorder columns: Date, current features, lag features, then target features
+    df = _reorder_columns_for_training(df, date_col=date_col)
+    report["steps"].append("reorder_columns_for_training")
 
     report["columns_after"] = list(df.columns)
     return df, report

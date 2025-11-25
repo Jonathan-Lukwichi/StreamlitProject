@@ -1,0 +1,80 @@
+================================================================================
+                    HOW TO RUN STREAMLIT WITH LSTM SUPPORT
+================================================================================
+
+    IMPORTANT: You CANNOT run Streamlit the normal way anymore!
+
+    Your default Python 3.14 does NOT have TensorFlow.
+    You MUST use the Python 3.11 environment we created.
+
+================================================================================
+                             QUICK START
+================================================================================
+
+    1. DOUBLE-CLICK THIS FILE:
+
+           start_lstm.bat
+
+    2. Wait for Streamlit to open in your browser
+
+    3. That's it!
+
+================================================================================
+                        WHAT YOU'LL SEE
+================================================================================
+
+When start_lstm.bat runs, you should see:
+
+    [1/3] Activating Python 3.11 environment...
+    [2/3] Verifying environment...
+    Python 3.11.1
+    TensorFlow: 2.15.1
+    XGBoost: 3.1.1
+    [3/3] Starting Streamlit...
+
+If you see "Python 3.14.0" instead - STOP - you're using the wrong environment!
+
+================================================================================
+                        TESTING LSTM
+================================================================================
+
+After Streamlit opens:
+
+    1. Go to page: "08_Modeling_Hub.py"
+    2. Select model: "LSTM"
+    3. Click: "Train Model"
+    4. Watch console for preprocessing detection report!
+
+================================================================================
+                        TROUBLESHOOTING
+================================================================================
+
+If you get "All horizons failed during training":
+
+    1. Close Streamlit
+    2. Close all terminal/command prompt windows
+    3. Double-click start_lstm.bat again
+    4. Verify you see Python 3.11.1 (not 3.14.0!)
+
+================================================================================
+                        FILES TO USE
+================================================================================
+
+    start_lstm.bat           <- DOUBLE-CLICK THIS TO RUN STREAMLIT
+    test_lstm_import.py      <- Test if environment works
+    HOW_TO_RUN_LSTM.md       <- Detailed instructions
+    LSTM_SETUP_README.md     <- Complete documentation
+
+================================================================================
+                        DO NOT USE
+================================================================================
+
+    X  python pages/01_Dashboard.py
+    X  streamlit run pages/01_Dashboard.py (without activating environment)
+    X  Your global Python 3.14 installation
+
+================================================================================
+
+BOTTOM LINE: Always use start_lstm.bat or activate forecast_env_py311 first!
+
+================================================================================

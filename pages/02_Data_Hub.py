@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from typing import Optional
+from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -16,6 +17,22 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+
+# ============================================================================
+# AUTHENTICATION CHECK - ADMIN ONLY
+# ============================================================================
+from app_core.auth.authentication import require_admin_access
+from app_core.auth.navigation import configure_sidebar_navigation, add_logout_button
+require_admin_access()
+configure_sidebar_navigation()
+
+# Import API components
+try:
+    from app_core.api.config_manager import APIConfigManager
+    API_AVAILABLE = True
+except ImportError:
+    API_AVAILABLE = False
+    APIConfigManager = None
 
 try:
     from app_core.state.session import init_state
@@ -72,6 +89,126 @@ except Exception:
             except Exception as e:
                 st.error(f"Failed to load {title}: {e}")
 
+
+def _clean_datetime_column(df: pd.DataFrame, dataset_type: str) -> pd.DataFrame:
+    """
+    Clean datetime columns to ensure timezone-naive datetime64[ns].
+    Standardizes all datasets to have a 'datetime' column.
+    """
+    df = df.copy()
+
+    # Find the datetime column
+    dt_col = None
+    for col in ["datetime", "Date", "date", "timestamp", "ds"]:
+        if col in df.columns:
+            dt_col = col
+            break
+
+    if dt_col is None:
+        # Look for any datetime-like column
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                dt_col = col
+                break
+
+    if dt_col is not None:
+        # Convert to datetime and strip timezone
+        dt_series = pd.to_datetime(df[dt_col])
+
+        # Remove timezone if present by converting to string and back
+        if dt_series.dt.tz is not None:
+            # Strip timezone
+            dt_series = dt_series.dt.tz_localize(None)
+
+        # Store as 'datetime' column (standardized name)
+        df['datetime'] = dt_series
+
+        # Remove old column if it had a different name
+        if dt_col != 'datetime' and dt_col in df.columns:
+            df = df.drop(columns=[dt_col])
+
+    return df
+
+
+def _remove_empty_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove columns that are completely empty (all NaN, None, or empty strings).
+    This cleans up datasets from Supabase that may have placeholder columns.
+    """
+    df = df.copy()
+    initial_cols = len(df.columns)
+
+    # Find columns that are completely empty
+    empty_cols = []
+    for col in df.columns:
+        # Check if column is all NaN, None, or empty strings
+        if df[col].isna().all() or (df[col].astype(str).str.strip() == '').all():
+            empty_cols.append(col)
+
+    # Drop empty columns
+    if empty_cols:
+        df = df.drop(columns=empty_cols)
+        st.info(f"🧹 Removed {len(empty_cols)} empty columns: {', '.join(empty_cols)}")
+
+    return df
+
+
+def _fetch_from_api(dataset_type: str, start_date: datetime, end_date: datetime, provider: str = "supabase"):
+    """Fetch data from API and store in session state"""
+    if not API_AVAILABLE:
+        st.error("API functionality not available. Please check installation.")
+        return None
+
+    try:
+        config_manager = APIConfigManager()
+
+        # Get appropriate connector
+        if dataset_type == "patient":
+            connector = config_manager.get_patient_connector(provider)
+            session_key = "patient_data"
+        elif dataset_type == "weather":
+            connector = config_manager.get_weather_connector(provider)
+            session_key = "weather_data"
+        elif dataset_type == "calendar":
+            connector = config_manager.get_calendar_connector(provider)
+            session_key = "calendar_data"
+        elif dataset_type == "reason":
+            connector = config_manager.get_reason_connector(provider)
+            session_key = "reason_data"
+        else:
+            st.error(f"Unknown dataset type: {dataset_type}")
+            return None
+
+        # Fetch data
+        with st.spinner(f"Fetching {dataset_type} data from {provider}..."):
+            df = connector.fetch_data(start_date, end_date)
+
+        if df is not None and not df.empty:
+            # Clean datetime columns to remove timezone and standardize
+            df = _clean_datetime_column(df, dataset_type)
+
+            # Remove empty columns from Supabase
+            df = _remove_empty_columns(df)
+
+            # Special handling for reason dataset: Remove total_arrivals (duplicates Target_1)
+            if dataset_type == "reason":
+                # Find and remove total_arrivals column (case-insensitive)
+                cols_to_drop = [col for col in df.columns if col.lower() == "total_arrivals"]
+                if cols_to_drop:
+                    df = df.drop(columns=cols_to_drop)
+                    st.info(f"🗑️ Removed '{cols_to_drop[0]}' from reason dataset (duplicates patient_count)")
+
+            st.session_state[session_key] = df
+            st.session_state[f"{dataset_type}_loaded"] = True
+            st.success(f"✅ Fetched {len(df):,} rows from {provider} (cleaned {len(df.columns)} columns)")
+            return df
+        else:
+            st.warning(f"No data found for selected date range")
+            return None
+
+    except Exception as e:
+        st.error(f"❌ API fetch failed: {str(e)}")
+        return None
 
 
 # ---- Small utilities ------------------------------------------------------------
@@ -134,6 +271,7 @@ def page_data_hub():
     apply_css()
     inject_sidebar_style()
     render_sidebar_brand()
+    add_logout_button()
 
     # Apply fluorescent effects
     st.markdown("""
@@ -265,7 +403,27 @@ def page_data_hub():
             </div>
         """, unsafe_allow_html=True)
 
-        _upload_generic("Upload CSV", "patient", "datetime")
+        # Tabs for Upload vs API Fetch
+        tab1, tab2 = st.tabs(["📤 Upload CSV", "🔌 Fetch from API"])
+
+        with tab1:
+            _upload_generic("Upload CSV", "patient", "datetime")
+
+        with tab2:
+            if API_AVAILABLE:
+                st.caption("Fetch patient data from hospital database")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="patient_start")
+                with col_b:
+                    end = st.date_input("End Date", value=datetime.now(), key="patient_end")
+
+                if st.button("Fetch Patient Data", key="fetch_patient", use_container_width=True):
+                    _fetch_from_api("patient", datetime.combine(start, datetime.min.time()),
+                                   datetime.combine(end, datetime.min.time()), "supabase")
+            else:
+                st.warning("API functionality not available")
+
         df_patient = st.session_state.get("patient_data")
 
         if isinstance(df_patient, pd.DataFrame) and not df_patient.empty:
@@ -294,7 +452,27 @@ def page_data_hub():
             </div>
         """, unsafe_allow_html=True)
 
-        _upload_generic("Upload CSV", "weather", "datetime")
+        # Tabs for Upload vs API Fetch
+        tab1, tab2 = st.tabs(["📤 Upload CSV", "🔌 Fetch from API"])
+
+        with tab1:
+            _upload_generic("Upload CSV", "weather", "datetime")
+
+        with tab2:
+            if API_AVAILABLE:
+                st.caption("Fetch weather data from hospital database")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="weather_start")
+                with col_b:
+                    end = st.date_input("End Date", value=datetime.now(), key="weather_end")
+
+                if st.button("Fetch Weather Data", key="fetch_weather", use_container_width=True):
+                    _fetch_from_api("weather", datetime.combine(start, datetime.min.time()),
+                                   datetime.combine(end, datetime.min.time()), "supabase")
+            else:
+                st.warning("API functionality not available")
+
         df_weather = st.session_state.get("weather_data")
 
         if isinstance(df_weather, pd.DataFrame) and not df_weather.empty:
@@ -323,7 +501,27 @@ def page_data_hub():
             </div>
         """, unsafe_allow_html=True)
 
-        _upload_generic("Upload CSV", "calendar", "date")
+        # Tabs for Upload vs API Fetch
+        tab1, tab2 = st.tabs(["📤 Upload CSV", "🔌 Fetch from API"])
+
+        with tab1:
+            _upload_generic("Upload CSV", "calendar", "date")
+
+        with tab2:
+            if API_AVAILABLE:
+                st.caption("Fetch calendar data from hospital database")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="calendar_start")
+                with col_b:
+                    end = st.date_input("End Date", value=datetime.now(), key="calendar_end")
+
+                if st.button("Fetch Calendar Data", key="fetch_calendar", use_container_width=True):
+                    _fetch_from_api("calendar", datetime.combine(start, datetime.min.time()),
+                                   datetime.combine(end, datetime.min.time()), "supabase")
+            else:
+                st.warning("API functionality not available")
+
         df_calendar = st.session_state.get("calendar_data")
 
         if isinstance(df_calendar, pd.DataFrame) and not df_calendar.empty:
@@ -352,7 +550,27 @@ def page_data_hub():
             </div>
         """, unsafe_allow_html=True)
 
-        _upload_generic("Upload CSV", "reason", "datetime")
+        # Tabs for Upload vs API Fetch
+        tab1, tab2 = st.tabs(["📤 Upload CSV", "🔌 Fetch from API"])
+
+        with tab1:
+            _upload_generic("Upload CSV", "reason", "datetime")
+
+        with tab2:
+            if API_AVAILABLE:
+                st.caption("Fetch clinical visit data from hospital database")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="reason_start")
+                with col_b:
+                    end = st.date_input("End Date", value=datetime.now(), key="reason_end")
+
+                if st.button("Fetch Reason Data", key="fetch_reason", use_container_width=True):
+                    _fetch_from_api("reason", datetime.combine(start, datetime.min.time()),
+                                   datetime.combine(end, datetime.min.time()), "supabase")
+            else:
+                st.warning("API functionality not available")
+
         df_reason = st.session_state.get("reason_data")
 
         if isinstance(df_reason, pd.DataFrame) and not df_reason.empty:
@@ -367,6 +585,47 @@ def page_data_hub():
                     st.caption(f"📅 {dt.min().date()} → {dt.max().date()}")
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # ========================================================================
+    # BULK API FETCH SECTION
+    # ========================================================================
+    if API_AVAILABLE:
+        st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1.5rem; padding: 1.5rem;'>
+            <h3 class='hf-feature-title' style='font-size: 1.25rem; margin-bottom: 0.5rem;'>🚀 Bulk API Fetch</h3>
+            <p class='hf-feature-description' style='margin: 0; font-size: 0.875rem;'>
+                Fetch all 4 datasets from Supabase at once
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_bulk1, col_bulk2, col_bulk3 = st.columns([1, 2, 1])
+        with col_bulk2:
+            col_a, col_b = st.columns(2)
+            with col_a:
+                bulk_start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="bulk_start")
+            with col_b:
+                bulk_end = st.date_input("End Date", value=datetime(2023, 12, 31), key="bulk_end")
+
+            if st.button("🚀 Fetch All Datasets from Supabase", use_container_width=True, type="primary"):
+                start_dt = datetime.combine(bulk_start, datetime.min.time())
+                end_dt = datetime.combine(bulk_end, datetime.min.time())
+
+                with st.spinner("Fetching all datasets from Supabase..."):
+                    success_count = 0
+                    for dataset in ["patient", "weather", "calendar", "reason"]:
+                        result = _fetch_from_api(dataset, start_dt, end_dt, "supabase")
+                        if result is not None:
+                            success_count += 1
+
+                if success_count == 4:
+                    st.success(f"✅ Successfully fetched all 4 datasets!")
+                elif success_count > 0:
+                    st.warning(f"⚠️ Fetched {success_count}/4 datasets. Some datasets may not have data for this date range.")
+                else:
+                    st.error("❌ Failed to fetch datasets. Please check your configuration.")
 
     # ========================================================================
     # DETAILED DATA PREVIEW SECTION (EXPANDABLE)

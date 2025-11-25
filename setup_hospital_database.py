@@ -23,7 +23,7 @@ import sys
 try:
     from supabase import create_client, Client
 except ImportError:
-    print("❌ Error: 'supabase' package not installed")
+    print("[ERROR] Error: 'supabase' package not installed")
     print("Run: pip install supabase")
     sys.exit(1)
 
@@ -42,7 +42,7 @@ class HospitalDatabaseSetup:
 
     def clear_tables(self):
         """Clear all data from tables (for testing new datasets)"""
-        print("\n🗑️  Clearing all tables...")
+        print("\n[CLEAR] Clearing all tables...")
 
         tables = [
             "patient_arrivals",
@@ -55,15 +55,15 @@ class HospitalDatabaseSetup:
             try:
                 # Delete all rows
                 self.client.table(table).delete().neq("id", 0).execute()
-                print(f"   ✅ Cleared {table}")
+                print(f"   [OK] Cleared {table}")
             except Exception as e:
-                print(f"   ⚠️  {table}: {str(e)}")
+                print(f"   [WARN] {table}: {str(e)}")
 
-        print("✅ All tables cleared!\n")
+        print("[OK] All tables cleared!\n")
 
     def upload_patient_data(self, csv_path: str) -> int:
         """Upload patient arrivals data"""
-        print(f"\n📊 Uploading Patient Data from {Path(csv_path).name}...")
+        print(f"\n[PATIENT] Uploading Patient Data from {Path(csv_path).name}...")
 
         df = pd.read_csv(csv_path)
         print(f"   Loaded {len(df)} rows")
@@ -91,7 +91,7 @@ class HospitalDatabaseSetup:
 
     def upload_weather_data(self, csv_path: str) -> int:
         """Upload weather observations data"""
-        print(f"\n🌤️  Uploading Weather Data from {Path(csv_path).name}...")
+        print(f"\n[WEATHER] Uploading Weather Data from {Path(csv_path).name}...")
 
         df = pd.read_csv(csv_path)
         print(f"   Loaded {len(df)} rows")
@@ -120,7 +120,7 @@ class HospitalDatabaseSetup:
 
     def upload_calendar_data(self, csv_path: str) -> int:
         """Upload calendar/holiday data"""
-        print(f"\n📅 Uploading Calendar Data from {Path(csv_path).name}...")
+        print(f"\n[CALENDAR] Uploading Calendar Data from {Path(csv_path).name}...")
 
         df = pd.read_csv(csv_path)
         print(f"   Loaded {len(df)} rows")
@@ -144,7 +144,7 @@ class HospitalDatabaseSetup:
 
     def upload_clinical_data(self, csv_path: str) -> int:
         """Upload clinical visit conditions data"""
-        print(f"\n🏥 Uploading Clinical Visit Data from {Path(csv_path).name}...")
+        print(f"\n[CLINICAL] Uploading Clinical Visit Data from {Path(csv_path).name}...")
 
         df = pd.read_csv(csv_path)
         print(f"   Loaded {len(df)} rows")
@@ -184,13 +184,18 @@ class HospitalDatabaseSetup:
         records = df.to_dict('records')
 
         # Convert dates to strings for JSON serialization
+        import datetime as dt
         for record in records:
             for key, value in record.items():
                 if pd.isna(value):
                     record[key] = None
                 elif isinstance(value, (pd.Timestamp, datetime)):
                     record[key] = value.isoformat()
-                elif hasattr(value, 'date'):  # date object
+                elif isinstance(value, dt.date):  # Python date object
+                    record[key] = str(value)
+                elif hasattr(value, 'isoformat'):  # Any datetime-like object
+                    record[key] = value.isoformat()
+                elif hasattr(value, '__str__') and 'date' in str(type(value)).lower():
                     record[key] = str(value)
 
         print(f"   Uploading {total_rows} records in batches of {batch_size}...")
@@ -205,10 +210,10 @@ class HospitalDatabaseSetup:
                 print(f"   Progress: {uploaded}/{total_rows} ({int(uploaded/total_rows*100)}%)")
 
             except Exception as e:
-                print(f"   ⚠️  Error uploading batch {i}-{i+batch_size}: {str(e)}")
+                print(f"   [ERROR] Error uploading batch {i}-{i+batch_size}: {str(e)}")
 
         self.stats[stats_key] = uploaded
-        print(f"   ✅ Uploaded {uploaded} records to {table_name}")
+        print(f"   [OK] Uploaded {uploaded} records to {table_name}")
         return uploaded
 
     def _find_date_column(self, df: pd.DataFrame, candidates: list) -> Optional[str]:
@@ -247,15 +252,15 @@ class HospitalDatabaseSetup:
     def print_summary(self):
         """Print upload summary"""
         print("\n" + "="*60)
-        print("✅ HOSPITAL DATABASE SETUP COMPLETE!")
+        print("[SUCCESS] HOSPITAL DATABASE SETUP COMPLETE!")
         print("="*60)
-        print(f"\n📊 Patient Arrivals:     {self.stats['patient']:,} records")
-        print(f"🌤️  Weather Data:         {self.stats['weather']:,} records")
-        print(f"📅 Calendar Data:        {self.stats['calendar']:,} records")
-        print(f"🏥 Clinical Visits:      {self.stats['clinical']:,} records")
-        print(f"\n📈 TOTAL:                {sum(self.stats.values()):,} records")
-        print("\n🔒 Database is now READ-ONLY for API access")
-        print("✅ Your Streamlit app can now fetch data via API!")
+        print(f"\n[PATIENT] Patient Arrivals:     {self.stats['patient']:,} records")
+        print(f"[WEATHER] Weather Data:         {self.stats['weather']:,} records")
+        print(f"[CALENDAR] Calendar Data:        {self.stats['calendar']:,} records")
+        print(f"[CLINICAL] Clinical Visits:      {self.stats['clinical']:,} records")
+        print(f"\n[TOTAL] TOTAL:                {sum(self.stats.values()):,} records")
+        print("\n[INFO] Database is now READ-ONLY for API access")
+        print("[OK] Your Streamlit app can now fetch data via API!")
         print("="*60 + "\n")
 
 
@@ -292,7 +297,7 @@ def main():
             pass
 
     if not supabase_url or not supabase_key:
-        print("❌ Error: Supabase credentials not found")
+        print("[ERROR] Error: Supabase credentials not found")
         print("\nProvide via arguments:")
         print("  --supabase-url YOUR_URL --supabase-key YOUR_KEY")
         print("\nOr create .streamlit/secrets.toml:")
@@ -334,7 +339,7 @@ def main():
                     setup.upload_clinical_data(str(path))
                 uploaded_any = True
             else:
-                print(f"⚠️  File not found: {path}")
+                print(f"[WARN] File not found: {path}")
 
     else:
         # Upload individual datasets
@@ -357,7 +362,7 @@ def main():
     if uploaded_any:
         setup.print_summary()
     else:
-        print("❌ No files uploaded. Use --all or specify individual files.")
+        print("[ERROR] No files uploaded. Use --all or specify individual files.")
         parser.print_help()
 
 

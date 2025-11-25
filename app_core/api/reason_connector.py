@@ -185,29 +185,54 @@ class SupabaseReasonConnector(ReasonAPIConnector):
         end_date: datetime,
         **kwargs
     ) -> pd.DataFrame:
-        """Fetch from Supabase clinical_visits table with proper date range filtering"""
-        params = {
-            "date": f"gte.{start_date.strftime('%Y-%m-%d')}",
-            "date": f"lte.{end_date.strftime('%Y-%m-%d')}",
-            "order": "date.asc",
-            "select": "*"
-        }
+        """
+        Fetch from Supabase clinical_visits table with pagination
+        Supabase has 1000 row per request limit, so we fetch in batches
+        """
+        all_data = []
+        offset = 0
+        batch_size = 1000  # Supabase/PostgREST default limit
 
-        response = self._make_request(
-            endpoint="clinical_visits",  # Table name
-            method="GET",
-            params=params
-        )
+        while True:
+            # Use list of tuples to allow duplicate "date" parameter keys
+            params = [
+                ("date", f"gte.{start_date.strftime('%Y-%m-%d')}"),
+                ("date", f"lte.{end_date.strftime('%Y-%m-%d')}"),
+                ("order", "date.asc"),
+                ("select", "*"),
+                ("limit", str(batch_size)),
+                ("offset", str(offset))
+            ]
 
-        if not self.validate_response(response):
-            raise ValueError("Invalid Supabase response")
+            response = self._make_request(
+                endpoint="clinical_visits",  # Table name
+                method="GET",
+                params=params
+            )
 
-        raw_data = self._parse_response(response)
+            if not self.validate_response(response):
+                raise ValueError("Invalid Supabase response")
 
-        if len(raw_data) == 0:
+            raw_data = self._parse_response(response)
+
+            if len(raw_data) == 0:
+                # No more data to fetch
+                break
+
+            all_data.append(raw_data)
+            offset += batch_size
+
+            # If we got less than batch_size rows, we've reached the end
+            if len(raw_data) < batch_size:
+                break
+
+        if len(all_data) == 0:
             raise ValueError(f"No data found in Supabase for date range {start_date.date()} to {end_date.date()}")
 
-        return self.map_to_standard_schema(raw_data)
+        # Combine all batches
+        combined_data = pd.concat(all_data, ignore_index=True)
+
+        return self.map_to_standard_schema(combined_data)
 
 
 class FHIRReasonConnector(ReasonAPIConnector):

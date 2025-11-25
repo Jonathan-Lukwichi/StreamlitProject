@@ -94,7 +94,7 @@ class BaseAPIConnector(ABC):
         Args:
             endpoint: API endpoint (appended to base_url)
             method: HTTP method (GET, POST, etc.)
-            params: Query parameters
+            params: Query parameters (can be dict or list of tuples)
             data: Request body data
 
         Returns:

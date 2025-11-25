@@ -42,40 +42,40 @@ def test_connection(dataset_type: str, provider: str):
         elif dataset_type == "reason":
             connector = config_manager.get_reason_connector(provider)
         else:
-            print(f"❌ Unknown dataset type: {dataset_type}")
+            print(f"[ERROR] Unknown dataset type: {dataset_type}")
             return False
 
-        print(f"✅ Connector created: {connector.__class__.__name__}")
+        print(f"[OK] Connector created: {connector.__class__.__name__}")
 
         # Test fetch for last 7 days
         end_date = datetime.now()
         start_date = end_date - timedelta(days=7)
 
-        print(f"📅 Fetching data from {start_date.date()} to {end_date.date()}...")
+        print(f"[FETCH] Fetching data from {start_date.date()} to {end_date.date()}...")
 
         df = connector.fetch_data(start_date, end_date)
 
-        print(f"✅ SUCCESS! Fetched {len(df)} rows")
-        print(f"📊 Columns: {list(df.columns)}")
-        print(f"\n📋 Sample data (first 3 rows):")
+        print(f"[OK] SUCCESS! Fetched {len(df)} rows")
+        print(f"[DATA] Columns: {list(df.columns)}")
+        print(f"\n[SAMPLE] Sample data (first 3 rows):")
         print(df.head(3).to_string())
 
         return True
 
     except Exception as e:
-        print(f"❌ FAILED: {str(e)}")
+        print(f"[FAIL] FAILED: {str(e)}")
         return False
 
 
 def main():
     print("\n" + "="*60)
-    print("🧪 SUPABASE API CONNECTION TEST")
+    print("[TEST] SUPABASE API CONNECTION TEST")
     print("="*60)
 
     config_manager = APIConfigManager()
 
     # Check configuration
-    print("\n📝 Checking configuration...")
+    print("\n[CONFIG] Checking configuration...")
     print(f"   Patient provider: {config_manager.configs.get('patient', {}).get('provider', 'NOT SET')}")
     print(f"   Weather provider: {config_manager.configs.get('weather', {}).get('provider', 'NOT SET')}")
     print(f"   Calendar provider: {config_manager.configs.get('calendar', {}).get('provider', 'NOT SET')}")
@@ -90,12 +90,12 @@ def main():
 
     # Summary
     print("\n" + "="*60)
-    print("📊 TEST SUMMARY")
+    print("[SUMMARY] TEST SUMMARY")
     print("="*60)
 
     all_passed = True
     for dataset_type, success in results.items():
-        status = "✅ PASS" if success else "❌ FAIL"
+        status = "[PASS]" if success else "[FAIL]"
         print(f"{status}  {dataset_type.capitalize()} API")
         if not success:
             all_passed = False
@@ -103,12 +103,12 @@ def main():
     print("="*60)
 
     if all_passed:
-        print("\n🎉 ALL TESTS PASSED!")
-        print("✅ Your Streamlit app can now fetch data from Supabase")
-        print("🚀 Ready for production use!")
+        print("\n[SUCCESS] ALL TESTS PASSED!")
+        print("[OK] Your Streamlit app can now fetch data from Supabase")
+        print("[OK] Ready for production use!")
     else:
-        print("\n⚠️  SOME TESTS FAILED")
-        print("\n🔍 Troubleshooting:")
+        print("\n[WARN] SOME TESTS FAILED")
+        print("\n[INFO] Troubleshooting:")
         print("1. Verify Supabase URL and API key in .streamlit/secrets.toml")
         print("2. Ensure data is uploaded to Supabase (run setup_hospital_database.py)")
         print("3. Check Supabase RLS policies (run supabase_readonly_security.sql)")

@@ -265,3 +265,116 @@ class MockCalendarConnector(CalendarAPIConnector):
 
     def map_to_standard_schema(self, raw_data: pd.DataFrame) -> pd.DataFrame:
         return raw_data
+
+
+class SupabaseCalendarConnector(CalendarAPIConnector):
+    """Connector for Supabase calendar_data table"""
+
+    def _set_auth_header(self):
+        """Set Supabase authentication headers"""
+        if self.config.api_key:
+            self.session.headers.update({
+                "apikey": self.config.api_key,
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            })
+
+    def fetch_data(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Fetch calendar data from Supabase with pagination
+        Supabase has 1000 row per request limit, so we fetch in batches
+        """
+        # Format dates for PostgREST query
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+
+        all_data = []
+        offset = 0
+        batch_size = 1000  # Supabase/PostgREST default limit
+
+        while True:
+            # PostgREST filter syntax for date range
+            # Use list of tuples to allow duplicate "date" parameter keys
+            params = [
+                ("date", f"gte.{start_str}"),  # Greater than or equal
+                ("date", f"lte.{end_str}"),    # Less than or equal
+                ("order", "date.asc"),
+                ("select", "*"),
+                ("limit", str(batch_size)),
+                ("offset", str(offset))
+            ]
+
+            # Make request to calendar_data table
+            response = self._make_request(
+                endpoint="calendar_data",
+                method="GET",
+                params=params
+            )
+
+            # Parse JSON response
+            raw_data = response.json()
+
+            if len(raw_data) == 0:
+                # No more data to fetch
+                break
+
+            all_data.extend(raw_data)
+            offset += batch_size
+
+            # If we got less than batch_size rows, we've reached the end
+            if len(raw_data) < batch_size:
+                break
+
+        if len(all_data) == 0:
+            raise ValueError(
+                f"No data found in Supabase for date range {start_str} to {end_str}. "
+                f"Please check that data exists in the calendar_data table."
+            )
+
+        df = pd.DataFrame(all_data)
+
+        # Map to standard schema
+        return self.map_to_standard_schema(df)
+
+    def validate_response(self, response: requests.Response) -> bool:
+        """Validate Supabase response"""
+        if response.status_code == 200:
+            return True
+
+        error_msg = f"Supabase API error (status {response.status_code})"
+        try:
+            error_detail = response.json()
+            error_msg += f": {error_detail}"
+        except:
+            error_msg += f": {response.text}"
+
+        raise ValueError(error_msg)
+
+    def map_to_standard_schema(self, raw_data: pd.DataFrame) -> pd.DataFrame:
+        """Map Supabase columns to standard calendar schema"""
+        result = pd.DataFrame()
+
+        # Parse date
+        if "date" in raw_data.columns:
+            result["Date"] = pd.to_datetime(raw_data["date"]).dt.date
+
+        # Map calendar columns (handle both upper and lowercase)
+        if "day_of_week" in raw_data.columns:
+            result["Day_of_week"] = pd.to_numeric(raw_data["day_of_week"], errors='coerce').astype(int)
+
+        if "holiday" in raw_data.columns:
+            result["Holiday"] = pd.to_numeric(raw_data["holiday"], errors='coerce').astype(int)
+
+        if "holiday_prev" in raw_data.columns:
+            result["Holiday_prev"] = pd.to_numeric(raw_data["holiday_prev"], errors='coerce').astype(int)
+
+        if "moon_phase" in raw_data.columns:
+            result["Moon_Phase"] = pd.to_numeric(raw_data["moon_phase"], errors='coerce').astype(int)
+
+        return result.sort_values("Date").reset_index(drop=True)

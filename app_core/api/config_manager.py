@@ -16,12 +16,14 @@ from .weather_connector import (
     OpenWeatherConnector,
     VisualCrossingConnector,
     WeatherAPIComConnector,
-    MockWeatherConnector
+    MockWeatherConnector,
+    SupabaseWeatherConnector
 )
 from .calendar_connector import (
     AbstractAPIHolidaysConnector,
     CalendarificConnector,
-    MockCalendarConnector
+    MockCalendarConnector,
+    SupabaseCalendarConnector
 )
 from .reason_connector import (
     ReasonAPIConnector,
@@ -52,13 +54,15 @@ class APIConfigManager:
         "mock": MockWeatherConnector,
         "openweather": OpenWeatherConnector,
         "visualcrossing": VisualCrossingConnector,
-        "weatherapi": WeatherAPIComConnector
+        "weatherapi": WeatherAPIComConnector,
+        "supabase": SupabaseWeatherConnector
     }
 
     CALENDAR_CONNECTORS = {
         "mock": MockCalendarConnector,
         "abstractapi": AbstractAPIHolidaysConnector,
-        "calendarific": CalendarificConnector
+        "calendarific": CalendarificConnector,
+        "supabase": SupabaseCalendarConnector
     }
 
     REASON_CONNECTORS = {
