@@ -1349,6 +1349,173 @@ def page_dashboard():
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
+    # ========================================
+    # REASON FOR VISIT FORECAST SECTION
+    # ========================================
+    st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown(f"<h2 class='section-header'>🏥 Reason for Visit Forecast</h2>", unsafe_allow_html=True)
+
+    # Check for multi-target forecasting results
+    multi_target_results = st.session_state.get("arima_multi_target_results") or st.session_state.get("sarimax_multi_target_results")
+
+    if not multi_target_results:
+        st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
+        st.info("🎯 Train models in Multi-Target mode to view reason for visit forecasts. Enable 'Multi-Target Mode' in the Benchmarks page and select clinical categories.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        summary_df = multi_target_results.get("summary")
+        successful_targets = multi_target_results.get("successful_targets", [])
+
+        if summary_df is not None and not summary_df.empty:
+            # Clinical categories to display (aggregated)
+            clinical_categories = ["RESPIRATORY", "CARDIAC", "TRAUMA", "GASTROINTESTINAL", "INFECTIOUS", "NEUROLOGICAL", "OTHER"]
+
+            # Filter for clinical category results only
+            category_results = []
+            for category in clinical_categories:
+                # Check if this category was trained (look for Target column matching category)
+                cat_rows = summary_df[summary_df["Target"].str.upper().str.startswith(category)]
+                if not cat_rows.empty:
+                    # Get the first horizon result (most recent forecast)
+                    row = cat_rows.iloc[0]
+                    category_results.append({
+                        "category": category,
+                        "mae": row.get("MAE", np.nan),
+                        "rmse": row.get("RMSE", np.nan),
+                        "accuracy": row.get("Accuracy_%", np.nan),
+                        "r2": row.get("R2", np.nan),
+                    })
+
+            if category_results:
+                # Display forecast cards for each clinical category
+                st.markdown(f"""
+                <div class='forecast-card'>
+                    <div class='forecast-header'>
+                        <div>
+                            <div class='forecast-title'>
+                                Clinical Category Forecast Summary
+                            </div>
+                            <div class='forecast-subtitle'>
+                                Predicted patient arrivals by <span>medical category</span>
+                            </div>
+                        </div>
+                        <div class='forecast-info-badge'>
+                            📊 {len(category_results)} Categories Trained
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                # Display category cards in a grid
+                num_cols = min(4, len(category_results))
+                cols = st.columns(num_cols)
+
+                # Category icons and colors
+                category_icons = {
+                    "RESPIRATORY": "🫁",
+                    "CARDIAC": "❤️",
+                    "TRAUMA": "🩹",
+                    "GASTROINTESTINAL": "🤢",
+                    "INFECTIOUS": "🦠",
+                    "NEUROLOGICAL": "🧠",
+                    "OTHER": "📋",
+                }
+                category_colors = {
+                    "RESPIRATORY": "#3b82f6",
+                    "CARDIAC": "#ef4444",
+                    "TRAUMA": "#f59e0b",
+                    "GASTROINTESTINAL": "#10b981",
+                    "INFECTIOUS": "#8b5cf6",
+                    "NEUROLOGICAL": "#ec4899",
+                    "OTHER": "#6b7280",
+                }
+
+                for idx, result in enumerate(category_results):
+                    col_idx = idx % num_cols
+                    category = result["category"]
+                    mae = result["mae"]
+                    rmse = result["rmse"]
+                    r2 = result["r2"]
+
+                    icon = category_icons.get(category, "📊")
+                    color = category_colors.get(category, "#3b82f6")
+
+                    # Determine quality indicator based on R2
+                    if pd.notna(r2):
+                        if r2 >= 0.5:
+                            quality_text = "Good Fit"
+                            quality_color = "#10b981"
+                        elif r2 >= 0:
+                            quality_text = "Moderate"
+                            quality_color = "#f59e0b"
+                        else:
+                            quality_text = "Poor Fit"
+                            quality_color = "#ef4444"
+                    else:
+                        quality_text = "N/A"
+                        quality_color = "#6b7280"
+
+                    with cols[col_idx]:
+                        st.markdown(f"""
+                        <div class='forecast-mini-card' style='text-align: center; margin-bottom: 1rem; border-left: 3px solid {color};'>
+                            <div style='font-size: 2rem; margin-bottom: 0.5rem;'>{icon}</div>
+                            <div class='forecast-day-name' style='color: {color};'>
+                                {category}
+                            </div>
+                            <div style='margin: 1rem 0;'>
+                                <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;'>MAE</div>
+                                <div style='font-size: 1.5rem; font-weight: 700; color: #e2e8f0;'>{mae:.2f if pd.notna(mae) else "—"}</div>
+                            </div>
+                            <div style='margin: 0.75rem 0;'>
+                                <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;'>RMSE</div>
+                                <div style='font-size: 1.25rem; font-weight: 600; color: #cbd5e1;'>{rmse:.2f if pd.notna(rmse) else "—"}</div>
+                            </div>
+                            <div class='forecast-accuracy-enhanced' style='background: rgba({quality_color[1:]}, 0.15); border-color: {quality_color}40; color: {quality_color};'>
+                                R² = {r2:.3f if pd.notna(r2) else "N/A"}
+                            </div>
+                            <div style='margin-top: 0.5rem; font-size: 0.6875rem; color: {quality_color}; font-weight: 600;'>
+                                {quality_text}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                # Summary metrics row
+                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown("""
+                <div class='dashboard-kpi-card' style='padding: 1.5rem;'>
+                    <span class='kpi-label' style='margin-bottom: 1rem;'>Multi-Target Performance Summary</span>
+                """, unsafe_allow_html=True)
+
+                summary_cols = st.columns(4)
+                with summary_cols[0]:
+                    total_trained = len(successful_targets)
+                    st.metric("Categories Trained", total_trained)
+                with summary_cols[1]:
+                    if category_results:
+                        avg_mae = np.nanmean([r["mae"] for r in category_results])
+                        st.metric("Avg MAE", f"{avg_mae:.2f}" if pd.notna(avg_mae) else "—")
+                with summary_cols[2]:
+                    if category_results:
+                        avg_rmse = np.nanmean([r["rmse"] for r in category_results])
+                        st.metric("Avg RMSE", f"{avg_rmse:.2f}" if pd.notna(avg_rmse) else "—")
+                with summary_cols[3]:
+                    failed = multi_target_results.get("failed_targets", [])
+                    if failed:
+                        st.metric("Failed", len(failed), delta_color="inverse")
+                    else:
+                        st.metric("Failed", 0)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
+                st.info("🏥 No clinical category forecasts found. Make sure to select aggregated categories (RESPIRATORY, CARDIAC, etc.) when training in Multi-Target mode.")
+                st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
+            st.info("📊 Multi-target training completed but no summary data available. Please check the Results page for details.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
 
     # ========================================
     # SYSTEM OVERVIEW SECTION

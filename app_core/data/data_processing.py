@@ -288,6 +288,12 @@ def _reorder_columns_for_training(df: pd.DataFrame, date_col: Optional[str] = No
         'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
     ]
 
+    # Aggregated clinical category names
+    clinical_category_keywords = [
+        'respiratory', 'cardiac', 'trauma', 'gastrointestinal',
+        'infectious', 'neurological', 'other'
+    ]
+
     # Categorize columns
     date_cols = []
     calendar_cols = []
@@ -317,15 +323,22 @@ def _reorder_columns_for_training(df: pd.DataFrame, date_col: Optional[str] = No
         elif col_lower.startswith('ed_') and len(col_lower) > 3 and col_lower[3:].isdigit():
             lag_cols.append(col)
 
-        # 5. Future Targets (Target_1, Target_2, asthma_1, pneumonia_1, etc.)
+        # 5. Future Targets (Target_1, Target_2, asthma_1, pneumonia_1, RESPIRATORY_1, etc.)
         elif col_lower.startswith('target_'):
             target_cols.append(col)
         elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in reason_keywords):
             # This catches columns like "asthma_1", "pneumonia_2", etc.
             target_cols.append(col)
+        elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in clinical_category_keywords):
+            # This catches columns like "RESPIRATORY_1", "CARDIAC_2", etc.
+            target_cols.append(col)
 
         # Current reason columns (base columns without suffixes) - put with other
         elif any(col_lower == keyword for keyword in reason_keywords):
+            other_cols.append(col)
+
+        # Current clinical category columns (base columns without suffixes) - put with other
+        elif any(col_lower == keyword for keyword in clinical_category_keywords):
             other_cols.append(col)
 
         # Everything else
@@ -366,6 +379,7 @@ def process_dataset(
     date_col: Optional[str] = None,
     ed_col: Optional[str] = None,
     strict_drop_na_edges: bool = True,
+    use_aggregated_categories: bool = True,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Clean and engineer a dataset for ED forecasting with multi-target support.
@@ -453,25 +467,39 @@ def process_dataset(
     else:
         report["notes"].append("Skipped lag/target generation because ED was not identified.")
 
-    # 6a) Create aggregated clinical categories from granular reason columns
-    df, created_categories = _create_clinical_categories(df)
-    if created_categories:
-        report["created_clinical_categories"] = created_categories
-        report["notes"].append(f"Created {len(created_categories)} clinical categories: {', '.join(created_categories)}")
-        report["steps"].append("create_clinical_categories")
+    # 6a) Create aggregated clinical categories from granular reason columns (if enabled)
+    created_categories = []
+    if use_aggregated_categories:
+        df, created_categories = _create_clinical_categories(df)
+        if created_categories:
+            report["created_clinical_categories"] = created_categories
+            report["notes"].append(f"Created {len(created_categories)} clinical categories: {', '.join(created_categories)}")
+            report["steps"].append("create_clinical_categories")
+    else:
+        report["notes"].append("Aggregated clinical categories disabled - using granular reason columns only.")
 
     # 6b) Generate multi-lag and multi-target forecasting features for reason columns
-    reason_cols = _detect_reason_columns(df)
-    # Exclude the ED column itself to avoid duplicate lag features
-    if ed_col and ed_col in reason_cols:
-        reason_cols.remove(ed_col)
+    if use_aggregated_categories and created_categories:
+        # Use aggregated clinical categories for multi-target forecasting
+        reason_cols = created_categories
+        report["notes"].append(f"Using aggregated clinical categories for multi-target: {', '.join(reason_cols)}")
+    else:
+        # Use granular reason columns for multi-target forecasting
+        reason_cols = _detect_reason_columns(df)
+        # Exclude the ED column itself to avoid duplicate lag features
+        if ed_col and ed_col in reason_cols:
+            reason_cols.remove(ed_col)
+        # Also exclude the aggregated categories if they were created
+        reason_cols = [c for c in reason_cols if c not in list(CLINICAL_CATEGORIES.keys())]
+
     if len(reason_cols) > 0:
-        # Generate lag features (past values)
-        df = _generate_multi_lags(df, lag_cols=reason_cols, n_lags=n_lags)
-        for col in reason_cols:
-            report["created_multi_lags"][col] = [f"{col}_lag_{i}" for i in range(1, n_lags+1)]
-        report["notes"].append(f"Generated {n_lags} lag features for {len(reason_cols)} reason columns: {', '.join(reason_cols)}")
-        report["steps"].append("generate_multi_lags")
+        # Generate lag features (past values) - only for granular reasons, not aggregated
+        if not use_aggregated_categories:
+            df = _generate_multi_lags(df, lag_cols=reason_cols, n_lags=n_lags)
+            for col in reason_cols:
+                report["created_multi_lags"][col] = [f"{col}_lag_{i}" for i in range(1, n_lags+1)]
+            report["notes"].append(f"Generated {n_lags} lag features for {len(reason_cols)} reason columns: {', '.join(reason_cols)}")
+            report["steps"].append("generate_multi_lags")
 
         # Generate target features (future values)
         df = _generate_multi_targets(df, target_cols=reason_cols, n_lags=n_lags)

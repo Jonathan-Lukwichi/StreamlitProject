@@ -86,7 +86,7 @@ except Exception:
 try:
     from app_core.data import process_dataset
 except Exception:
-    def process_dataset(df: pd.DataFrame, n_lags: int, date_col=None, ed_col=None, strict_drop_na_edges=True):
+    def process_dataset(df: pd.DataFrame, n_lags: int, date_col=None, ed_col=None, strict_drop_na_edges=True, use_aggregated_categories=True):
         # basic placeholder: add ED_1..ED_n and Target_1..Target_n from first numeric col
         # plus clinical categories and multi-targets
         work = df.copy()
@@ -99,7 +99,7 @@ except Exception:
                 work[f"ED_{i}"] = work[y].shift(i)
                 work[f"Target_{i}"] = work[y].shift(-i)
 
-        # Create clinical categories from granular reason columns
+        # Clinical category mapping
         clinical_categories = {
             "RESPIRATORY": ["asthma", "pneumonia", "shortness_of_breath"],
             "CARDIAC": ["chest_pain", "arrhythmia", "hypertensive_emergency"],
@@ -110,30 +110,33 @@ except Exception:
             "OTHER": ["allergic_reaction", "mental_health"],
         }
         col_map = {c.lower(): c for c in work.columns}
-        for category, reasons in clinical_categories.items():
-            matching_cols = [col_map[r] for r in reasons if r in col_map]
-            if matching_cols:
-                work[category] = work[matching_cols].fillna(0).sum(axis=1)
 
-        # Generate multi-targets for clinical categories
-        category_cols = list(clinical_categories.keys())
-        for col in category_cols:
-            if col in work.columns:
-                for i in range(1, n_lags+1):
-                    work[f"{col}_{i}"] = work[col].shift(-i)
+        if use_aggregated_categories:
+            # Create aggregated clinical categories from granular reason columns
+            for category, reasons in clinical_categories.items():
+                matching_cols = [col_map[r] for r in reasons if r in col_map]
+                if matching_cols:
+                    work[category] = work[matching_cols].fillna(0).sum(axis=1)
 
-        # Also generate for granular reasons if present
-        granular_reasons = [
-            "asthma", "pneumonia", "shortness_of_breath", "chest_pain", "arrhythmia",
-            "hypertensive_emergency", "fracture", "laceration", "burn", "fall_injury",
-            "abdominal_pain", "vomiting", "diarrhea", "flu_symptoms", "fever",
-            "viral_infection", "headache", "dizziness", "allergic_reaction", "mental_health"
-        ]
-        for reason in granular_reasons:
-            if reason in col_map:
-                col = col_map[reason]
-                for i in range(1, n_lags+1):
-                    work[f"{col}_{i}"] = work[col].shift(-i)
+            # Generate multi-targets for clinical categories
+            category_cols = list(clinical_categories.keys())
+            for col in category_cols:
+                if col in work.columns:
+                    for i in range(1, n_lags+1):
+                        work[f"{col}_{i}"] = work[col].shift(-i)
+        else:
+            # Generate multi-targets for granular reasons only (no aggregation)
+            granular_reasons = [
+                "asthma", "pneumonia", "shortness_of_breath", "chest_pain", "arrhythmia",
+                "hypertensive_emergency", "fracture", "laceration", "burn", "fall_injury",
+                "abdominal_pain", "vomiting", "diarrhea", "flu_symptoms", "fever",
+                "viral_infection", "headache", "dizziness", "allergic_reaction", "mental_health"
+            ]
+            for reason in granular_reasons:
+                if reason in col_map:
+                    col = col_map[reason]
+                    for i in range(1, n_lags+1):
+                        work[f"{col}_{i}"] = work[col].shift(-i)
 
         if strict_drop_na_edges:
             work = work.dropna(how="any")
@@ -234,13 +237,24 @@ def _detect_target_columns(columns: list[str]) -> list[str]:
     # Standard targets (Target_1, Target_2, etc.)
     targets = [c for c in columns if re.fullmatch(r"Target_\d+", c)]
 
-    # Multi-target patterns (Respiratory_Cases_1, Cardiac_Cases_2, etc.)
-    reason_patterns = [
-        "Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
-        "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"
+    # Aggregated clinical category patterns (RESPIRATORY_1, CARDIAC_2, etc.)
+    clinical_patterns = [
+        "RESPIRATORY", "CARDIAC", "TRAUMA", "GASTROINTESTINAL",
+        "INFECTIOUS", "NEUROLOGICAL", "OTHER"
     ]
-    for pattern in reason_patterns:
-        multi_targets = [c for c in columns if re.fullmatch(rf"{pattern}_\d+", c)]
+    for pattern in clinical_patterns:
+        multi_targets = [c for c in columns if re.fullmatch(rf"{pattern}_\d+", c, re.IGNORECASE)]
+        targets.extend(multi_targets)
+
+    # Granular reason patterns (asthma_1, pneumonia_2, etc.)
+    granular_patterns = [
+        "asthma", "pneumonia", "shortness_of_breath", "chest_pain", "arrhythmia",
+        "hypertensive_emergency", "fracture", "laceration", "burn", "fall_injury",
+        "abdominal_pain", "vomiting", "diarrhea", "flu_symptoms", "fever",
+        "viral_infection", "headache", "dizziness", "allergic_reaction", "mental_health"
+    ]
+    for pattern in granular_patterns:
+        multi_targets = [c for c in columns if re.fullmatch(rf"{pattern}_\d+", c, re.IGNORECASE)]
         targets.extend(multi_targets)
 
     # Sort by extracting the numeric suffix
@@ -281,17 +295,18 @@ def _run_fusion_cached(patient_df: pd.DataFrame, weather_df: pd.DataFrame, calen
     return merged, log
 
 @st.cache_data(show_spinner=False)
-def _preprocess_after_fusion_cached(merged_df: pd.DataFrame, n_lags: int, strict_drop: bool):
+def _preprocess_after_fusion_cached(merged_df: pd.DataFrame, n_lags: int, strict_drop: bool, use_aggregated_categories: bool = True):
     processed_df, _ = process_dataset(
-        merged_df, n_lags=n_lags, date_col=None, ed_col=None, strict_drop_na_edges=strict_drop
+        merged_df, n_lags=n_lags, date_col=None, ed_col=None,
+        strict_drop_na_edges=strict_drop, use_aggregated_categories=use_aggregated_categories
     )
     processed_df = _ensure_datetime_and_date(processed_df)
-    
+
     # Drop columns with _x and _y suffixes created by the merge
     cols_to_drop = [c for c in processed_df.columns if c.endswith('_x') or c.endswith('_y')]
     if cols_to_drop:
         processed_df = processed_df.drop(columns=cols_to_drop)
-        
+
     processed_df = _harmonize_day_of_week_and_ed(processed_df)
     processed_df = order_columns_pipeline(processed_df)
     return processed_df
@@ -334,6 +349,12 @@ def _render_preprocessed_info(proc: pd.DataFrame):
             'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
         ]
 
+        # Aggregated clinical category names
+        clinical_keywords = [
+            'respiratory', 'cardiac', 'trauma', 'gastrointestinal',
+            'infectious', 'neurological', 'other'
+        ]
+
         for col in cols:
             col_lower = col.lower()
 
@@ -363,12 +384,20 @@ def _render_preprocessed_info(proc: pd.DataFrame):
             elif '_lag_' in col_lower and any(keyword in col_lower for keyword in reason_keywords):
                 past_reason_cols.append(col)
 
-            # Future reason features (asthma_1, pneumonia_1, etc.)
+            # Future reason features - granular (asthma_1, pneumonia_1, etc.)
             elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in reason_keywords):
+                future_reason_cols.append(col)
+
+            # Future reason features - aggregated clinical categories (RESPIRATORY_1, CARDIAC_1, etc.)
+            elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in clinical_keywords):
                 future_reason_cols.append(col)
 
             # Current reason features (asthma, pneumonia, etc. without suffixes)
             elif any(col_lower == keyword for keyword in reason_keywords):
+                current_reason_cols.append(col)
+
+            # Current clinical category features (RESPIRATORY, CARDIAC, etc. without suffixes)
+            elif any(col_lower == keyword for keyword in clinical_keywords):
                 current_reason_cols.append(col)
 
             # Other columns
@@ -1078,7 +1107,7 @@ def page_data_preparation_studio():
                 unsafe_allow_html=True,
             )
 
-            c1, c2 = st.columns([1, 1])
+            c1, c2, c3 = st.columns([1, 1, 1])
             with c1:
                 n_lags = st.number_input("Lags/Targets (days)", min_value=1, max_value=30, value=7, step=1,
                                         help="Number of lag features (ED_1..ED_n) and targets (Target_1..Target_n) to create")
@@ -1088,12 +1117,22 @@ def page_data_preparation_studio():
                     value=True,
                     help="Removes NaNs at the edges caused by lag/target shifts."
                 )
+            with c3:
+                use_aggregated_categories = st.checkbox(
+                    "🏥 Enable Aggregated Categories",
+                    value=True,
+                    help="Aggregate 20 granular medical reasons into 7 clinical categories (RESPIRATORY, CARDIAC, TRAUMA, etc.) for better forecasting accuracy."
+                )
+                st.session_state["use_aggregated_categories"] = use_aggregated_categories
 
             run = st.button("🧪 Build Features", type="primary", use_container_width=True)
             if run:
                 with st.spinner("Engineering features, harmonising schema, and ordering columns…"):
                     try:
-                        processed = _preprocess_after_fusion_cached(md, n_lags=n_lags, strict_drop=strict_drop)
+                        processed = _preprocess_after_fusion_cached(
+                            md, n_lags=n_lags, strict_drop=strict_drop,
+                            use_aggregated_categories=use_aggregated_categories
+                        )
                         st.session_state["processed_df"] = processed
                         st.markdown(
                             f"""
@@ -1135,6 +1174,12 @@ def page_data_preparation_studio():
                         'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
                     ]
 
+                    # Aggregated clinical category names
+                    clinical_keywords = [
+                        'respiratory', 'cardiac', 'trauma', 'gastrointestinal',
+                        'infectious', 'neurological', 'other'
+                    ]
+
                     for col in cols:
                         col_lower = col.lower()
 
@@ -1164,12 +1209,20 @@ def page_data_preparation_studio():
                         elif '_lag_' in col_lower and any(keyword in col_lower for keyword in reason_keywords):
                             past_reason_cols.append(col)
 
-                        # Future reason features (asthma_1, pneumonia_1, etc.)
+                        # Future reason features - granular (asthma_1, pneumonia_1, etc.)
                         elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in reason_keywords):
+                            future_reason_cols.append(col)
+
+                        # Future reason features - aggregated clinical categories (RESPIRATORY_1, CARDIAC_1, etc.)
+                        elif '_' in col and col.split('_')[-1].isdigit() and any(keyword in col_lower for keyword in clinical_keywords):
                             future_reason_cols.append(col)
 
                         # Current reason features (asthma, pneumonia, etc. without suffixes)
                         elif any(col_lower == keyword for keyword in reason_keywords):
+                            current_reason_cols.append(col)
+
+                        # Current clinical category features (RESPIRATORY, CARDIAC, etc. without suffixes)
+                        elif any(col_lower == keyword for keyword in clinical_keywords):
                             current_reason_cols.append(col)
 
                         # Other columns
