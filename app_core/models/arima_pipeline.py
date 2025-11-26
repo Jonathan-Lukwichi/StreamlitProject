@@ -926,3 +926,174 @@ def plot_stationarity_tests(arima_results: dict) -> go.Figure:
 
     fig.update_layout(height=300, margin=dict(t=80, b=40, l=40, r=40))
     return add_grid(fig)
+
+
+# ===========================================
+# Multi-Target ARIMA Pipeline
+# ===========================================
+def run_arima_multi_target_pipeline(
+    df: pd.DataFrame,
+    target_columns: List[str],
+    order: Optional[Tuple[int, int, int]] = None,
+    train_ratio: float = 0.8,
+    auto_select: bool = True,
+    search_mode: str = "aic_only",
+    cv_strategy: str = "expanding",
+    n_folds: int = 3,
+    max_candidates: int = 20,
+    progress_callback: Optional[callable] = None,
+) -> Dict[str, Any]:
+    """
+    Run ARIMA pipeline for multiple target columns (patient arrivals + reasons).
+
+    Args:
+        df: DataFrame with date and target columns
+        target_columns: List of target column names to forecast
+            e.g., ["patient_count", "asthma", "pneumonia", "chest_pain", ...]
+        order: ARIMA order (p,d,q) - if None, auto-select for each target
+        train_ratio: Train/test split ratio
+        auto_select: Whether to auto-select order for each target
+        search_mode: Order search mode ("aic_only", "pmdarima_oos", "hybrid")
+        cv_strategy: Cross-validation strategy
+        n_folds: Number of CV folds
+        max_candidates: Max candidates for order search
+        progress_callback: Optional callback function(target_name, idx, total)
+
+    Returns:
+        Dictionary with results for each target:
+        {
+            "target_name": {
+                "results": arima_results_dict,
+                "order": (p, d, q),
+                "metrics": {...}
+            },
+            ...
+            "summary": pd.DataFrame with all targets' metrics
+        }
+    """
+    all_results = {}
+    metrics_summary = []
+
+    total_targets = len(target_columns)
+
+    for idx, target_col in enumerate(target_columns):
+        if progress_callback:
+            progress_callback(target_col, idx, total_targets)
+
+        # Check if target column exists in dataframe
+        if target_col not in df.columns:
+            all_results[target_col] = {
+                "status": "error",
+                "message": f"Column '{target_col}' not found in dataframe"
+            }
+            continue
+
+        # Check if column has enough non-null values
+        valid_count = df[target_col].dropna().shape[0]
+        if valid_count < 12:
+            all_results[target_col] = {
+                "status": "error",
+                "message": f"Insufficient data for '{target_col}' (need >= 12 points, got {valid_count})"
+            }
+            continue
+
+        try:
+            # Run single-target ARIMA pipeline
+            result = run_arima_pipeline(
+                df=df.copy(),
+                order=order,
+                train_ratio=train_ratio,
+                auto_select=auto_select,
+                target_col=target_col,
+                search_mode=search_mode,
+                cv_strategy=cv_strategy,
+                n_folds=n_folds,
+                max_candidates=max_candidates,
+            )
+
+            # Store results
+            all_results[target_col] = {
+                "status": "success",
+                "results": result,
+                "order": result.get("model_info", {}).get("order", (1, 1, 1)),
+            }
+
+            # Extract metrics for summary
+            test_metrics = result.get("test_metrics", {})
+            metrics_summary.append({
+                "Target": target_col,
+                "Order": str(result.get("model_info", {}).get("order", "N/A")),
+                "MAE": test_metrics.get("MAE", np.nan),
+                "RMSE": test_metrics.get("RMSE", np.nan),
+                "MAPE_%": test_metrics.get("MAPE", np.nan),
+                "Accuracy_%": test_metrics.get("Accuracy", np.nan),
+                "R2": test_metrics.get("R2", np.nan),
+                "Direction_Acc_%": test_metrics.get("Direction_Accuracy_%", np.nan),
+            })
+
+        except Exception as e:
+            all_results[target_col] = {
+                "status": "error",
+                "message": str(e)
+            }
+            metrics_summary.append({
+                "Target": target_col,
+                "Order": "Error",
+                "MAE": np.nan,
+                "RMSE": np.nan,
+                "MAPE_%": np.nan,
+                "Accuracy_%": np.nan,
+                "R2": np.nan,
+                "Direction_Acc_%": np.nan,
+            })
+
+    # Create summary dataframe
+    summary_df = pd.DataFrame(metrics_summary)
+
+    # Add average row (excluding errors)
+    if not summary_df.empty:
+        numeric_cols = ["MAE", "RMSE", "MAPE_%", "Accuracy_%", "R2", "Direction_Acc_%"]
+        avg_row = {"Target": "AVERAGE", "Order": "-"}
+        for col in numeric_cols:
+            avg_row[col] = summary_df[col].mean()
+        summary_df = pd.concat([summary_df, pd.DataFrame([avg_row])], ignore_index=True)
+
+    all_results["summary"] = summary_df
+    all_results["successful_targets"] = [t for t, r in all_results.items()
+                                          if isinstance(r, dict) and r.get("status") == "success"]
+    all_results["failed_targets"] = [t for t, r in all_results.items()
+                                      if isinstance(r, dict) and r.get("status") == "error"]
+
+    return all_results
+
+
+def get_reason_target_columns(df: pd.DataFrame) -> List[str]:
+    """
+    Detect all reason/target columns in the dataframe for multi-target forecasting.
+
+    Returns list of column names that can be used as forecast targets:
+    - patient_count or similar arrival columns
+    - Medical reason columns (asthma, pneumonia, chest_pain, etc.)
+    """
+    # Known reason column names
+    reason_keywords = [
+        'patient_count', 'ed_visits', 'arrivals', 'visits',
+        'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
+        'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
+        'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
+        'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
+    ]
+
+    # Find matching columns (case-insensitive)
+    target_cols = []
+    for col in df.columns:
+        col_lower = col.lower()
+        # Check if column matches any reason keyword
+        if any(keyword in col_lower for keyword in reason_keywords):
+            # Exclude lag columns and future target columns
+            if '_lag_' not in col_lower and not col_lower.startswith('target_') and not col_lower.startswith('ed_'):
+                # Check if column is numeric
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    target_cols.append(col)
+
+    return target_cols

@@ -36,10 +36,16 @@ from app_core.plots import build_multihorizon_results_dashboard
 from app_core.models.sarimax_pipeline import (
     run_sarimax_multihorizon,
     to_multihorizon_artifacts,
+    run_sarimax_multi_target_pipeline,
+    get_reason_target_columns as get_sarimax_target_columns,
 )
 
 # === ARIMA helpers (with graceful fallbacks for plotting) ===
-from app_core.models.arima_pipeline import run_arima_pipeline
+from app_core.models.arima_pipeline import (
+    run_arima_pipeline,
+    run_arima_multi_target_pipeline,
+    get_reason_target_columns as get_arima_target_columns,
+)
 try:
     from app_core.plots import plot_arima_forecast
     _plt_import_ok = True
@@ -1819,6 +1825,47 @@ def page_benchmarks():
 
         st.info(f"🎯 Configuring: **{current_model}**")
 
+        # ============================================================
+        # FORECAST MODE SELECTION (Single vs Multi-Target)
+        # ============================================================
+        st.markdown("#### Forecasting Mode")
+        forecast_mode = st.radio(
+            "Select forecasting mode:",
+            ["Single-Target (Patient Arrivals Only)", "Multi-Target (Arrivals + Reasons)"],
+            horizontal=True,
+            key="forecast_mode",
+            help="Multi-Target mode forecasts patient arrivals AND each reason for visit separately"
+        )
+        st.session_state["forecast_mode"] = forecast_mode
+
+        if "Multi-Target" in forecast_mode:
+            st.markdown("---")
+            st.markdown("#### Target Column Selection")
+            st.markdown("Select which targets to forecast (patient arrivals + reasons for visit):")
+
+            # Detect available target columns
+            available_targets = get_arima_target_columns(data)
+            if not available_targets:
+                st.warning("No reason columns detected. Make sure your dataset includes medical reason columns.")
+                available_targets = []
+
+            # Default: select all
+            default_targets = available_targets if st.checkbox("Select all targets", value=True, key="select_all_targets") else []
+            selected_targets = st.multiselect(
+                "Choose targets to forecast:",
+                options=available_targets,
+                default=default_targets,
+                key="selected_targets"
+            )
+            st.session_state["multi_target_columns"] = selected_targets
+
+            if selected_targets:
+                st.success(f"✅ {len(selected_targets)} targets selected for forecasting")
+            else:
+                st.warning("⚠️ Please select at least one target column")
+
+        st.markdown("---")
+
         if current_model == "ARIMA":
             mode = st.radio("Parameter Mode", ["Automatic (recommended)", "Manual (enter p,d,q)"],
                             horizontal=True, key="arima_mode")
@@ -1906,49 +1953,121 @@ def page_benchmarks():
         train_ratio = train_size / 100.0
         st.caption(f"Train/Test split: {train_size}% / {100-train_size}%")
 
+        # Check forecast mode
+        forecast_mode = st.session_state.get("forecast_mode", "Single-Target")
+        is_multi_target = "Multi-Target" in forecast_mode
+
+        if is_multi_target:
+            multi_targets = st.session_state.get("multi_target_columns", [])
+            if multi_targets:
+                st.info(f"📊 **Multi-Target Mode**: Forecasting {len(multi_targets)} targets")
+            else:
+                st.warning("⚠️ No targets selected. Go to Configuration tab to select targets.")
+
         if current_model == "ARIMA":
             order = st.session_state.get("arima_order")
             use_auto = order is None
             arima_h = int(st.session_state.get("arima_h", 7))
 
-            if st.button("🚀 Train ARIMA (multi-horizon)", use_container_width=True, type="primary", key="train_arima_btn"):
-                with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
-                    t0 = time.time()
-                    try:
-                        arima_mh_out = run_arima_multihorizon(
-                            df=data,
-                            date_col="Date",
-                            horizons=int(arima_h),
-                            train_ratio=train_ratio,
-                            order=order,
-                            auto_select=use_auto,
-                            cv_strategy=st.session_state.get("cv_strategy", "expanding"),
-                        )
-                        runtime_s = time.time() - t0
-                        st.session_state["arima_mh_results"] = arima_mh_out
-                        st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
+            # ============================================================
+            # MULTI-TARGET ARIMA TRAINING
+            # ============================================================
+            if is_multi_target:
+                multi_targets = st.session_state.get("multi_target_columns", [])
+                if not multi_targets:
+                    st.warning("⚠️ Please select target columns in the Configuration tab first.")
+                else:
+                    if st.button(f"🚀 Train ARIMA Multi-Target ({len(multi_targets)} targets)", use_container_width=True, type="primary", key="train_arima_multi_btn"):
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
 
-                        res_df = arima_mh_out.get("results_df")
-                        if res_df is not None and not res_df.empty:
-                            res_df = _sanitize_metrics_df(res_df)
-                            best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
-                            best_row = res_df.loc[best_idx]
-                            kpis = {
-                                "MAE": _safe_float(best_row.get("Test_MAE")),
-                                "RMSE": _safe_float(best_row.get("Test_RMSE")),
-                                "MAPE": _safe_float(best_row.get("Test_MAPE")),
-                                "Accuracy": _safe_float(best_row.get("Test_Acc")),
-                            }
-                            model_params = f"order={order if order else 'auto'}; H={arima_h}"
-                            _append_to_comparison(
-                                model_name=f"ARIMA (best h={int(best_row.get('Horizon', 1))})",
+                        def update_progress(target_name, idx, total):
+                            progress = (idx + 1) / total
+                            progress_bar.progress(progress)
+                            status_text.text(f"Training ARIMA for: {target_name} ({idx + 1}/{total})")
+
+                        t0 = time.time()
+                        try:
+                            multi_results = run_arima_multi_target_pipeline(
+                                df=data.copy(),
+                                target_columns=multi_targets,
+                                order=order,
                                 train_ratio=train_ratio,
-                                kpis=kpis,
-                                model_params=model_params,
-                                runtime_s=runtime_s
+                                auto_select=use_auto,
+                                search_mode="aic_only",
+                                cv_strategy=st.session_state.get("cv_strategy", "expanding"),
+                                progress_callback=update_progress,
                             )
-                    except Exception as e:
-                        st.error(f"❌ ARIMA multi-horizon training failed: {e}")
+                            runtime_s = time.time() - t0
+                            st.session_state["arima_multi_target_results"] = multi_results
+                            progress_bar.progress(1.0)
+                            status_text.empty()
+
+                            # Display summary
+                            successful = len(multi_results.get("successful_targets", []))
+                            failed = len(multi_results.get("failed_targets", []))
+                            st.success(f"✅ ARIMA Multi-Target training completed in {runtime_s:.2f}s! ({successful} successful, {failed} failed)")
+
+                            # Show summary table
+                            summary_df = multi_results.get("summary")
+                            if summary_df is not None and not summary_df.empty:
+                                st.markdown("### Multi-Target Results Summary")
+                                st.dataframe(summary_df.style.format({
+                                    "MAE": "{:.3f}",
+                                    "RMSE": "{:.3f}",
+                                    "MAPE_%": "{:.2f}",
+                                    "Accuracy_%": "{:.2f}",
+                                    "R2": "{:.3f}",
+                                    "Direction_Acc_%": "{:.2f}",
+                                }, na_rep="—"), use_container_width=True)
+
+                        except Exception as e:
+                            st.error(f"❌ ARIMA Multi-Target training failed: {e}")
+                            progress_bar.empty()
+                            status_text.empty()
+
+            # ============================================================
+            # SINGLE-TARGET ARIMA TRAINING (Original)
+            # ============================================================
+            else:
+                if st.button("🚀 Train ARIMA (multi-horizon)", use_container_width=True, type="primary", key="train_arima_btn"):
+                    with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
+                        t0 = time.time()
+                        try:
+                            arima_mh_out = run_arima_multihorizon(
+                                df=data,
+                                date_col="Date",
+                                horizons=int(arima_h),
+                                train_ratio=train_ratio,
+                                order=order,
+                                auto_select=use_auto,
+                                cv_strategy=st.session_state.get("cv_strategy", "expanding"),
+                            )
+                            runtime_s = time.time() - t0
+                            st.session_state["arima_mh_results"] = arima_mh_out
+                            st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
+
+                            res_df = arima_mh_out.get("results_df")
+                            if res_df is not None and not res_df.empty:
+                                res_df = _sanitize_metrics_df(res_df)
+                                best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                                best_row = res_df.loc[best_idx]
+                                kpis = {
+                                    "MAE": _safe_float(best_row.get("Test_MAE")),
+                                    "RMSE": _safe_float(best_row.get("Test_RMSE")),
+                                    "MAPE": _safe_float(best_row.get("Test_MAPE")),
+                                    "Accuracy": _safe_float(best_row.get("Test_Acc")),
+                                }
+                                model_params = f"order={order if order else 'auto'}; H={arima_h}"
+                                _append_to_comparison(
+                                    model_name=f"ARIMA (best h={int(best_row.get('Horizon', 1))})",
+                                    train_ratio=train_ratio,
+                                    kpis=kpis,
+                                    model_params=model_params,
+                                    runtime_s=runtime_s
+                                )
+                        except Exception as e:
+                            st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
         elif current_model == "SARIMAX":
             exog_vars      = st.session_state.get("sarimax_features", [])
@@ -1957,59 +2076,124 @@ def page_benchmarks():
             order          = st.session_state.get("sarimax_order")
             seasonal_order = st.session_state.get("sarimax_seasonal_order")
 
-            if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
-                t0 = time.time()
-                try:
-                    kwargs = dict(
-                        df_merged=data,
-                        date_col="Date",
-                        train_ratio=train_ratio,
-                        season_length=season_len,
-                        horizons=horizons,
-                        use_all_features=(len(exog_vars) == 0),
-                        include_dow_ohe=True,
-                        selected_features=exog_vars if exog_vars else None,
-                        search_mode="aic_only",  # Fast AIC-only search (4-5x faster than hybrid)
-                    )
-                    if order is not None and seasonal_order is not None:
-                        kwargs.update(dict(order=order, seasonal_order=seasonal_order))
+            # ============================================================
+            # MULTI-TARGET SARIMAX TRAINING
+            # ============================================================
+            if is_multi_target:
+                multi_targets = st.session_state.get("multi_target_columns", [])
+                if not multi_targets:
+                    st.warning("⚠️ Please select target columns in the Configuration tab first.")
+                else:
+                    if st.button(f"🚀 Train SARIMAX Multi-Target ({len(multi_targets)} targets)", use_container_width=True, type="primary", key="train_sarimax_multi_btn"):
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
 
+                        def update_progress(target_name, idx, total):
+                            progress = (idx + 1) / total
+                            progress_bar.progress(progress)
+                            status_text.text(f"Training SARIMAX for: {target_name} ({idx + 1}/{total})")
+
+                        t0 = time.time()
+                        try:
+                            multi_results = run_sarimax_multi_target_pipeline(
+                                df=data.copy(),
+                                target_columns=multi_targets,
+                                date_col="Date",
+                                train_ratio=train_ratio,
+                                season_length=season_len,
+                                use_all_features=(len(exog_vars) == 0),
+                                include_dow_ohe=True,
+                                order=order,
+                                seasonal_order=seasonal_order,
+                                selected_features=exog_vars if exog_vars else None,
+                                search_mode="aic_only",
+                                progress_callback=update_progress,
+                            )
+                            runtime_s = time.time() - t0
+                            st.session_state["sarimax_multi_target_results"] = multi_results
+                            progress_bar.progress(1.0)
+                            status_text.empty()
+
+                            # Display summary
+                            successful = len(multi_results.get("successful_targets", []))
+                            failed = len(multi_results.get("failed_targets", []))
+                            st.success(f"✅ SARIMAX Multi-Target training completed in {runtime_s:.2f}s! ({successful} successful, {failed} failed)")
+
+                            # Show summary table
+                            summary_df = multi_results.get("summary")
+                            if summary_df is not None and not summary_df.empty:
+                                st.markdown("### Multi-Target Results Summary")
+                                st.dataframe(summary_df.style.format({
+                                    "MAE": "{:.3f}",
+                                    "RMSE": "{:.3f}",
+                                    "MAPE_%": "{:.2f}",
+                                    "Accuracy_%": "{:.2f}",
+                                    "R2": "{:.3f}",
+                                    "Direction_Acc_%": "{:.2f}",
+                                }, na_rep="—"), use_container_width=True)
+
+                        except Exception as e:
+                            st.error(f"❌ SARIMAX Multi-Target training failed: {e}")
+                            progress_bar.empty()
+                            status_text.empty()
+
+            # ============================================================
+            # SINGLE-TARGET SARIMAX TRAINING (Original)
+            # ============================================================
+            else:
+                if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
+                    t0 = time.time()
                     try:
-                        sarimax_out = run_sarimax_multihorizon(**kwargs)
-                    except TypeError:
-                        kwargs.pop("order", None)
-                        kwargs.pop("seasonal_order", None)
-                        kwargs.pop("selected_features", None)
-                        sarimax_out = run_sarimax_multihorizon(**kwargs)
-
-                    runtime_s = time.time() - t0
-                    st.session_state["sarimax_results"] = sarimax_out
-                    st.success(f"✅ SARIMAX trained in {runtime_s:.2f}s.")
-
-                    res_df = sarimax_out.get("results_df")
-                    if res_df is not None and not res_df.empty:
-                        res_df = _sanitize_metrics_df(res_df)
-                        best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
-                        best_row = res_df.loc[best_idx]
-                        kpis = {
-                            "MAE": _safe_float(best_row.get("Test_MAE") if "Test_MAE" in res_df.columns else best_row.get("MAE")),
-                            "RMSE": _safe_float(best_row.get("Test_RMSE") if "Test_RMSE" in res_df.columns else best_row.get("RMSE")),
-                            "MAPE": _safe_float(best_row.get("Test_MAPE") if "Test_MAPE" in res_df.columns else best_row.get("MAPE_%")),
-                            "Accuracy": _safe_float(best_row.get("Test_Acc") if "Test_Acc" in res_df.columns else best_row.get("Accuracy_%")),
-                        }
-                        order_str = "auto" if order is None else str(order)
-                        seas_str  = "auto" if seasonal_order is None else str(seasonal_order)
-                        feats = exog_vars if exog_vars else ["ALL"]
-                        model_params = f"order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={','.join(map(str, feats))}"
-                        _append_to_comparison(
-                            model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
+                        kwargs = dict(
+                            df_merged=data,
+                            date_col="Date",
                             train_ratio=train_ratio,
-                            kpis=kpis,
-                            model_params=model_params,
-                            runtime_s=runtime_s
+                            season_length=season_len,
+                            horizons=horizons,
+                            use_all_features=(len(exog_vars) == 0),
+                            include_dow_ohe=True,
+                            selected_features=exog_vars if exog_vars else None,
+                            search_mode="aic_only",  # Fast AIC-only search (4-5x faster than hybrid)
                         )
-                except Exception as e:
-                    st.error(f"❌ SARIMAX training failed: {e}")
+                        if order is not None and seasonal_order is not None:
+                            kwargs.update(dict(order=order, seasonal_order=seasonal_order))
+
+                        try:
+                            sarimax_out = run_sarimax_multihorizon(**kwargs)
+                        except TypeError:
+                            kwargs.pop("order", None)
+                            kwargs.pop("seasonal_order", None)
+                            kwargs.pop("selected_features", None)
+                            sarimax_out = run_sarimax_multihorizon(**kwargs)
+
+                        runtime_s = time.time() - t0
+                        st.session_state["sarimax_results"] = sarimax_out
+                        st.success(f"✅ SARIMAX trained in {runtime_s:.2f}s.")
+
+                        res_df = sarimax_out.get("results_df")
+                        if res_df is not None and not res_df.empty:
+                            res_df = _sanitize_metrics_df(res_df)
+                            best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                            best_row = res_df.loc[best_idx]
+                            kpis = {
+                                "MAE": _safe_float(best_row.get("Test_MAE") if "Test_MAE" in res_df.columns else best_row.get("MAE")),
+                                "RMSE": _safe_float(best_row.get("Test_RMSE") if "Test_RMSE" in res_df.columns else best_row.get("RMSE")),
+                                "MAPE": _safe_float(best_row.get("Test_MAPE") if "Test_MAPE" in res_df.columns else best_row.get("MAPE_%")),
+                                "Accuracy": _safe_float(best_row.get("Test_Acc") if "Test_Acc" in res_df.columns else best_row.get("Accuracy_%")),
+                            }
+                            order_str = "auto" if order is None else str(order)
+                            seas_str  = "auto" if seasonal_order is None else str(seasonal_order)
+                            feats = exog_vars if exog_vars else ["ALL"]
+                            model_params = f"order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={','.join(map(str, feats))}"
+                            _append_to_comparison(
+                                model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
+                                train_ratio=train_ratio,
+                                kpis=kpis,
+                                model_params=model_params,
+                                runtime_s=runtime_s
+                            )
+                    except Exception as e:
+                        st.error(f"❌ SARIMAX training failed: {e}")
 
     # ------------------------------------------------------------
     # 📊 Results — Unified Template (SARIMAX-style artifacts for both)

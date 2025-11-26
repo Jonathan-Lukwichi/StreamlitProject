@@ -766,3 +766,194 @@ def to_multihorizon_artifacts(sarimax_out: Dict[str, Any]):
     res = per_h[horizons[0]].get("res", None)
 
     return metrics_df, F, L, U, test_eval, train, res, horizons
+
+
+# ===========================================
+# Multi-Target SARIMAX Pipeline
+# ===========================================
+def run_sarimax_multi_target_pipeline(
+    df: pd.DataFrame,
+    target_columns: List[str],
+    date_col: str = "Date",
+    train_ratio: float = 0.80,
+    season_length: int = 7,
+    use_all_features: bool = True,
+    include_dow_ohe: bool = True,
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+    selected_features: Optional[List[str]] = None,
+    max_p: int = 3, max_q: int = 3, max_d: int = 2,
+    max_P: int = 2, max_Q: int = 2, max_D: int = 1,
+    search_mode: str = "hybrid",
+    n_folds: int = 3,
+    progress_callback: Optional[callable] = None,
+) -> Dict[str, Any]:
+    """
+    Run SARIMAX pipeline for multiple target columns (patient arrivals + reasons).
+
+    Args:
+        df: DataFrame with date and target columns
+        target_columns: List of target column names to forecast
+            e.g., ["patient_count", "asthma", "pneumonia", "chest_pain", ...]
+        date_col: Name of the date column
+        train_ratio: Train/test split ratio
+        season_length: Seasonal period (default 7 for weekly)
+        use_all_features: Whether to use all available features as exogenous
+        include_dow_ohe: Include day-of-week one-hot encoding
+        order: SARIMAX order (p,d,q) - if None, auto-select
+        seasonal_order: SARIMAX seasonal order (P,D,Q,s) - if None, auto-select
+        selected_features: Optional list of specific features to use
+        max_p, max_q, max_d: Non-seasonal parameter bounds
+        max_P, max_Q, max_D: Seasonal parameter bounds
+        search_mode: Order search mode ("aic_only" or "hybrid")
+        n_folds: Number of CV folds for hybrid search
+        progress_callback: Optional callback function(target_name, idx, total)
+
+    Returns:
+        Dictionary with results for each target:
+        {
+            "target_name": {
+                "results": sarimax_results_dict,
+                "order": (p, d, q),
+                "seasonal_order": (P, D, Q, s),
+                "metrics": {...}
+            },
+            ...
+            "summary": pd.DataFrame with all targets' metrics
+        }
+    """
+    all_results = {}
+    metrics_summary = []
+
+    total_targets = len(target_columns)
+
+    for idx, target_col in enumerate(target_columns):
+        if progress_callback:
+            progress_callback(target_col, idx, total_targets)
+
+        # Check if target column exists in dataframe
+        if target_col not in df.columns:
+            all_results[target_col] = {
+                "status": "error",
+                "message": f"Column '{target_col}' not found in dataframe"
+            }
+            continue
+
+        # Check if column has enough non-null values
+        valid_count = df[target_col].dropna().shape[0]
+        if valid_count < 100:
+            all_results[target_col] = {
+                "status": "error",
+                "message": f"Insufficient data for '{target_col}' (need >= 100 points, got {valid_count})"
+            }
+            continue
+
+        try:
+            # Run single-target SARIMAX pipeline
+            result = run_sarimax_single_horizon(
+                df_merged=df.copy(),
+                date_col=date_col,
+                target_col=target_col,
+                train_ratio=train_ratio,
+                season_length=season_length,
+                use_all_features=use_all_features,
+                include_dow_ohe=include_dow_ohe,
+                order=order,
+                seasonal_order=seasonal_order,
+                selected_features=selected_features,
+                max_p=max_p, max_q=max_q, max_d=max_d,
+                max_P=max_P, max_Q=max_Q, max_D=max_D,
+                search_mode=search_mode,
+                n_folds=n_folds,
+            )
+
+            # Store results
+            all_results[target_col] = {
+                "status": "success",
+                "results": result,
+                "order": result.get("model_info", {}).get("order", (1, 1, 1)),
+                "seasonal_order": result.get("model_info", {}).get("seasonal_order", (1, 1, 0, 7)),
+            }
+
+            # Extract metrics for summary
+            test_metrics = result.get("test_metrics", {})
+            model_info = result.get("model_info", {})
+            metrics_summary.append({
+                "Target": target_col,
+                "Order": str(model_info.get("order", "N/A")),
+                "Seasonal": str(model_info.get("seasonal_order", "N/A")),
+                "MAE": test_metrics.get("MAE", np.nan),
+                "RMSE": test_metrics.get("RMSE", np.nan),
+                "MAPE_%": test_metrics.get("MAPE_%", np.nan),
+                "Accuracy_%": test_metrics.get("Accuracy_%", np.nan),
+                "R2": test_metrics.get("R2", np.nan),
+                "Direction_Acc_%": test_metrics.get("Direction_Accuracy_%", np.nan),
+            })
+
+        except Exception as e:
+            all_results[target_col] = {
+                "status": "error",
+                "message": str(e)
+            }
+            metrics_summary.append({
+                "Target": target_col,
+                "Order": "Error",
+                "Seasonal": "Error",
+                "MAE": np.nan,
+                "RMSE": np.nan,
+                "MAPE_%": np.nan,
+                "Accuracy_%": np.nan,
+                "R2": np.nan,
+                "Direction_Acc_%": np.nan,
+            })
+
+    # Create summary dataframe
+    summary_df = pd.DataFrame(metrics_summary)
+
+    # Add average row (excluding errors)
+    if not summary_df.empty:
+        numeric_cols = ["MAE", "RMSE", "MAPE_%", "Accuracy_%", "R2", "Direction_Acc_%"]
+        avg_row = {"Target": "AVERAGE", "Order": "-", "Seasonal": "-"}
+        for col in numeric_cols:
+            avg_row[col] = summary_df[col].mean()
+        summary_df = pd.concat([summary_df, pd.DataFrame([avg_row])], ignore_index=True)
+
+    all_results["summary"] = summary_df
+    all_results["successful_targets"] = [t for t, r in all_results.items()
+                                          if isinstance(r, dict) and r.get("status") == "success"]
+    all_results["failed_targets"] = [t for t, r in all_results.items()
+                                      if isinstance(r, dict) and r.get("status") == "error"]
+
+    return all_results
+
+
+def get_reason_target_columns(df: pd.DataFrame) -> List[str]:
+    """
+    Detect all reason/target columns in the dataframe for multi-target forecasting.
+
+    Returns list of column names that can be used as forecast targets:
+    - patient_count or similar arrival columns
+    - Medical reason columns (asthma, pneumonia, chest_pain, etc.)
+    """
+    # Known reason column names
+    reason_keywords = [
+        'patient_count', 'ed_visits', 'arrivals', 'visits',
+        'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
+        'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
+        'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
+        'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
+    ]
+
+    # Find matching columns (case-insensitive)
+    target_cols = []
+    for col in df.columns:
+        col_lower = col.lower()
+        # Check if column matches any reason keyword
+        if any(keyword in col_lower for keyword in reason_keywords):
+            # Exclude lag columns and future target columns
+            if '_lag_' not in col_lower and not col_lower.startswith('target_') and not col_lower.startswith('ed_'):
+                # Check if column is numeric
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    target_cols.append(col)
+
+    return target_cols
