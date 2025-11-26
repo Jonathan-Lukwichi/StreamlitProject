@@ -1833,10 +1833,9 @@ def page_benchmarks():
             "Select forecasting mode:",
             ["Single-Target (Patient Arrivals Only)", "Multi-Target (Arrivals + Reasons)"],
             horizontal=True,
-            key="forecast_mode",
+            key="forecast_mode_radio",
             help="Multi-Target mode forecasts patient arrivals AND each reason for visit separately"
         )
-        st.session_state["forecast_mode"] = forecast_mode
 
         if "Multi-Target" in forecast_mode:
             st.markdown("---")
@@ -1850,13 +1849,15 @@ def page_benchmarks():
                 available_targets = []
 
             # Default: select all
-            default_targets = available_targets if st.checkbox("Select all targets", value=True, key="select_all_targets") else []
+            select_all = st.checkbox("Select all targets", value=True, key="select_all_targets_cb")
+            default_targets = available_targets if select_all else []
             selected_targets = st.multiselect(
                 "Choose targets to forecast:",
                 options=available_targets,
                 default=default_targets,
-                key="selected_targets"
+                key="selected_targets_ms"
             )
+            # Store in session state for use in Train tab
             st.session_state["multi_target_columns"] = selected_targets
 
             if selected_targets:
@@ -1953,8 +1954,8 @@ def page_benchmarks():
         train_ratio = train_size / 100.0
         st.caption(f"Train/Test split: {train_size}% / {100-train_size}%")
 
-        # Check forecast mode
-        forecast_mode = st.session_state.get("forecast_mode", "Single-Target")
+        # Check forecast mode (from Configuration tab radio button)
+        forecast_mode = st.session_state.get("forecast_mode_radio", "Single-Target (Patient Arrivals Only)")
         is_multi_target = "Multi-Target" in forecast_mode
 
         if is_multi_target:
