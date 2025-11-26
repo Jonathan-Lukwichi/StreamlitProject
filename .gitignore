@@ -44,7 +44,10 @@ data/
 *.hdf5
 
 # Model Artifacts (trained models can be large)
-models/
+# Note: models/ excluded to not ignore app_core/models/
+/models/
+saved_models/
+trained_models/
 *.joblib
 *.pt
 *.pth
