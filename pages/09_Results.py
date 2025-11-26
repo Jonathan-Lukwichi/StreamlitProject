@@ -166,8 +166,8 @@ with right:
     )
 
 # Tabs for different result views
-tab_summary, tab_horizons, tab_plots, tab_artifacts = st.tabs(
-    ["📋 Summary Table", "🗓️ Per-Horizon", "📈 Plots", "📦 Artifacts"]
+tab_summary, tab_horizons, tab_multi_target, tab_plots, tab_artifacts = st.tabs(
+    ["📋 Summary Table", "🗓️ Per-Horizon", "🏥 Multi-Target", "📈 Plots", "📦 Artifacts"]
 )
 
 with tab_summary:
@@ -189,6 +189,86 @@ with tab_horizons:
             st.info("No per-horizon metrics yet for this selection.")
     else:
         st.info("No per-horizon metrics yet.")
+
+with tab_multi_target:
+    st.markdown("#### Multi-Target Forecasting Results (Reason for Visit)")
+    st.caption("Performance metrics for forecasting patient arrivals AND medical reasons")
+
+    # Check for multi-target results from either ARIMA or SARIMAX
+    multi_target_results = st.session_state.get("arima_multi_target_results") or st.session_state.get("sarimax_multi_target_results")
+
+    if multi_target_results:
+        summary_df = multi_target_results.get("summary")
+        successful = multi_target_results.get("successful_targets", [])
+        failed = multi_target_results.get("failed_targets", [])
+
+        # KPI metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Targets Trained", len(successful))
+        with col2:
+            st.metric("Failed", len(failed), delta_color="inverse" if failed else "off")
+        with col3:
+            if summary_df is not None and not summary_df.empty and "MAPE_%" in summary_df.columns:
+                import pandas as pd
+                avg_mape = summary_df["MAPE_%"].mean()
+                st.metric("Avg MAPE", f"{avg_mape:.2f}%" if pd.notna(avg_mape) else "—")
+            else:
+                st.metric("Avg MAPE", "—")
+        with col4:
+            if summary_df is not None and not summary_df.empty and "Accuracy_%" in summary_df.columns:
+                import pandas as pd
+                avg_acc = summary_df["Accuracy_%"].mean()
+                st.metric("Avg Accuracy", f"{avg_acc:.2f}%" if pd.notna(avg_acc) else "—")
+            else:
+                st.metric("Avg Accuracy", "—")
+
+        st.markdown("---")
+
+        if summary_df is not None and not summary_df.empty:
+            import pandas as pd
+
+            # Separate patient arrivals from medical reasons
+            patient_df = summary_df[summary_df["Target"].str.lower().str.startswith("target_")].copy()
+            reason_df = summary_df[~summary_df["Target"].str.lower().str.startswith("target_")].copy()
+
+            if not patient_df.empty:
+                st.markdown("##### 👥 Patient Arrivals Forecast")
+                st.dataframe(
+                    patient_df.style.format({
+                        "MAE": "{:.3f}",
+                        "RMSE": "{:.3f}",
+                        "MAPE_%": "{:.2f}",
+                        "Accuracy_%": "{:.2f}",
+                        "R2": "{:.3f}",
+                    }, na_rep="—"),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            if not reason_df.empty:
+                st.markdown("##### 🩺 Medical Reasons Forecast")
+                st.dataframe(
+                    reason_df.style.format({
+                        "MAE": "{:.3f}",
+                        "RMSE": "{:.3f}",
+                        "MAPE_%": "{:.2f}",
+                        "Accuracy_%": "{:.2f}",
+                        "R2": "{:.3f}",
+                    }, na_rep="—"),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+        # Show failed targets if any
+        if failed:
+            with st.expander(f"⚠️ Failed Targets ({len(failed)})", expanded=False):
+                for target in failed:
+                    result = multi_target_results.get(target, {})
+                    error_msg = result.get("message", "Unknown error")
+                    st.error(f"**{target}**: {error_msg}")
+    else:
+        st.info("No multi-target results yet. Train a model in Multi-Target mode from the Benchmarks page.")
 
 with tab_plots:
     st.markdown("#### Diagnostics & Forecast plots (placeholders)")

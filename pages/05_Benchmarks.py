@@ -1839,29 +1839,61 @@ def page_benchmarks():
 
         if "Multi-Target" in forecast_mode:
             st.markdown("---")
-            st.markdown("#### Target Column Selection")
-            st.markdown("Select which targets to forecast (patient arrivals + reasons for visit):")
+            st.markdown("#### Target Variable Selection (Dependent Variables)")
+            st.markdown("""
+            Select the **future values** you want to predict. These are your dependent variables:
+            - `Target_N`: Patient arrivals N days ahead
+            - `reason_N`: Medical reason counts N days ahead (e.g., `asthma_1`, `pneumonia_2`)
+            """)
+
+            # Horizon selection
+            col_h1, col_h2 = st.columns([1, 2])
+            with col_h1:
+                selected_horizon = st.selectbox(
+                    "Select forecast horizon:",
+                    options=["All Horizons (1-7)", 1, 2, 3, 4, 5, 6, 7],
+                    index=0,
+                    key="multi_target_horizon",
+                    help="Choose specific horizon or 'All' for multi-horizon forecasting"
+                )
+
+            # Determine horizon for filtering
+            horizon_filter = None if selected_horizon == "All Horizons (1-7)" else int(selected_horizon)
 
             # Detect available target columns
-            available_targets = get_arima_target_columns(data)
+            available_targets = get_arima_target_columns(data, horizon=horizon_filter)
             if not available_targets:
-                st.warning("No reason columns detected. Make sure your dataset includes medical reason columns.")
+                st.warning("⚠️ No future target columns detected. Ensure your dataset has columns like `Target_1`, `asthma_1`, etc.")
                 available_targets = []
+            else:
+                # Group targets for display
+                patient_targets = [t for t in available_targets if t.lower().startswith('target_')]
+                reason_targets = [t for t in available_targets if not t.lower().startswith('target_')]
 
-            # Default: select all
+                with col_h2:
+                    st.info(f"📊 Found **{len(patient_targets)}** patient arrival targets + **{len(reason_targets)}** reason targets")
+
+            # Selection controls
             select_all = st.checkbox("Select all targets", value=True, key="select_all_targets_cb")
             default_targets = available_targets if select_all else []
+
             selected_targets = st.multiselect(
-                "Choose targets to forecast:",
+                "Choose targets to forecast (dependent variables):",
                 options=available_targets,
                 default=default_targets,
-                key="selected_targets_ms"
+                key="selected_targets_ms",
+                help="Each target will be trained as a separate univariate model"
             )
+
             # Store in session state for use in Train tab
             st.session_state["multi_target_columns"] = selected_targets
 
             if selected_targets:
                 st.success(f"✅ {len(selected_targets)} targets selected for forecasting")
+                # Show breakdown
+                n_patient = len([t for t in selected_targets if t.lower().startswith('target_')])
+                n_reason = len(selected_targets) - n_patient
+                st.caption(f"Patient Arrivals: {n_patient} | Medical Reasons: {n_reason}")
             else:
                 st.warning("⚠️ Please select at least one target column")
 
@@ -2347,6 +2379,115 @@ def page_benchmarks():
                 st.error(f"Could not render the multi-horizon dashboard: {e}")
                 import traceback
                 st.code(traceback.format_exc())
+
+        # ============================================================
+        # MULTI-TARGET RESULTS (Reason for Visit Forecasting)
+        # ============================================================
+        multi_target_results = st.session_state.get("arima_multi_target_results") or st.session_state.get("sarimax_multi_target_results")
+
+        if multi_target_results:
+            st.markdown("---")
+            st.markdown(
+                f"""
+                <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 1.5rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(34, 197, 94, 0.1)); border: 2px solid rgba(16, 185, 129, 0.3); box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);'>
+                  <div style='font-size: 2rem; margin-bottom: 0.5rem;'>🏥</div>
+                  <h2 style='font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; background: linear-gradient(135deg, {SUCCESS_COLOR}, #22c55e); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>Multi-Target Results (Reason for Visit)</h2>
+                  <p style='font-size: 0.9rem; color: {BODY_TEXT};'>Forecasting performance for patient arrivals AND medical reasons</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Summary statistics
+            summary_df = multi_target_results.get("summary")
+            successful = multi_target_results.get("successful_targets", [])
+            failed = multi_target_results.get("failed_targets", [])
+
+            # KPI row for multi-target
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Targets Trained", len(successful), delta=None)
+            with col2:
+                st.metric("Failed", len(failed), delta=None, delta_color="inverse" if failed else "off")
+            with col3:
+                if summary_df is not None and not summary_df.empty and "MAPE_%" in summary_df.columns:
+                    avg_mape = summary_df["MAPE_%"].mean()
+                    st.metric("Avg MAPE", f"{avg_mape:.2f}%" if pd.notna(avg_mape) else "—")
+                else:
+                    st.metric("Avg MAPE", "—")
+            with col4:
+                if summary_df is not None and not summary_df.empty and "Accuracy_%" in summary_df.columns:
+                    avg_acc = summary_df["Accuracy_%"].mean()
+                    st.metric("Avg Accuracy", f"{avg_acc:.2f}%" if pd.notna(avg_acc) else "—")
+                else:
+                    st.metric("Avg Accuracy", "—")
+
+            # Summary table
+            if summary_df is not None and not summary_df.empty:
+                st.markdown("#### 📋 Multi-Target Performance Summary")
+
+                # Separate patient arrivals from medical reasons
+                patient_df = summary_df[summary_df["Target"].str.lower().str.startswith("target_")].copy()
+                reason_df = summary_df[~summary_df["Target"].str.lower().str.startswith("target_")].copy()
+
+                if not patient_df.empty:
+                    st.markdown("##### 👥 Patient Arrivals")
+                    st.dataframe(
+                        patient_df.style.format({
+                            "MAE": "{:.3f}",
+                            "RMSE": "{:.3f}",
+                            "MAPE_%": "{:.2f}",
+                            "Accuracy_%": "{:.2f}",
+                            "R2": "{:.3f}",
+                        }, na_rep="—").background_gradient(subset=["Accuracy_%"], cmap="Greens"),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                if not reason_df.empty:
+                    st.markdown("##### 🩺 Medical Reasons for Visit")
+                    st.dataframe(
+                        reason_df.style.format({
+                            "MAE": "{:.3f}",
+                            "RMSE": "{:.3f}",
+                            "MAPE_%": "{:.2f}",
+                            "Accuracy_%": "{:.2f}",
+                            "R2": "{:.3f}",
+                        }, na_rep="—").background_gradient(subset=["Accuracy_%"], cmap="Greens"),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+                # Quick comparison chart
+                if "Accuracy_%" in summary_df.columns:
+                    st.markdown("#### 📊 Performance Comparison Chart")
+                    chart_df = summary_df.dropna(subset=["Accuracy_%"]).sort_values("Accuracy_%", ascending=True)
+                    if not chart_df.empty:
+                        fig = px.bar(
+                            chart_df,
+                            x="Accuracy_%",
+                            y="Target",
+                            orientation="h",
+                            title="Forecast Accuracy by Target",
+                            color="Accuracy_%",
+                            color_continuous_scale="Greens",
+                        )
+                        fig.update_layout(
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            font_color=BODY_TEXT,
+                            height=max(400, len(chart_df) * 25),
+                            showlegend=False,
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+            # Show failed targets if any
+            if failed:
+                with st.expander(f"⚠️ Failed Targets ({len(failed)})", expanded=False):
+                    for target in failed:
+                        result = multi_target_results.get(target, {})
+                        error_msg = result.get("message", "Unknown error")
+                        st.error(f"**{target}**: {error_msg}")
 
     # ------------------------------------------------------------
     # 🆚 Model Comparison

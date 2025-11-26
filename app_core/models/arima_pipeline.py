@@ -1067,33 +1067,77 @@ def run_arima_multi_target_pipeline(
     return all_results
 
 
-def get_reason_target_columns(df: pd.DataFrame) -> List[str]:
+def get_reason_target_columns(df: pd.DataFrame, horizon: Optional[int] = None) -> List[str]:
     """
-    Detect all reason/target columns in the dataframe for multi-target forecasting.
+    Detect all FUTURE target columns in the dataframe for multi-target forecasting.
 
-    Returns list of column names that can be used as forecast targets:
-    - patient_count or similar arrival columns
-    - Medical reason columns (asthma, pneumonia, chest_pain, etc.)
+    These are the dependent variables (what we want to predict):
+    - Target_1, Target_2, ..., Target_7 (patient arrivals for horizons 1-7)
+    - asthma_1, asthma_2, ..., asthma_7 (asthma cases for horizons 1-7)
+    - pneumonia_1, pneumonia_2, etc. (and all other medical reasons)
+
+    Args:
+        df: DataFrame with preprocessed columns
+        horizon: If specified, only return targets for this specific horizon (1-7)
+                 If None, return all available target columns
+
+    Returns:
+        List of future target column names (dependent variables)
     """
-    # Known reason column names
-    reason_keywords = [
-        'patient_count', 'ed_visits', 'arrivals', 'visits',
+    # Medical reason base names (without horizon suffix)
+    reason_bases = [
         'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
         'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
         'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
         'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
     ]
 
-    # Find matching columns (case-insensitive)
     target_cols = []
+
     for col in df.columns:
         col_lower = col.lower()
-        # Check if column matches any reason keyword
-        if any(keyword in col_lower for keyword in reason_keywords):
-            # Exclude lag columns and future target columns
-            if '_lag_' not in col_lower and not col_lower.startswith('target_') and not col_lower.startswith('ed_'):
-                # Check if column is numeric
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    target_cols.append(col)
 
-    return target_cols
+        # Skip lag columns (features, not targets)
+        if '_lag_' in col_lower or col_lower.startswith('ed_'):
+            continue
+
+        # Check for Target_N pattern (patient arrivals)
+        if col_lower.startswith('target_'):
+            try:
+                h = int(col_lower.split('_')[1])
+                if horizon is None or h == horizon:
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        target_cols.append(col)
+            except (IndexError, ValueError):
+                pass
+            continue
+
+        # Check for reason_N pattern (e.g., asthma_1, pneumonia_2)
+        for base in reason_bases:
+            if col_lower.startswith(base + '_'):
+                try:
+                    suffix = col_lower[len(base) + 1:]
+                    h = int(suffix)
+                    if 1 <= h <= 7:  # Valid horizon range
+                        if horizon is None or h == horizon:
+                            if pd.api.types.is_numeric_dtype(df[col]):
+                                target_cols.append(col)
+                except ValueError:
+                    pass
+                break
+
+    # Sort by horizon for consistent ordering
+    def sort_key(col):
+        col_lower = col.lower()
+        if col_lower.startswith('target_'):
+            return (0, int(col_lower.split('_')[1]))
+        for i, base in enumerate(reason_bases):
+            if col_lower.startswith(base + '_'):
+                try:
+                    h = int(col_lower[len(base) + 1:])
+                    return (i + 1, h)
+                except ValueError:
+                    return (100, 0)
+        return (100, 0)
+
+    return sorted(target_cols, key=sort_key)
