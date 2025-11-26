@@ -1846,9 +1846,17 @@ def page_benchmarks():
             - `reason_N`: Medical reason counts N days ahead (e.g., `asthma_1`, `pneumonia_2`)
             """)
 
-            # Horizon selection
-            col_h1, col_h2 = st.columns([1, 2])
-            with col_h1:
+            # Granularity and Horizon selection
+            col_g1, col_g2, col_g3 = st.columns([1, 1, 1])
+            with col_g1:
+                forecast_granularity = st.radio(
+                    "Forecast granularity:",
+                    ["Aggregated Categories (Recommended)", "Granular Reasons"],
+                    index=0,
+                    key="forecast_granularity",
+                    help="Aggregated categories (RESPIRATORY, CARDIAC, etc.) have better accuracy than granular reasons"
+                )
+            with col_g2:
                 selected_horizon = st.selectbox(
                     "Select forecast horizon:",
                     options=["All Horizons (1-7)", 1, 2, 3, 4, 5, 6, 7],
@@ -1860,22 +1868,45 @@ def page_benchmarks():
             # Determine horizon for filtering
             horizon_filter = None if selected_horizon == "All Horizons (1-7)" else int(selected_horizon)
 
+            # Aggregated clinical categories
+            aggregated_bases = ['respiratory', 'cardiac', 'trauma', 'gastrointestinal', 'infectious', 'neurological', 'other']
+
             # Detect available target columns (with fallback for backward compatibility)
             try:
                 available_targets = get_arima_target_columns(data, horizon=horizon_filter)
             except TypeError:
                 # Fallback if old function signature without horizon parameter
                 available_targets = get_arima_target_columns(data)
+
+            # Filter based on granularity selection
+            if "Aggregated" in forecast_granularity:
+                # Only show aggregated categories + patient arrivals
+                available_targets = [
+                    t for t in available_targets
+                    if t.lower().startswith('target_') or
+                    any(t.lower().startswith(cat + '_') for cat in aggregated_bases)
+                ]
+            else:
+                # Only show granular reasons + patient arrivals (exclude aggregated)
+                available_targets = [
+                    t for t in available_targets
+                    if t.lower().startswith('target_') or
+                    not any(t.lower().startswith(cat + '_') for cat in aggregated_bases)
+                ]
+
             if not available_targets:
-                st.warning("⚠️ No future target columns detected. Ensure your dataset has columns like `Target_1`, `asthma_1`, etc.")
+                st.warning("⚠️ No future target columns detected. Ensure your dataset has columns like `Target_1`, `RESPIRATORY_1`, etc.")
                 available_targets = []
             else:
                 # Group targets for display
                 patient_targets = [t for t in available_targets if t.lower().startswith('target_')]
                 reason_targets = [t for t in available_targets if not t.lower().startswith('target_')]
 
-                with col_h2:
-                    st.info(f"📊 Found **{len(patient_targets)}** patient arrival targets + **{len(reason_targets)}** reason targets")
+                with col_g3:
+                    if "Aggregated" in forecast_granularity:
+                        st.success(f"✅ **{len(patient_targets)}** arrivals + **{len(reason_targets)}** categories")
+                    else:
+                        st.info(f"📊 **{len(patient_targets)}** arrivals + **{len(reason_targets)}** reasons")
 
             # Selection controls
             select_all = st.checkbox("Select all targets", value=True, key="select_all_targets_cb")

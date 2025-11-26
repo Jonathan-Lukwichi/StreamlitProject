@@ -156,6 +156,66 @@ def _detect_reason_columns(df: pd.DataFrame) -> List[str]:
 
     return reason_cols
 
+
+# Clinical category mapping for aggregation
+CLINICAL_CATEGORIES = {
+    "RESPIRATORY": ["asthma", "pneumonia", "shortness_of_breath"],
+    "CARDIAC": ["chest_pain", "arrhythmia", "hypertensive_emergency"],
+    "TRAUMA": ["fracture", "laceration", "burn", "fall_injury"],
+    "GASTROINTESTINAL": ["abdominal_pain", "vomiting", "diarrhea"],
+    "INFECTIOUS": ["flu_symptoms", "fever", "viral_infection"],
+    "NEUROLOGICAL": ["headache", "dizziness"],
+    "OTHER": ["allergic_reaction", "mental_health"],
+}
+
+
+def _create_clinical_categories(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+    """
+    Aggregate granular medical reasons into 6 clinical categories.
+
+    This improves forecasting accuracy by:
+    - Increasing daily counts (more signal, less noise)
+    - Reducing sparsity (fewer zeros)
+    - Making ARIMA/SARIMAX more effective
+
+    Categories:
+        RESPIRATORY = asthma + pneumonia + shortness_of_breath
+        CARDIAC = chest_pain + arrhythmia + hypertensive_emergency
+        TRAUMA = fracture + laceration + burn + fall_injury
+        GASTROINTESTINAL = abdominal_pain + vomiting + diarrhea
+        INFECTIOUS = flu_symptoms + fever + viral_infection
+        NEUROLOGICAL = headache + dizziness
+        OTHER = allergic_reaction + mental_health
+
+    Returns:
+        Tuple of (df with new category columns, list of created category column names)
+    """
+    df = df.copy()
+    created_categories = []
+
+    # Build column name mapping (case-insensitive)
+    col_map = {c.lower(): c for c in df.columns}
+
+    for category, reasons in CLINICAL_CATEGORIES.items():
+        # Find matching columns for this category
+        matching_cols = []
+        for reason in reasons:
+            # Try exact match first
+            if reason in col_map:
+                matching_cols.append(col_map[reason])
+            # Try with underscores replaced
+            elif reason.replace("_", "") in col_map:
+                matching_cols.append(col_map[reason.replace("_", "")])
+
+        # Create aggregated column if we found any matching columns
+        if matching_cols:
+            # Sum the matching columns, treating NaN as 0
+            df[category] = df[matching_cols].fillna(0).sum(axis=1)
+            created_categories.append(category)
+
+    return df, created_categories
+
+
 def _generate_lags_and_targets(df: pd.DataFrame, ed_col: str, n_lags: int) -> pd.DataFrame:
     """Generate lag features (ED_1..ED_n) and future targets (Target_1..Target_n) from ED column."""
     df = df.copy()
@@ -392,6 +452,13 @@ def process_dataset(
         report["created_targets"] = [f"Target_{i}" for i in range(1, n_lags+1)]
     else:
         report["notes"].append("Skipped lag/target generation because ED was not identified.")
+
+    # 6a) Create aggregated clinical categories from granular reason columns
+    df, created_categories = _create_clinical_categories(df)
+    if created_categories:
+        report["created_clinical_categories"] = created_categories
+        report["notes"].append(f"Created {len(created_categories)} clinical categories: {', '.join(created_categories)}")
+        report["steps"].append("create_clinical_categories")
 
     # 6b) Generate multi-lag and multi-target forecasting features for reason columns
     reason_cols = _detect_reason_columns(df)

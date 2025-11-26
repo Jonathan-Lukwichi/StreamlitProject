@@ -1085,7 +1085,11 @@ def get_reason_target_columns(df: pd.DataFrame, horizon: Optional[int] = None) -
         List of future target column names (dependent variables)
     """
     # Medical reason base names (without horizon suffix)
+    # Includes both granular reasons AND aggregated clinical categories
     reason_bases = [
+        # Aggregated clinical categories (recommended for forecasting)
+        'respiratory', 'cardiac', 'trauma', 'gastrointestinal', 'infectious', 'neurological', 'other',
+        # Granular medical reasons
         'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
         'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
         'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
