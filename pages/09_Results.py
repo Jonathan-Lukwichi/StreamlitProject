@@ -209,19 +209,19 @@ with tab_multi_target:
         with col2:
             st.metric("Failed", len(failed), delta_color="inverse" if failed else "off")
         with col3:
-            if summary_df is not None and not summary_df.empty and "MAPE_%" in summary_df.columns:
+            if summary_df is not None and not summary_df.empty and "MAE" in summary_df.columns:
                 import pandas as pd
-                avg_mape = summary_df["MAPE_%"].mean()
-                st.metric("Avg MAPE", f"{avg_mape:.2f}%" if pd.notna(avg_mape) else "—")
+                avg_mae = summary_df["MAE"].mean()
+                st.metric("Avg MAE", f"{avg_mae:.2f}" if pd.notna(avg_mae) else "—")
             else:
-                st.metric("Avg MAPE", "—")
+                st.metric("Avg MAE", "—")
         with col4:
-            if summary_df is not None and not summary_df.empty and "Accuracy_%" in summary_df.columns:
+            if summary_df is not None and not summary_df.empty and "RMSE" in summary_df.columns:
                 import pandas as pd
-                avg_acc = summary_df["Accuracy_%"].mean()
-                st.metric("Avg Accuracy", f"{avg_acc:.2f}%" if pd.notna(avg_acc) else "—")
+                avg_rmse = summary_df["RMSE"].mean()
+                st.metric("Avg RMSE", f"{avg_rmse:.2f}" if pd.notna(avg_rmse) else "—")
             else:
-                st.metric("Avg Accuracy", "—")
+                st.metric("Avg RMSE", "—")
 
         st.markdown("---")
 
