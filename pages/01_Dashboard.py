@@ -1455,6 +1455,11 @@ def page_dashboard():
                         quality_color = "#6b7280"
 
                     with cols[col_idx]:
+                        # Pre-format values to avoid f-string syntax issues
+                        mae_display = f"{mae:.2f}" if pd.notna(mae) else "—"
+                        rmse_display = f"{rmse:.2f}" if pd.notna(rmse) else "—"
+                        r2_display = f"{r2:.3f}" if pd.notna(r2) else "N/A"
+
                         st.markdown(f"""
                         <div class='forecast-mini-card' style='text-align: center; margin-bottom: 1rem; border-left: 3px solid {color};'>
                             <div style='font-size: 2rem; margin-bottom: 0.5rem;'>{icon}</div>
@@ -1463,14 +1468,14 @@ def page_dashboard():
                             </div>
                             <div style='margin: 1rem 0;'>
                                 <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;'>MAE</div>
-                                <div style='font-size: 1.5rem; font-weight: 700; color: #e2e8f0;'>{mae:.2f if pd.notna(mae) else "—"}</div>
+                                <div style='font-size: 1.5rem; font-weight: 700; color: #e2e8f0;'>{mae_display}</div>
                             </div>
                             <div style='margin: 0.75rem 0;'>
                                 <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;'>RMSE</div>
-                                <div style='font-size: 1.25rem; font-weight: 600; color: #cbd5e1;'>{rmse:.2f if pd.notna(rmse) else "—"}</div>
+                                <div style='font-size: 1.25rem; font-weight: 600; color: #cbd5e1;'>{rmse_display}</div>
                             </div>
                             <div class='forecast-accuracy-enhanced' style='background: rgba({quality_color[1:]}, 0.15); border-color: {quality_color}40; color: {quality_color};'>
-                                R² = {r2:.3f if pd.notna(r2) else "N/A"}
+                                R² = {r2_display}
                             </div>
                             <div style='margin-top: 0.5rem; font-size: 0.6875rem; color: {quality_color}; font-weight: 600;'>
                                 {quality_text}
