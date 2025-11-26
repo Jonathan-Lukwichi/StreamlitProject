@@ -1860,8 +1860,12 @@ def page_benchmarks():
             # Determine horizon for filtering
             horizon_filter = None if selected_horizon == "All Horizons (1-7)" else int(selected_horizon)
 
-            # Detect available target columns
-            available_targets = get_arima_target_columns(data, horizon=horizon_filter)
+            # Detect available target columns (with fallback for backward compatibility)
+            try:
+                available_targets = get_arima_target_columns(data, horizon=horizon_filter)
+            except TypeError:
+                # Fallback if old function signature without horizon parameter
+                available_targets = get_arima_target_columns(data)
             if not available_targets:
                 st.warning("⚠️ No future target columns detected. Ensure your dataset has columns like `Target_1`, `asthma_1`, etc.")
                 available_targets = []
