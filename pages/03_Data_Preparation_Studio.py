@@ -88,7 +88,7 @@ try:
 except Exception:
     def process_dataset(df: pd.DataFrame, n_lags: int, date_col=None, ed_col=None, strict_drop_na_edges=True):
         # basic placeholder: add ED_1..ED_n and Target_1..Target_n from first numeric col
-        # plus multi-targets for reason columns
+        # plus clinical categories and multi-targets
         work = df.copy()
         y = None
         for c in work.columns:
@@ -99,11 +99,39 @@ except Exception:
                 work[f"ED_{i}"] = work[y].shift(i)
                 work[f"Target_{i}"] = work[y].shift(-i)
 
-        # Generate multi-targets for reason columns
-        reason_cols = ["Respiratory_Cases", "Cardiac_Cases", "Trauma_Cases",
-                      "Gastrointestinal_Cases", "Infectious_Cases", "Other_Cases", "Total_Arrivals"]
-        for col in reason_cols:
+        # Create clinical categories from granular reason columns
+        clinical_categories = {
+            "RESPIRATORY": ["asthma", "pneumonia", "shortness_of_breath"],
+            "CARDIAC": ["chest_pain", "arrhythmia", "hypertensive_emergency"],
+            "TRAUMA": ["fracture", "laceration", "burn", "fall_injury"],
+            "GASTROINTESTINAL": ["abdominal_pain", "vomiting", "diarrhea"],
+            "INFECTIOUS": ["flu_symptoms", "fever", "viral_infection"],
+            "NEUROLOGICAL": ["headache", "dizziness"],
+            "OTHER": ["allergic_reaction", "mental_health"],
+        }
+        col_map = {c.lower(): c for c in work.columns}
+        for category, reasons in clinical_categories.items():
+            matching_cols = [col_map[r] for r in reasons if r in col_map]
+            if matching_cols:
+                work[category] = work[matching_cols].fillna(0).sum(axis=1)
+
+        # Generate multi-targets for clinical categories
+        category_cols = list(clinical_categories.keys())
+        for col in category_cols:
             if col in work.columns:
+                for i in range(1, n_lags+1):
+                    work[f"{col}_{i}"] = work[col].shift(-i)
+
+        # Also generate for granular reasons if present
+        granular_reasons = [
+            "asthma", "pneumonia", "shortness_of_breath", "chest_pain", "arrhythmia",
+            "hypertensive_emergency", "fracture", "laceration", "burn", "fall_injury",
+            "abdominal_pain", "vomiting", "diarrhea", "flu_symptoms", "fever",
+            "viral_infection", "headache", "dizziness", "allergic_reaction", "mental_health"
+        ]
+        for reason in granular_reasons:
+            if reason in col_map:
+                col = col_map[reason]
                 for i in range(1, n_lags+1):
                     work[f"{col}_{i}"] = work[col].shift(-i)
 
