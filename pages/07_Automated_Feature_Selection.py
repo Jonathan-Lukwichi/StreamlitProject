@@ -183,8 +183,9 @@ class FeatureSelectionPipeline:
         """
         start = time.time()
         base_model = RandomForestRegressor(
-            n_estimators=self.config.get("rf_n_estimators", 200),
-            random_state=self.config.get("random_state", 42)
+            n_estimators=self.config.get("rf_n_estimators", 100),  # Reduced from 200 for speed
+            random_state=self.config.get("random_state", 42),
+            n_jobs=-1  # Parallel processing
         )
         base_model.fit(X_train, y_train)
         base_pred = base_model.predict(X_test)
@@ -232,7 +233,7 @@ class FeatureSelectionPipeline:
         Keep ALL non-zero coefficients (positive and negative).
         """
         start = time.time()
-        lcv = LassoCV(cv=self.config.get("lasso_cv_folds", 5), random_state=42, n_alphas=100)
+        lcv = LassoCV(cv=self.config.get("lasso_cv_folds", 5), random_state=42, n_alphas=30, n_jobs=-1)  # Reduced alphas + parallel
         lcv.fit(X_train, y_train)
         alphas = np.unique(np.clip(lcv.alphas_, 1e-6, None))
 
@@ -271,13 +272,14 @@ class FeatureSelectionPipeline:
     # ---- Option 3: Gradient Boosting (with GridSearchCV) ----
     def _gb_gridsearch(self, X_train, X_test, y_train, y_test):
         start = time.time()
+        # Reduced grid for faster execution (9 combinations instead of 27)
         grid = self.config.get("gb_param_grid", {
-            "learning_rate":[0.01,0.1,0.2],
-            "max_depth":[3,5,7],
-            "n_estimators":[50,100,200]
+            "learning_rate": [0.05, 0.1],
+            "max_depth": [3, 5],
+            "n_estimators": [50, 100]
         })
         gbr = GradientBoostingRegressor(random_state=42)
-        gscv = GridSearchCV(gbr, grid, cv=self.config.get("cv_folds",5), scoring="neg_root_mean_squared_error")
+        gscv = GridSearchCV(gbr, grid, cv=self.config.get("cv_folds", 3), scoring="neg_root_mean_squared_error", n_jobs=-1)  # Reduced CV + parallel
         gscv.fit(X_train, y_train)
         best = gscv.best_estimator_
         yhat_tr = best.predict(X_train)
@@ -308,8 +310,9 @@ class FeatureSelectionPipeline:
 
         for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
             base_model = RandomForestRegressor(
-                n_estimators=self.config.get("rf_n_estimators", 200),
-                random_state=self.config.get("random_state", 42)
+                n_estimators=self.config.get("rf_n_estimators", 100),  # Reduced for speed
+                random_state=self.config.get("random_state", 42),
+                n_jobs=-1  # Parallel processing
             )
             base_model.fit(X_tr, y_tr)
             base_pred = base_model.predict(X_te)
@@ -371,7 +374,7 @@ class FeatureSelectionPipeline:
         all_metrics = []
 
         for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
-            lcv = LassoCV(cv=self.config.get("lasso_cv_folds", 5), random_state=42, n_alphas=100)
+            lcv = LassoCV(cv=self.config.get("lasso_cv_folds", 5), random_state=42, n_alphas=30, n_jobs=-1)  # Reduced + parallel
             lcv.fit(X_tr, y_tr)
             alphas = np.unique(np.clip(lcv.alphas_, 1e-6, None))
 
@@ -427,16 +430,17 @@ class FeatureSelectionPipeline:
         all_importances = []  # List of importance arrays, one per target
         all_metrics = []
 
+        # Reduced grid for faster execution (8 combinations instead of 27)
         grid_params = self.config.get("gb_param_grid", {
-            "learning_rate": [0.01, 0.1, 0.2],
-            "max_depth": [3, 5, 7],
-            "n_estimators": [50, 100, 200]
+            "learning_rate": [0.05, 0.1],
+            "max_depth": [3, 5],
+            "n_estimators": [50, 100]
         })
 
         for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
             gbr = GradientBoostingRegressor(random_state=42)
-            gscv = GridSearchCV(gbr, grid_params, cv=self.config.get("cv_folds", 5),
-                                scoring="neg_root_mean_squared_error")
+            gscv = GridSearchCV(gbr, grid_params, cv=self.config.get("cv_folds", 3),
+                                scoring="neg_root_mean_squared_error", n_jobs=-1)  # Reduced CV + parallel
             gscv.fit(X_tr, y_tr)
             best = gscv.best_estimator_
             yhat_tr = best.predict(X_tr)
@@ -709,19 +713,20 @@ def page_feature_selection():
     with c3:
         run_which = st.selectbox("Method(s)", ["All (0–3)", "0 Baseline", "1 Permutation", "2 Lasso (L1)", "3 Gradient Boosting"], index=0)
 
-    # Config (compact)
+    # Config (compact) - Optimized defaults for faster execution
     with st.expander("Configuration", expanded=False):
         left, right = st.columns(2)
         with left:
             tr_ratio = st.slider("Train ratio (ignored if FE indices provided)", 0.5, 0.95, 0.8, 0.05)
-            cv_folds = st.number_input("CV folds", 3, 10, value=5, step=1)
-            rf_n = st.number_input("RF n_estimators (baseline model for permutation)", 50, 1000, value=200, step=50)
+            cv_folds = st.number_input("CV folds", 3, 10, value=3, step=1)  # Reduced from 5 for speed
+            rf_n = st.number_input("RF n_estimators (baseline model for permutation)", 50, 500, value=100, step=50)  # Reduced from 200
             rf_thr = st.text_input("Permutation threshold on ΔRMSE (blank = top 80%)", "")
         with right:
-            gb_lr = [0.01, 0.1, 0.2]
-            gb_depth = [3, 5, 7]
-            gb_n = [50, 100, 200]
+            gb_lr = [0.05, 0.1]  # Reduced grid
+            gb_depth = [3, 5]
+            gb_n = [50, 100]
             st.caption(f"GB grid: learning_rate {gb_lr}, max_depth {gb_depth}, n_estimators {gb_n}")
+            st.caption("⚡ Optimized for speed with parallel processing")
 
     # Build config dict
     try:
