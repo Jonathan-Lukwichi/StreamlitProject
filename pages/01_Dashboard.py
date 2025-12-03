@@ -1166,35 +1166,38 @@ def page_dashboard():
                     merged_df = st.session_state.get("merged_data")
 
                     if merged_df is not None and not merged_df.empty:
-                        # Look for category columns (aggregated clinical categories)
-                        cat_columns_found = []
+                        # Build a lowercase column map for case-insensitive matching
+                        col_map = {col.upper(): col for col in merged_df.columns}
+
+                        # Sum up historical values for each category
+                        cat_totals = {}
                         for cat in category_config.keys():
-                            # Check for columns like RESPIRATORY_1, RESPIRATORY_2, etc. or just RESPIRATORY
-                            for col in merged_df.columns:
-                                col_upper = col.upper()
-                                if col_upper == cat or col_upper.startswith(cat + "_"):
-                                    cat_columns_found.append((cat, col))
-                                    break
+                            cat_upper = cat.upper()
 
-                        # Calculate proportions from historical data
-                        if cat_columns_found:
-                            # Sum up historical values for each category
-                            cat_totals = {}
-                            for cat, col in cat_columns_found:
-                                if col in merged_df.columns:
-                                    cat_sum = merged_df[col].sum()
-                                    if pd.notna(cat_sum) and cat_sum > 0:
-                                        if cat not in cat_totals:
-                                            cat_totals[cat] = 0
-                                        cat_totals[cat] += cat_sum
+                            # Look for columns that match this category (case-insensitive)
+                            matching_cols = []
+                            for col_upper, original_col in col_map.items():
+                                # Match exact category name or category with suffix (e.g., RESPIRATORY_1)
+                                if col_upper == cat_upper or col_upper.startswith(cat_upper + "_"):
+                                    matching_cols.append(original_col)
 
-                            # Calculate total across all categories
-                            total_cat_sum = sum(cat_totals.values())
+                            # Sum all matching columns for this category
+                            if matching_cols:
+                                total_for_cat = 0
+                                for col in matching_cols:
+                                    col_sum = merged_df[col].sum()
+                                    if pd.notna(col_sum):
+                                        total_for_cat += col_sum
+                                if total_for_cat > 0:
+                                    cat_totals[cat] = total_for_cat
 
-                            # Calculate proportions
-                            if total_cat_sum > 0:
-                                for cat, cat_sum in cat_totals.items():
-                                    category_proportions[cat] = cat_sum / total_cat_sum
+                        # Calculate total across all categories
+                        total_cat_sum = sum(cat_totals.values()) if cat_totals else 0
+
+                        # Calculate proportions
+                        if total_cat_sum > 0:
+                            for cat, cat_sum in cat_totals.items():
+                                category_proportions[cat] = cat_sum / total_cat_sum
 
                     # Helper function for smart rounding (ensures sum = total)
                     def distribute_with_smart_rounding(total: int, proportions: dict) -> dict:

@@ -2552,18 +2552,29 @@ def page_benchmarks():
         }
 
         if merged_df is not None and not merged_df.empty:
-            # Look for category columns
+            # Build a column map for case-insensitive matching
+            col_map = {col.upper(): col for col in merged_df.columns}
+
+            # Look for category columns and sum ALL matching columns
             cat_totals = {}
             for cat in category_config.keys():
-                for col in merged_df.columns:
-                    col_upper = col.upper()
-                    if col_upper == cat or col_upper.startswith(cat + "_"):
-                        cat_sum = merged_df[col].sum()
-                        if pd.notna(cat_sum) and cat_sum > 0:
-                            if cat not in cat_totals:
-                                cat_totals[cat] = 0
-                            cat_totals[cat] += cat_sum
-                        break
+                cat_upper = cat.upper()
+
+                # Find all columns that match this category
+                matching_cols = []
+                for col_upper_key, original_col in col_map.items():
+                    if col_upper_key == cat_upper or col_upper_key.startswith(cat_upper + "_"):
+                        matching_cols.append(original_col)
+
+                # Sum all matching columns
+                if matching_cols:
+                    total_for_cat = 0
+                    for col in matching_cols:
+                        col_sum = merged_df[col].sum()
+                        if pd.notna(col_sum):
+                            total_for_cat += col_sum
+                    if total_for_cat > 0:
+                        cat_totals[cat] = total_for_cat
 
             if cat_totals:
                 total_sum = sum(cat_totals.values())
