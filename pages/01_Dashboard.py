@@ -1355,8 +1355,8 @@ def page_dashboard():
     st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
     st.markdown(f"<h2 class='section-header'>🏥 Reason for Visit Forecast</h2>", unsafe_allow_html=True)
 
-    # Check for multi-target forecasting results
-    multi_target_results = st.session_state.get("arima_multi_target_results") or st.session_state.get("sarimax_multi_target_results")
+    # Check for multi-target forecasting results (SARIMAX or ARIMA)
+    multi_target_results = st.session_state.get("sarimax_multi_target_results") or st.session_state.get("arima_multi_target_results")
 
     if not multi_target_results:
         st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
@@ -1366,159 +1366,307 @@ def page_dashboard():
         summary_df = multi_target_results.get("summary")
         successful_targets = multi_target_results.get("successful_targets", [])
 
-        if summary_df is not None and not summary_df.empty:
-            # Clinical categories to display (aggregated)
-            clinical_categories = ["RESPIRATORY", "CARDIAC", "TRAUMA", "GASTROINTESTINAL", "INFECTIOUS", "NEUROLOGICAL", "OTHER"]
+        # Category icons and colors for clinical categories
+        category_icons = {
+            "RESPIRATORY": "🫁", "CARDIAC": "❤️", "TRAUMA": "🩹",
+            "GASTROINTESTINAL": "🤢", "INFECTIOUS": "🦠", "NEUROLOGICAL": "🧠", "OTHER": "📋",
+        }
+        category_colors = {
+            "RESPIRATORY": "#3b82f6", "CARDIAC": "#ef4444", "TRAUMA": "#f59e0b",
+            "GASTROINTESTINAL": "#10b981", "INFECTIOUS": "#8b5cf6", "NEUROLOGICAL": "#ec4899", "OTHER": "#6b7280",
+        }
 
-            # Filter for clinical category results only
-            category_results = []
-            for category in clinical_categories:
-                # Check if this category was trained (look for Target column matching category)
-                cat_rows = summary_df[summary_df["Target"].str.upper().str.startswith(category)]
-                if not cat_rows.empty:
-                    # Get the first horizon result (most recent forecast)
-                    row = cat_rows.iloc[0]
-                    category_results.append({
-                        "category": category,
-                        "mae": row.get("MAE", np.nan),
-                        "rmse": row.get("RMSE", np.nan),
-                        "accuracy": row.get("Accuracy_%", np.nan),
-                        "r2": row.get("R2", np.nan),
-                    })
+        # Build forecast results from all successful targets
+        category_results = []
 
-            if category_results:
-                # Display forecast cards for each clinical category
-                st.markdown(f"""
-                <div class='forecast-card'>
-                    <div class='forecast-header'>
-                        <div>
-                            <div class='forecast-title'>
-                                Clinical Category Forecast Summary
-                            </div>
-                            <div class='forecast-subtitle'>
-                                Predicted patient arrivals by <span>medical category</span>
-                            </div>
+        for target_name in successful_targets:
+            target_data = multi_target_results.get(target_name, {})
+            if not isinstance(target_data, dict) or target_data.get("status") != "success":
+                continue
+
+            # Extract category from target name (e.g., "RESPIRATORY_1" -> "RESPIRATORY")
+            target_upper = target_name.upper()
+            category = None
+            for cat in category_icons.keys():
+                if target_upper.startswith(cat):
+                    category = cat
+                    break
+
+            # If no category match, use the target name itself
+            if category is None:
+                # Try to extract base name before underscore+number
+                parts = target_name.rsplit('_', 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    category = parts[0].upper()
+                else:
+                    category = target_name.upper()
+
+            # Get forecast values from target_data
+            # Results are stored in "results" key (matching ARIMA structure)
+            results = target_data.get("results", {})
+            forecasts = results.get("forecasts") if results else target_data.get("forecasts")
+            y_test = results.get("y_test") if results else target_data.get("y_test")
+            forecast_lower = results.get("forecast_lower") if results else target_data.get("forecast_lower")
+            forecast_upper = results.get("forecast_upper") if results else target_data.get("forecast_upper")
+
+            # Extract last forecast value (tomorrow's prediction)
+            forecast_val = np.nan
+            lower_val = np.nan
+            upper_val = np.nan
+            actual_last = np.nan
+
+            if forecasts is not None:
+                try:
+                    if hasattr(forecasts, 'iloc') and len(forecasts) > 0:
+                        forecast_val = float(forecasts.iloc[-1])
+                    elif hasattr(forecasts, '__len__') and len(forecasts) > 0:
+                        forecast_val = float(forecasts[-1])
+                except (IndexError, TypeError, ValueError):
+                    pass
+
+            if forecast_lower is not None:
+                try:
+                    if hasattr(forecast_lower, 'iloc') and len(forecast_lower) > 0:
+                        lower_val = float(forecast_lower.iloc[-1])
+                    elif hasattr(forecast_lower, '__len__') and len(forecast_lower) > 0:
+                        lower_val = float(forecast_lower[-1])
+                except (IndexError, TypeError, ValueError):
+                    pass
+
+            if forecast_upper is not None:
+                try:
+                    if hasattr(forecast_upper, 'iloc') and len(forecast_upper) > 0:
+                        upper_val = float(forecast_upper.iloc[-1])
+                    elif hasattr(forecast_upper, '__len__') and len(forecast_upper) > 0:
+                        upper_val = float(forecast_upper[-1])
+                except (IndexError, TypeError, ValueError):
+                    pass
+
+            if y_test is not None:
+                try:
+                    if hasattr(y_test, 'iloc') and len(y_test) > 0:
+                        actual_last = float(y_test.iloc[-1])
+                    elif hasattr(y_test, '__len__') and len(y_test) > 0:
+                        actual_last = float(y_test[-1])
+                except (IndexError, TypeError, ValueError):
+                    pass
+
+            # Get metrics from summary_df
+            accuracy = np.nan
+            mae = np.nan
+            rmse = np.nan
+            if summary_df is not None and not summary_df.empty:
+                target_rows = summary_df[summary_df["Target"] == target_name]
+                if not target_rows.empty:
+                    row = target_rows.iloc[0]
+                    accuracy = row.get("Accuracy_%", np.nan)
+                    mae = row.get("MAE", np.nan)
+                    rmse = row.get("RMSE", np.nan)
+
+            category_results.append({
+                "category": category,
+                "target": target_name,
+                "forecast": forecast_val,
+                "lower": lower_val,
+                "upper": upper_val,
+                "actual_last": actual_last,
+                "accuracy": accuracy,
+                "mae": mae,
+                "rmse": rmse,
+            })
+
+        if category_results:
+            # Calculate total expected patients
+            total_forecast = sum(r["forecast"] for r in category_results if pd.notna(r["forecast"]))
+            has_forecasts = any(pd.notna(r["forecast"]) for r in category_results)
+
+            # Display header
+            st.markdown(f"""
+            <div class='forecast-card'>
+                <div class='forecast-header'>
+                    <div>
+                        <div class='forecast-title'>
+                            {"Expected Patients by Medical Category" if has_forecasts else "Clinical Category Forecast Summary"}
                         </div>
-                        <div class='forecast-info-badge'>
-                            📊 {len(category_results)} Categories Trained
+                        <div class='forecast-subtitle'>
+                            {"Tomorrow's forecast" if has_forecasts else "Predicted patient arrivals by"} <span style='color: #10b981;'>medical category</span>
+                            {f" • Total: ~{int(total_forecast)} patients" if has_forecasts and total_forecast > 0 else ""}
                         </div>
                     </div>
-                """, unsafe_allow_html=True)
+                    <div class='forecast-info-badge'>
+                        📊 {len(category_results)} Categories Trained
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-                # Display category cards in a grid
-                num_cols = min(4, len(category_results))
-                cols = st.columns(num_cols)
+            # Display category cards in a grid
+            num_cols = min(4, len(category_results))
+            cols = st.columns(num_cols)
 
-                # Category icons and colors
-                category_icons = {
-                    "RESPIRATORY": "🫁",
-                    "CARDIAC": "❤️",
-                    "TRAUMA": "🩹",
-                    "GASTROINTESTINAL": "🤢",
-                    "INFECTIOUS": "🦠",
-                    "NEUROLOGICAL": "🧠",
-                    "OTHER": "📋",
-                }
-                category_colors = {
-                    "RESPIRATORY": "#3b82f6",
-                    "CARDIAC": "#ef4444",
-                    "TRAUMA": "#f59e0b",
-                    "GASTROINTESTINAL": "#10b981",
-                    "INFECTIOUS": "#8b5cf6",
-                    "NEUROLOGICAL": "#ec4899",
-                    "OTHER": "#6b7280",
-                }
+            for idx, result in enumerate(category_results):
+                col_idx = idx % num_cols
+                if idx > 0 and col_idx == 0:
+                    cols = st.columns(num_cols)
 
-                for idx, result in enumerate(category_results):
-                    col_idx = idx % num_cols
-                    category = result["category"]
-                    mae = result["mae"]
-                    rmse = result["rmse"]
-                    r2 = result["r2"]
+                category = result["category"]
+                forecast = result["forecast"]
+                lower = result["lower"]
+                upper = result["upper"]
+                accuracy = result["accuracy"]
+                actual_last = result["actual_last"]
+                mae = result["mae"]
+                rmse = result["rmse"]
 
-                    icon = category_icons.get(category, "📊")
-                    color = category_colors.get(category, "#3b82f6")
+                icon = category_icons.get(category, "📊")
+                color = category_colors.get(category, "#3b82f6")
 
-                    # Determine quality indicator based on R2
-                    if pd.notna(r2):
-                        if r2 >= 0.5:
-                            quality_text = "Good Fit"
-                            quality_color = "#10b981"
-                        elif r2 >= 0:
-                            quality_text = "Moderate"
-                            quality_color = "#f59e0b"
+                # Determine what to display: forecast value OR metrics
+                has_forecast = pd.notna(forecast) and forecast > 0
+
+                if has_forecast:
+                    # Display forecast value prominently
+                    main_value = f"{int(round(forecast))}"
+                    main_label = "Expected Patients"
+
+                    # Confidence based on accuracy
+                    if pd.notna(accuracy):
+                        if accuracy >= 85:
+                            conf_text = f"✓ {accuracy:.0f}%"
+                            conf_color = "#10b981"
+                        elif accuracy >= 70:
+                            conf_text = f"~ {accuracy:.0f}%"
+                            conf_color = "#f59e0b"
                         else:
-                            quality_text = "Poor Fit"
-                            quality_color = "#ef4444"
+                            conf_text = f"! {accuracy:.0f}%"
+                            conf_color = "#ef4444"
                     else:
-                        quality_text = "N/A"
-                        quality_color = "#6b7280"
+                        conf_text = "N/A"
+                        conf_color = "#6b7280"
+
+                    # Range display
+                    if pd.notna(lower) and pd.notna(upper):
+                        range_text = f"Range: {int(round(lower))} - {int(round(upper))}"
+                    else:
+                        range_text = ""
+
+                    # Trend calculation
+                    trend_html = ""
+                    if pd.notna(actual_last) and actual_last > 0:
+                        change_pct = ((forecast - actual_last) / actual_last) * 100
+                        if change_pct > 10:
+                            trend_html = f"<div style='margin-top: 0.5rem; font-size: 0.6875rem; color: #ef4444; font-weight: 600;'>↑ +{change_pct:.0f}%</div>"
+                        elif change_pct < -10:
+                            trend_html = f"<div style='margin-top: 0.5rem; font-size: 0.6875rem; color: #10b981; font-weight: 600;'>↓ {change_pct:.0f}%</div>"
+                        else:
+                            trend_html = f"<div style='margin-top: 0.5rem; font-size: 0.6875rem; color: #64748b; font-weight: 600;'>→ Stable</div>"
 
                     with cols[col_idx]:
-                        # Pre-format values to avoid f-string syntax issues
-                        mae_display = f"{mae:.2f}" if pd.notna(mae) else "—"
-                        rmse_display = f"{rmse:.2f}" if pd.notna(rmse) else "—"
-                        r2_display = f"{r2:.3f}" if pd.notna(r2) else "N/A"
-
                         st.markdown(f"""
                         <div class='forecast-mini-card' style='text-align: center; margin-bottom: 1rem; border-left: 3px solid {color};'>
                             <div style='font-size: 2rem; margin-bottom: 0.5rem;'>{icon}</div>
-                            <div class='forecast-day-name' style='color: {color};'>
+                            <div class='forecast-day-name' style='color: {color}; font-size: 0.75rem;'>
                                 {category}
                             </div>
-                            <div style='margin: 1rem 0;'>
-                                <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;'>MAE</div>
-                                <div style='font-size: 1.5rem; font-weight: 700; color: #e2e8f0;'>{mae_display}</div>
+                            <div class='forecast-number' style='font-size: 2.5rem; margin: 0.75rem 0;'>
+                                {main_value}
+                            </div>
+                            <div style='font-size: 0.6875rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem;'>
+                                {main_label}
+                            </div>
+                            <div class='forecast-accuracy-enhanced' style='background: rgba(16, 185, 129, 0.15); border-color: {conf_color}40; color: {conf_color}; margin-bottom: 0.5rem;'>
+                                {conf_text}
+                            </div>
+                            <div class='forecast-range' style='font-size: 0.625rem;'>
+                                {range_text}
+                            </div>
+                            {trend_html}
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    # Fallback: display metrics (MAE, RMSE, Accuracy) when no forecast available
+                    mae_display = f"{mae:.2f}" if pd.notna(mae) else "—"
+                    rmse_display = f"{rmse:.2f}" if pd.notna(rmse) else "—"
+                    acc_display = f"{accuracy:.0f}%" if pd.notna(accuracy) else "—"
+
+                    # Determine fit quality
+                    if pd.notna(accuracy):
+                        if accuracy >= 85:
+                            fit_text = "Good Fit"
+                            fit_color = "#10b981"
+                        elif accuracy >= 70:
+                            fit_text = "Moderate"
+                            fit_color = "#f59e0b"
+                        else:
+                            fit_text = "Low Accuracy"
+                            fit_color = "#ef4444"
+                    else:
+                        fit_text = "N/A"
+                        fit_color = "#6b7280"
+
+                    with cols[col_idx]:
+                        st.markdown(f"""
+                        <div class='forecast-mini-card' style='text-align: center; margin-bottom: 1rem; border-left: 3px solid {color};'>
+                            <div style='font-size: 2rem; margin-bottom: 0.5rem;'>{icon}</div>
+                            <div class='forecast-day-name' style='color: {color}; font-size: 0.75rem;'>
+                                {category}
                             </div>
                             <div style='margin: 0.75rem 0;'>
-                                <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;'>RMSE</div>
+                                <div style='font-size: 0.6875rem; color: #64748b; margin-bottom: 0.25rem;'>MAE</div>
+                                <div style='font-size: 1.5rem; font-weight: 700; color: #e2e8f0;'>{mae_display}</div>
+                            </div>
+                            <div style='margin: 0.5rem 0;'>
+                                <div style='font-size: 0.6875rem; color: #64748b; margin-bottom: 0.25rem;'>RMSE</div>
                                 <div style='font-size: 1.25rem; font-weight: 600; color: #cbd5e1;'>{rmse_display}</div>
                             </div>
-                            <div class='forecast-accuracy-enhanced' style='background: rgba({quality_color[1:]}, 0.15); border-color: {quality_color}40; color: {quality_color};'>
-                                R² = {r2_display}
+                            <div class='forecast-accuracy-enhanced' style='background: rgba(16, 185, 129, 0.15); border-color: {fit_color}40; color: {fit_color}; margin-top: 0.75rem;'>
+                                {acc_display}
                             </div>
-                            <div style='margin-top: 0.5rem; font-size: 0.6875rem; color: {quality_color}; font-weight: 600;'>
-                                {quality_text}
+                            <div style='font-size: 0.625rem; color: {fit_color}; margin-top: 0.25rem;'>
+                                {fit_text}
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-                # Summary metrics row
-                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-                st.markdown("""
-                <div class='dashboard-kpi-card' style='padding: 1.5rem;'>
-                    <span class='kpi-label' style='margin-bottom: 1rem;'>Multi-Target Performance Summary</span>
-                """, unsafe_allow_html=True)
+            # Summary row for stakeholders
+            st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown("""
+            <div class='dashboard-kpi-card' style='padding: 1.5rem;'>
+                <span class='kpi-label' style='margin-bottom: 1rem;'>Forecast Summary</span>
+            """, unsafe_allow_html=True)
 
-                summary_cols = st.columns(4)
-                with summary_cols[0]:
-                    total_trained = len(successful_targets)
-                    st.metric("Categories Trained", total_trained)
-                with summary_cols[1]:
-                    if category_results:
-                        avg_mae = np.nanmean([r["mae"] for r in category_results])
-                        st.metric("Avg MAE", f"{avg_mae:.2f}" if pd.notna(avg_mae) else "—")
-                with summary_cols[2]:
-                    if category_results:
-                        avg_rmse = np.nanmean([r["rmse"] for r in category_results])
-                        st.metric("Avg RMSE", f"{avg_rmse:.2f}" if pd.notna(avg_rmse) else "—")
-                with summary_cols[3]:
-                    failed = multi_target_results.get("failed_targets", [])
-                    if failed:
-                        st.metric("Failed", len(failed), delta_color="inverse")
-                    else:
-                        st.metric("Failed", 0)
+            summary_cols = st.columns(4)
+            with summary_cols[0]:
+                if has_forecasts and total_forecast > 0:
+                    st.metric("Total Expected", f"~{int(total_forecast)}", help="Sum of all category forecasts")
+                else:
+                    st.metric("Categories", len(category_results), help="Number of trained categories")
+            with summary_cols[1]:
+                accuracies = [r["accuracy"] for r in category_results if pd.notna(r["accuracy"])]
+                avg_accuracy = np.mean(accuracies) if accuracies else np.nan
+                st.metric("Avg Accuracy", f"{avg_accuracy:.0f}%" if pd.notna(avg_accuracy) else "—")
+            with summary_cols[2]:
+                maes = [r["mae"] for r in category_results if pd.notna(r["mae"])]
+                avg_mae = np.mean(maes) if maes else np.nan
+                st.metric("Avg MAE", f"{avg_mae:.2f}" if pd.notna(avg_mae) else "—", help="Average Mean Absolute Error")
+            with summary_cols[3]:
+                failed = multi_target_results.get("failed_targets", [])
+                if failed:
+                    st.metric("Failed", len(failed), delta_color="inverse", help="Categories that couldn't be forecasted")
+                else:
+                    st.metric("Status", "All OK", help="All categories trained successfully")
 
-                st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
-                st.info("🏥 No clinical category forecasts found. Make sure to select aggregated categories (RESPIRATORY, CARDIAC, etc.) when training in Multi-Target mode.")
-                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        elif summary_df is not None and not summary_df.empty:
+            # No category_results but we have summary - show info
+            st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
+            st.info("📊 Training completed but forecast data not available. Please re-train models in the Benchmarks page.")
+            st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
-            st.info("📊 Multi-target training completed but no summary data available. Please check the Results page for details.")
+            st.info("🏥 No clinical category forecasts found. Enable 'Multi-Target Mode' in Benchmarks and train with clinical categories.")
             st.markdown("</div>", unsafe_allow_html=True)
 
 

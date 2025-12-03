@@ -72,16 +72,27 @@ def _clean_daily(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
         out[c] = out[c].interpolate("linear").ffill().bfill()
     return out
 
-def _exog_calendar(index: pd.DatetimeIndex, include_dow_ohe: bool = True) -> pd.DataFrame:
-    """Calendar features (DOW one-hot, weekend flag, yearly sin/cos)."""
-    X = pd.DataFrame(index=index)
-    dow = index.dayofweek
+def _exog_calendar(index, include_dow_ohe: bool = True) -> pd.DataFrame:
+    """Calendar features (DOW one-hot, weekend flag, yearly sin/cos).
+
+    Args:
+        index: DatetimeIndex or Series of datetime values
+        include_dow_ohe: Whether to include day-of-week one-hot encoding
+    """
+    # Handle both DatetimeIndex and Series inputs
+    if isinstance(index, pd.Series):
+        dt_index = pd.DatetimeIndex(index)
+    else:
+        dt_index = index
+
+    X = pd.DataFrame(index=dt_index)
+    dow = dt_index.dayofweek
     if include_dow_ohe:
         # Mon..Sun one-hot
         for i, name in enumerate(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]):
             X[f"is_{name}"] = (dow == i).astype(int)
     X["is_weekend"] = (dow >= 5).astype(int)
-    t = index.dayofyear.astype(float)
+    t = dt_index.dayofyear.astype(float)
     X["sin_y"] = np.sin(2*np.pi*t/365.25)
     X["cos_y"] = np.cos(2*np.pi*t/365.25)
     return X
@@ -769,7 +780,7 @@ def to_multihorizon_artifacts(sarimax_out: Dict[str, Any]):
 
 
 # ===========================================
-# Multi-Target SARIMAX Pipeline
+# Multi-Target SARIMAX Pipeline (Matches ARIMA pattern)
 # ===========================================
 def run_sarimax_multi_target_pipeline(
     df: pd.DataFrame,
@@ -777,61 +788,44 @@ def run_sarimax_multi_target_pipeline(
     date_col: str = "Date",
     train_ratio: float = 0.80,
     season_length: int = 7,
-    use_all_features: bool = True,
+    use_all_features: bool = False,
     include_dow_ohe: bool = True,
     order: Optional[Tuple[int, int, int]] = None,
     seasonal_order: Optional[Tuple[int, int, int, int]] = None,
     selected_features: Optional[List[str]] = None,
     max_p: int = 3, max_q: int = 3, max_d: int = 2,
     max_P: int = 2, max_Q: int = 2, max_D: int = 1,
-    search_mode: str = "hybrid",
+    search_mode: str = "aic_only",
     n_folds: int = 3,
     progress_callback: Optional[callable] = None,
 ) -> Dict[str, Any]:
     """
     Run SARIMAX pipeline for multiple target columns (patient arrivals + reasons).
-
-    Args:
-        df: DataFrame with date and target columns
-        target_columns: List of target column names to forecast
-            e.g., ["patient_count", "asthma", "pneumonia", "chest_pain", ...]
-        date_col: Name of the date column
-        train_ratio: Train/test split ratio
-        season_length: Seasonal period (default 7 for weekly)
-        use_all_features: Whether to use all available features as exogenous
-        include_dow_ohe: Include day-of-week one-hot encoding
-        order: SARIMAX order (p,d,q) - if None, auto-select
-        seasonal_order: SARIMAX seasonal order (P,D,Q,s) - if None, auto-select
-        selected_features: Optional list of specific features to use
-        max_p, max_q, max_d: Non-seasonal parameter bounds
-        max_P, max_Q, max_D: Seasonal parameter bounds
-        search_mode: Order search mode ("aic_only" or "hybrid")
-        n_folds: Number of CV folds for hybrid search
-        progress_callback: Optional callback function(target_name, idx, total)
-
-    Returns:
-        Dictionary with results for each target:
-        {
-            "target_name": {
-                "results": sarimax_results_dict,
-                "order": (p, d, q),
-                "seasonal_order": (P, D, Q, s),
-                "metrics": {...}
-            },
-            ...
-            "summary": pd.DataFrame with all targets' metrics
-        }
+    Follows the same pattern as run_arima_multi_target_pipeline for consistency.
     """
     all_results = {}
     metrics_summary = []
-
     total_targets = len(target_columns)
+
+    # ========== DIAGNOSTIC OUTPUT ==========
+    print("\n" + "="*60)
+    print("SARIMAX MULTI-TARGET PIPELINE STARTING")
+    print("="*60)
+    print(f"DataFrame shape: {df.shape}")
+    print(f"DataFrame columns ({len(df.columns)}): {list(df.columns)[:20]}{'...' if len(df.columns) > 20 else ''}")
+    print(f"Target columns requested ({len(target_columns)}): {target_columns[:10]}{'...' if len(target_columns) > 10 else ''}")
+    print(f"Date column: '{date_col}' - exists: {date_col in df.columns}")
+    if date_col in df.columns:
+        print(f"Date column dtype: {df[date_col].dtype}")
+        print(f"Date range: {df[date_col].min()} to {df[date_col].max()}")
+    print("="*60 + "\n")
+    # ========================================
 
     for idx, target_col in enumerate(target_columns):
         if progress_callback:
             progress_callback(target_col, idx, total_targets)
 
-        # Check if target column exists in dataframe
+        # Check if target column exists
         if target_col not in df.columns:
             all_results[target_col] = {
                 "status": "error",
@@ -839,35 +833,40 @@ def run_sarimax_multi_target_pipeline(
             }
             continue
 
-        # Check if column has enough non-null values
+        # Check for sufficient data
         valid_count = df[target_col].dropna().shape[0]
-        if valid_count < 100:
+        print(f"[SARIMAX CHECK] {target_col}: valid_count={valid_count}")
+        if valid_count < 24:
+            print(f"[SARIMAX SKIP] {target_col}: Insufficient data ({valid_count} < 24)")
             all_results[target_col] = {
                 "status": "error",
-                "message": f"Insufficient data for '{target_col}' (need >= 100 points, got {valid_count})"
+                "message": f"Insufficient data for '{target_col}' (need >= 24 points, got {valid_count})"
             }
             continue
 
         try:
-            # Run single-target SARIMAX pipeline
-            result = run_sarimax_single_horizon(
-                df_merged=df.copy(),
+            # Create a simple dataframe with just date and target (like ARIMA does)
+            df_simple = df[[date_col, target_col]].copy()
+
+            # Debug: Check data before running
+            print(f"[SARIMAX DEBUG] {target_col}: {len(df_simple)} rows, {df_simple[target_col].notna().sum()} non-null")
+
+            # Run single-target SARIMAX
+            result = run_sarimax_single(
+                df_merged=df_simple,
                 date_col=date_col,
                 target_col=target_col,
                 train_ratio=train_ratio,
                 season_length=season_length,
-                use_all_features=use_all_features,
+                use_all_features=False,  # Only use calendar features
                 include_dow_ohe=include_dow_ohe,
                 order=order,
                 seasonal_order=seasonal_order,
-                selected_features=selected_features,
                 max_p=max_p, max_q=max_q, max_d=max_d,
                 max_P=max_P, max_Q=max_Q, max_D=max_D,
-                search_mode=search_mode,
-                n_folds=n_folds,
             )
 
-            # Store results
+            # Store results (match ARIMA structure exactly)
             all_results[target_col] = {
                 "status": "success",
                 "results": result,
@@ -884,13 +883,16 @@ def run_sarimax_multi_target_pipeline(
                 "Seasonal": str(model_info.get("seasonal_order", "N/A")),
                 "MAE": test_metrics.get("MAE", np.nan),
                 "RMSE": test_metrics.get("RMSE", np.nan),
-                "MAPE_%": test_metrics.get("MAPE_%", np.nan),
-                "Accuracy_%": test_metrics.get("Accuracy_%", np.nan),
+                "MAPE_%": test_metrics.get("MAPE", np.nan),
+                "Accuracy_%": test_metrics.get("Accuracy", np.nan),
                 "R2": test_metrics.get("R2", np.nan),
                 "Direction_Acc_%": test_metrics.get("Direction_Accuracy_%", np.nan),
             })
 
         except Exception as e:
+            import traceback
+            print(f"[SARIMAX ERROR] {target_col}: {str(e)}")
+            traceback.print_exc()
             all_results[target_col] = {
                 "status": "error",
                 "message": str(e)
@@ -910,7 +912,7 @@ def run_sarimax_multi_target_pipeline(
     # Create summary dataframe
     summary_df = pd.DataFrame(metrics_summary)
 
-    # Add average row (excluding errors)
+    # Add average row
     if not summary_df.empty:
         numeric_cols = ["MAE", "RMSE", "MAPE_%", "Accuracy_%", "R2", "Direction_Acc_%"]
         avg_row = {"Target": "AVERAGE", "Order": "-", "Seasonal": "-"}
