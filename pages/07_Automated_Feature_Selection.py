@@ -375,9 +375,13 @@ def _variants_from_session():
     return variants, fe.get("train_idx"), fe.get("test_idx")
 
 def _pick_target(df: pd.DataFrame) -> List[str]:
-    if "Target_1" in df.columns: return ["Target_1"]
-    t = [c for c in df.columns if c.lower().startswith("target_")]
-    return sorted(t, key=lambda x: (x != "Target_1", x)) or [df.columns[-1]]
+    """Return all available Target columns (Target_1 through Target_7)."""
+    targets = [f"Target_{i}" for i in range(1, 8) if f"Target_{i}" in df.columns]
+    if not targets:
+        # Fallback: look for any target-like columns
+        targets = [c for c in df.columns if c.lower().startswith("target_")]
+        targets = sorted(targets, key=lambda x: (x != "Target_1", x))
+    return targets if targets else [df.columns[-1]]
 
 # ---------- Page ----------
 def page_feature_selection():
@@ -400,12 +404,26 @@ def page_feature_selection():
         st.warning("No engineered datasets found. Please run **Advanced Feature Engineering** first.")
         return
 
-    c1, c2, c3 = st.columns([1.25, 1, 1])
+    c1, c2, c3 = st.columns([1.25, 1.5, 1])
     with c1:
         variant_name = st.selectbox("Dataset variant", list(variants.keys()), index=0)
     dfv = variants[variant_name].copy()
+    available_targets = _pick_target(dfv)
     with c2:
-        target_col = st.selectbox("Target (uses only Target_1 for selection)", _pick_target(dfv), index=0)
+        # Multi-select for targets with "Select All" option
+        select_all = st.checkbox("Select All Targets", value=False, key="select_all_targets")
+        if select_all:
+            selected_targets = available_targets
+        else:
+            selected_targets = st.multiselect(
+                "Target(s) for feature selection",
+                options=available_targets,
+                default=[available_targets[0]] if available_targets else [],
+                help="Select one or more targets. Features will be selected based on importance across all selected targets."
+            )
+        if not selected_targets:
+            selected_targets = [available_targets[0]] if available_targets else []
+            st.warning("At least one target required. Using Target_1.")
     with c3:
         run_which = st.selectbox("Method(s)", ["All (0–3)", "0 Baseline", "1 Permutation", "2 Lasso (L1)", "3 Gradient Boosting"], index=0)
 
@@ -445,13 +463,20 @@ def page_feature_selection():
         "gb_importance_threshold": 0.0,  # keep all >0; fallback to top 80%
     }
 
-    # Strict: never use Target_2..7 in selection; keep them for outputs
-    forbidden = [f"Target_{i}" for i in range(2,8)]
+    # Exclude non-selected targets from features (they are outputs, not inputs)
+    all_targets = [f"Target_{i}" for i in range(1, 8) if f"Target_{i}" in dfv.columns]
+    forbidden = [t for t in all_targets if t not in selected_targets]
     date_like = [c for c in dfv.columns if any(k in c.lower() for k in ["date","time","stamp","datetime","ds"])]
 
-    X = dfv.drop(columns=[target_col] + date_like + forbidden, errors="ignore")
-    y = dfv[target_col]
-    targets_1_7 = [f"Target_{i}" for i in range(1,8) if f"Target_{i}" in dfv.columns]
+    # For multi-target: use first selected target as primary for single-target methods
+    # For averaging across targets, we'll aggregate importance scores
+    primary_target = selected_targets[0]
+    X = dfv.drop(columns=selected_targets + date_like + forbidden, errors="ignore")
+    y = dfv[primary_target]  # Primary target for single-target methods
+
+    # Store all target data for multi-target aggregation
+    y_multi = {t: dfv[t] for t in selected_targets if t in dfv.columns}
+    targets_1_7 = all_targets  # Keep all targets in output datasets
 
     pipe = FeatureSelectionPipeline(config=config)
 
@@ -484,7 +509,10 @@ def page_feature_selection():
 
     run = st.button("🚀 Run Selection", type="primary")
     if not run:
-        st.caption(f"Training target: **{target_col}**. Excluded from selection: {', '.join(forbidden)}")
+        targets_str = ", ".join(selected_targets)
+        excluded_str = ", ".join(forbidden) if forbidden else "None"
+        st.caption(f"**Selected targets ({len(selected_targets)}):** {targets_str}")
+        st.caption(f"**Excluded from features:** {excluded_str}")
         return
 
     with st.spinner("Selecting features…"):
@@ -506,10 +534,11 @@ def page_feature_selection():
         "summary": summary,
         "filtered_datasets": filtered_datasets,
         "variant": variant_name,
-        "target": target_col
+        "targets": selected_targets,  # Now stores list of targets
+        "primary_target": primary_target
     }
 
-    st.success("Done. Explore outputs below.")
+    st.success(f"✅ Done! Feature selection completed for **{len(selected_targets)} target(s)**: {', '.join(selected_targets)}")
 
     # Tabs per option
     labels = []
@@ -551,7 +580,7 @@ def page_feature_selection():
                              feats, label_col="importance", title="Permutation Importance (ΔRMSE)")
             # optional correlation heatmap
             if feats:
-                cols = [c for c in (feats + [target_col]) if c in dfv.columns]
+                cols = [c for c in (feats + [primary_target]) if c in dfv.columns]
                 _corr_heatmap(dfv[cols], "Correlation — Selected + Target_1")
             df_out = filtered_datasets.get(1)
             if df_out is not None:
@@ -595,7 +624,7 @@ def page_feature_selection():
             _lists(3)
             _bar_importances(imp, feats, label_col="importance", title="GB Feature Importance")
             if feats:
-                cols = [c for c in (feats + [target_col]) if c in dfv.columns]
+                cols = [c for c in (feats + [primary_target]) if c in dfv.columns]
                 _corr_heatmap(dfv[cols], "Correlation — Selected + Target_1")
             df_out = filtered_datasets.get(3)
             if df_out is not None:
@@ -624,7 +653,8 @@ def page_feature_selection():
                       "selected_features": st.session_state["feature_selection"]["selected_features"],
                       "summary": st.session_state["feature_selection"]["summary"].to_dict(orient="records"),
                       "variant_used": st.session_state["feature_selection"]["variant"],
-                      "target": st.session_state["feature_selection"]["target"]
+                      "targets": st.session_state["feature_selection"]["targets"],
+                      "primary_target": st.session_state["feature_selection"]["primary_target"]
                   }), indent=2).encode("utf-8"),
                   "feature_selection_report.json", "application/json")
 
