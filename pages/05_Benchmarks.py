@@ -2524,6 +2524,111 @@ def page_benchmarks():
                         error_msg = result.get("message", "Unknown error")
                         st.error(f"**{target}**: {error_msg}")
 
+        # ============================================================
+        # CATEGORY PROPORTIONS (Probability-Based Approach)
+        # ============================================================
+        st.markdown("---")
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 1.5rem; background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(139, 92, 246, 0.1)); border: 2px solid rgba(167, 139, 250, 0.3); box-shadow: 0 0 30px rgba(167, 139, 250, 0.2);'>
+              <div style='font-size: 2rem; margin-bottom: 0.5rem;'>📊</div>
+              <h2 style='font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; background: linear-gradient(135deg, #a78bfa, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>Category Proportions (Probability Approach)</h2>
+              <p style='font-size: 0.9rem; color: {BODY_TEXT};'>Historical distribution used in Dashboard for consistent category forecasts</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Calculate category proportions from merged_data
+        merged_df = st.session_state.get("merged_data")
+        category_config = {
+            "RESPIRATORY": {"icon": "🫁", "color": "#3b82f6"},
+            "CARDIAC": {"icon": "❤️", "color": "#ef4444"},
+            "TRAUMA": {"icon": "🩹", "color": "#f59e0b"},
+            "GASTROINTESTINAL": {"icon": "🤢", "color": "#10b981"},
+            "INFECTIOUS": {"icon": "🦠", "color": "#8b5cf6"},
+            "NEUROLOGICAL": {"icon": "🧠", "color": "#ec4899"},
+            "OTHER": {"icon": "📋", "color": "#6b7280"},
+        }
+
+        if merged_df is not None and not merged_df.empty:
+            # Look for category columns
+            cat_totals = {}
+            for cat in category_config.keys():
+                for col in merged_df.columns:
+                    col_upper = col.upper()
+                    if col_upper == cat or col_upper.startswith(cat + "_"):
+                        cat_sum = merged_df[col].sum()
+                        if pd.notna(cat_sum) and cat_sum > 0:
+                            if cat not in cat_totals:
+                                cat_totals[cat] = 0
+                            cat_totals[cat] += cat_sum
+                        break
+
+            if cat_totals:
+                total_sum = sum(cat_totals.values())
+                proportions = {cat: (val / total_sum * 100) for cat, val in cat_totals.items()}
+
+                st.markdown("#### 📈 Historical Category Distribution")
+                st.info("💡 **How it works**: The Dashboard uses these proportions to distribute the total patient forecast into categories. This ensures category totals always sum to the forecasted total.")
+
+                # Display proportions in columns
+                prop_cols = st.columns(len(category_config))
+                for idx, (cat, cfg) in enumerate(category_config.items()):
+                    with prop_cols[idx]:
+                        prop = proportions.get(cat, 0)
+                        total = cat_totals.get(cat, 0)
+                        st.markdown(f"""
+                        <div style='
+                            background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
+                            border-radius: 12px;
+                            padding: 1rem 0.5rem;
+                            text-align: center;
+                            border: 1px solid {cfg['color']}40;
+                        '>
+                            <div style='font-size: 1.5rem; margin-bottom: 0.25rem;'>{cfg['icon']}</div>
+                            <div style='font-size: 0.625rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;'>{cat[:4]}</div>
+                            <div style='font-size: 1.5rem; font-weight: 800; color: {cfg['color']}; margin: 0.375rem 0;'>{prop:.1f}%</div>
+                            <div style='font-size: 0.5rem; color: #64748b;'>~{int(total):,} total</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # Summary
+                st.markdown("#### 📋 Proportion Summary Table")
+                prop_df = pd.DataFrame([
+                    {
+                        "Category": cat,
+                        "Icon": cfg["icon"],
+                        "Historical Total": int(cat_totals.get(cat, 0)),
+                        "Proportion (%)": round(proportions.get(cat, 0), 2)
+                    }
+                    for cat, cfg in category_config.items()
+                ])
+                prop_df = prop_df.sort_values("Proportion (%)", ascending=False)
+                st.dataframe(
+                    prop_df.style.background_gradient(subset=["Proportion (%)"], cmap="Blues"),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # Example calculation
+                st.markdown("#### 🧮 Example Calculation")
+                example_total = 80
+                st.markdown(f"If Total Forecast = **{example_total} patients**:")
+                example_cols = st.columns(len(category_config))
+                for idx, (cat, cfg) in enumerate(category_config.items()):
+                    with example_cols[idx]:
+                        prop = proportions.get(cat, 0)
+                        calculated = int(round(example_total * prop / 100))
+                        st.metric(f"{cfg['icon']} {cat[:4]}", f"{calculated}")
+
+                sum_example = sum(int(round(example_total * proportions.get(cat, 0) / 100)) for cat in category_config.keys())
+                st.success(f"✅ Sum of categories = **{sum_example}** (matches total of {example_total})")
+            else:
+                st.warning("⚠️ No category columns found in merged data. Enable 'Aggregated Clinical Categories' in Data Preparation Studio.")
+        else:
+            st.warning("⚠️ Merged data not available. Please run the Data Fusion pipeline first.")
+
     # ------------------------------------------------------------
     # 🆚 Model Comparison
     # ------------------------------------------------------------

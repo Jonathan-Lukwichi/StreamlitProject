@@ -1149,9 +1149,6 @@ def page_dashboard():
                 if forecast_idx != -1:
                     base_date = test_eval.index[forecast_idx]
 
-                    # --- Get multi-target results for category breakdown ---
-                    multi_target_results = st.session_state.get("arima_multi_target_results") or st.session_state.get("sarimax_multi_target_results")
-
                     # Category icons and colors
                     category_config = {
                         "RESPIRATORY": {"icon": "🫁", "color": "#3b82f6"},
@@ -1163,55 +1160,85 @@ def page_dashboard():
                         "OTHER": {"icon": "📋", "color": "#6b7280"},
                     }
 
-                    # Build category forecasts by horizon
-                    # Structure: {horizon: {category: forecast_value}}
-                    category_forecasts_by_horizon = {}
-                    if multi_target_results:
-                        successful_targets = multi_target_results.get("successful_targets", [])
-                        for target_name in successful_targets:
-                            target_data = multi_target_results.get(target_name, {})
-                            if not isinstance(target_data, dict) or target_data.get("status") != "success":
-                                continue
+                    # --- PROBABILITY-BASED CATEGORY FORECASTING ---
+                    # Calculate historical proportions from merged_data
+                    category_proportions = {}
+                    merged_df = st.session_state.get("merged_data")
 
-                            # Extract category and horizon from target name (e.g., "RESPIRATORY_1" -> category="RESPIRATORY", horizon=1)
-                            target_upper = target_name.upper()
-                            category = None
-                            horizon = None
-
-                            for cat in category_config.keys():
-                                if target_upper.startswith(cat + "_"):
-                                    category = cat
-                                    try:
-                                        horizon = int(target_upper.split("_")[-1])
-                                    except ValueError:
-                                        pass
+                    if merged_df is not None and not merged_df.empty:
+                        # Look for category columns (aggregated clinical categories)
+                        cat_columns_found = []
+                        for cat in category_config.keys():
+                            # Check for columns like RESPIRATORY_1, RESPIRATORY_2, etc. or just RESPIRATORY
+                            for col in merged_df.columns:
+                                col_upper = col.upper()
+                                if col_upper == cat or col_upper.startswith(cat + "_"):
+                                    cat_columns_found.append((cat, col))
                                     break
 
-                            if category and horizon:
-                                # Get forecast value
-                                results = target_data.get("results", {})
-                                forecasts = results.get("forecasts") if results else target_data.get("forecasts")
+                        # Calculate proportions from historical data
+                        if cat_columns_found:
+                            # Sum up historical values for each category
+                            cat_totals = {}
+                            for cat, col in cat_columns_found:
+                                if col in merged_df.columns:
+                                    cat_sum = merged_df[col].sum()
+                                    if pd.notna(cat_sum) and cat_sum > 0:
+                                        if cat not in cat_totals:
+                                            cat_totals[cat] = 0
+                                        cat_totals[cat] += cat_sum
 
-                                forecast_val = np.nan
-                                if forecasts is not None:
-                                    try:
-                                        if hasattr(forecasts, 'iloc') and len(forecasts) > 0:
-                                            # Use the value at the same index as our selected date
-                                            if forecast_idx < len(forecasts):
-                                                forecast_val = float(forecasts.iloc[forecast_idx])
-                                            else:
-                                                forecast_val = float(forecasts.iloc[-1])
-                                        elif hasattr(forecasts, '__len__') and len(forecasts) > 0:
-                                            forecast_val = float(forecasts[-1])
-                                    except (IndexError, TypeError, ValueError):
-                                        pass
+                            # Calculate total across all categories
+                            total_cat_sum = sum(cat_totals.values())
 
-                                if horizon not in category_forecasts_by_horizon:
-                                    category_forecasts_by_horizon[horizon] = {}
-                                category_forecasts_by_horizon[horizon][category] = forecast_val
+                            # Calculate proportions
+                            if total_cat_sum > 0:
+                                for cat, cat_sum in cat_totals.items():
+                                    category_proportions[cat] = cat_sum / total_cat_sum
+
+                    # Helper function for smart rounding (ensures sum = total)
+                    def distribute_with_smart_rounding(total: int, proportions: dict) -> dict:
+                        """Distribute total into categories using proportions with smart rounding."""
+                        if not proportions:
+                            return {}
+
+                        # Calculate initial values (floored)
+                        result = {}
+                        remainders = {}
+                        allocated = 0
+
+                        for cat, prop in proportions.items():
+                            exact_val = total * prop
+                            floored_val = int(exact_val)
+                            result[cat] = floored_val
+                            remainders[cat] = exact_val - floored_val
+                            allocated += floored_val
+
+                        # Distribute remaining units based on largest remainders
+                        remaining = total - allocated
+                        sorted_cats = sorted(remainders.keys(), key=lambda x: remainders[x], reverse=True)
+
+                        for i in range(min(remaining, len(sorted_cats))):
+                            result[sorted_cats[i]] += 1
+
+                        return result
+
+                    # Build category forecasts by horizon using proportions
+                    category_forecasts_by_horizon = {}
+                    has_categories = bool(category_proportions)
+
+                    # Pre-calculate category breakdown for each horizon using proportions
+                    if has_categories:
+                        max_h = F.shape[1]
+                        for h in range(min(forecast_days, max_h)):
+                            horizon_num = h + 1
+                            total_forecast = int(round(float(F[forecast_idx, h])))
+                            # Apply proportions with smart rounding
+                            category_forecasts_by_horizon[horizon_num] = distribute_with_smart_rounding(
+                                total_forecast, category_proportions
+                            )
 
                     # --- Premium Horizontal Forecast Timeline ---
-                    has_categories = bool(category_forecasts_by_horizon)
 
                     st.markdown(f"""
                     <div class='forecast-card' style='padding: 1.5rem;'>
@@ -1306,42 +1333,14 @@ def page_dashboard():
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                    # --- Category Statistics Section (Average + Accuracy) ---
+                    # --- Category Statistics Section (Average + Proportion) ---
                     if has_categories:
-                        # Build category accuracy from multi_target_results
-                        category_accuracy = {}
-                        if multi_target_results:
-                            successful_targets = multi_target_results.get("successful_targets", [])
-                            for target_name in successful_targets:
-                                target_data = multi_target_results.get(target_name, {})
-                                if not isinstance(target_data, dict) or target_data.get("status") != "success":
-                                    continue
-
-                                target_upper = target_name.upper()
-                                for cat in category_config.keys():
-                                    if target_upper.startswith(cat + "_"):
-                                        results = target_data.get("results", {})
-                                        metrics = results.get("metrics", {}) if results else target_data.get("metrics", {})
-
-                                        acc = metrics.get("accuracy") or metrics.get("Accuracy_%") or metrics.get("Test_Acc")
-                                        if acc is None:
-                                            mae = metrics.get("MAE") or metrics.get("mae")
-                                            mean_val = metrics.get("mean") or metrics.get("Mean")
-                                            if mae is not None and mean_val is not None and mean_val > 0:
-                                                acc = max(0, 100 - (mae / mean_val * 100))
-
-                                        if acc is not None and pd.notna(acc):
-                                            if cat not in category_accuracy:
-                                                category_accuracy[cat] = []
-                                            category_accuracy[cat].append(float(acc))
-                                        break
-
                         st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
                         st.markdown("""
                         <div class='forecast-card' style='padding: 1.25rem;'>
                             <div style='margin-bottom: 1rem;'>
                                 <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0;'>📊 Category Statistics</div>
-                                <div style='font-size: 0.75rem; color: #64748b;'>Average daily arrivals and forecast accuracy per category</div>
+                                <div style='font-size: 0.75rem; color: #64748b;'>Average daily arrivals and historical proportion per category</div>
                             </div>
                         """, unsafe_allow_html=True)
 
@@ -1350,7 +1349,7 @@ def page_dashboard():
                         cat_cols = st.columns(num_cats, gap="small")
 
                         for idx, (cat, config) in enumerate(category_config.items()):
-                            # Calculate average for category
+                            # Calculate average for category from forecasts
                             total_for_cat = 0
                             count = 0
                             for h_cats in category_forecasts_by_horizon.values():
@@ -1359,28 +1358,22 @@ def page_dashboard():
                                     count += 1
                             avg_for_cat = total_for_cat / count if count > 0 else 0
 
-                            # Get average accuracy for category
-                            cat_acc_list = category_accuracy.get(cat, [])
-                            avg_acc = sum(cat_acc_list) / len(cat_acc_list) if cat_acc_list else None
+                            # Get proportion for this category
+                            proportion = category_proportions.get(cat, 0) * 100  # Convert to percentage
 
-                            # Determine accuracy color
-                            if avg_acc is not None:
-                                if avg_acc >= 75:
-                                    cat_acc_color = "#10b981"
-                                    cat_acc_bg = "rgba(16, 185, 129, 0.15)"
-                                elif avg_acc >= 60:
-                                    cat_acc_color = "#f59e0b"
-                                    cat_acc_bg = "rgba(245, 158, 11, 0.15)"
-                                else:
-                                    cat_acc_color = "#ef4444"
-                                    cat_acc_bg = "rgba(239, 68, 68, 0.15)"
+                            # Color based on proportion (higher proportion = more prominent)
+                            if proportion >= 15:
+                                prop_color = "#10b981"
+                                prop_bg = "rgba(16, 185, 129, 0.15)"
+                            elif proportion >= 10:
+                                prop_color = "#22d3ee"
+                                prop_bg = "rgba(34, 211, 238, 0.15)"
                             else:
-                                cat_acc_color = "#64748b"
-                                cat_acc_bg = "rgba(100, 116, 139, 0.15)"
+                                prop_color = "#a78bfa"
+                                prop_bg = "rgba(167, 139, 250, 0.15)"
 
                             with cat_cols[idx]:
-                                if avg_for_cat > 0:
-                                    acc_text_cat = f"{avg_acc:.0f}%" if avg_acc is not None else "N/A"
+                                if avg_for_cat > 0 or proportion > 0:
                                     st.markdown(f"""
                                     <div style='
                                         background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
@@ -1396,13 +1389,13 @@ def page_dashboard():
                                         <div style='
                                             display: inline-block;
                                             padding: 0.1875rem 0.375rem;
-                                            background: {cat_acc_bg};
-                                            border: 1px solid {cat_acc_color}40;
+                                            background: {prop_bg};
+                                            border: 1px solid {prop_color}40;
                                             border-radius: 4px;
                                             font-size: 0.5625rem;
                                             font-weight: 700;
-                                            color: {cat_acc_color};
-                                        '>✓ {acc_text_cat}</div>
+                                            color: {prop_color};
+                                        '>{proportion:.1f}%</div>
                                     </div>
                                     """, unsafe_allow_html=True)
                                 else:
