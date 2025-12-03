@@ -1239,6 +1239,7 @@ def page_dashboard():
                             )
 
                     # --- Premium Horizontal Forecast Timeline ---
+                    categories_text = " • <span style='color: #10b981;'>Categories Available</span>" if has_categories else ""
 
                     st.markdown(f"""
                     <div class='forecast-card' style='padding: 1.5rem;'>
@@ -1249,8 +1250,7 @@ def page_dashboard():
                                 </div>
                                 <div class='forecast-subtitle' style='margin-top: 0.375rem;'>
                                     Model: <span style='color: #22d3ee;'>{cached_model}</span> •
-                                    Starting: <span style='color: #a78bfa;'>{base_date.strftime("%b %d, %Y")}</span>
-                                    {" • <span style='color: #10b981;'>Categories Available</span>" if has_categories else ""}
+                                    Starting: <span style='color: #a78bfa;'>{base_date.strftime("%b %d, %Y")}</span>{categories_text}
                                 </div>
                             </div>
                             <div class='forecast-info-badge' style='padding: 0.5rem 0.875rem;'>
