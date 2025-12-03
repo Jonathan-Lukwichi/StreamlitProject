@@ -1149,17 +1149,81 @@ def page_dashboard():
                 if forecast_idx != -1:
                     base_date = test_eval.index[forecast_idx]
 
+                    # --- Get multi-target results for category breakdown ---
+                    multi_target_results = st.session_state.get("arima_multi_target_results") or st.session_state.get("sarimax_multi_target_results")
+
+                    # Category icons and colors
+                    category_config = {
+                        "RESPIRATORY": {"icon": "🫁", "color": "#3b82f6"},
+                        "CARDIAC": {"icon": "❤️", "color": "#ef4444"},
+                        "TRAUMA": {"icon": "🩹", "color": "#f59e0b"},
+                        "GASTROINTESTINAL": {"icon": "🤢", "color": "#10b981"},
+                        "INFECTIOUS": {"icon": "🦠", "color": "#8b5cf6"},
+                        "NEUROLOGICAL": {"icon": "🧠", "color": "#ec4899"},
+                        "OTHER": {"icon": "📋", "color": "#6b7280"},
+                    }
+
+                    # Build category forecasts by horizon
+                    # Structure: {horizon: {category: forecast_value}}
+                    category_forecasts_by_horizon = {}
+                    if multi_target_results:
+                        successful_targets = multi_target_results.get("successful_targets", [])
+                        for target_name in successful_targets:
+                            target_data = multi_target_results.get(target_name, {})
+                            if not isinstance(target_data, dict) or target_data.get("status") != "success":
+                                continue
+
+                            # Extract category and horizon from target name (e.g., "RESPIRATORY_1" -> category="RESPIRATORY", horizon=1)
+                            target_upper = target_name.upper()
+                            category = None
+                            horizon = None
+
+                            for cat in category_config.keys():
+                                if target_upper.startswith(cat + "_"):
+                                    category = cat
+                                    try:
+                                        horizon = int(target_upper.split("_")[-1])
+                                    except ValueError:
+                                        pass
+                                    break
+
+                            if category and horizon:
+                                # Get forecast value
+                                results = target_data.get("results", {})
+                                forecasts = results.get("forecasts") if results else target_data.get("forecasts")
+
+                                forecast_val = np.nan
+                                if forecasts is not None:
+                                    try:
+                                        if hasattr(forecasts, 'iloc') and len(forecasts) > 0:
+                                            # Use the value at the same index as our selected date
+                                            if forecast_idx < len(forecasts):
+                                                forecast_val = float(forecasts.iloc[forecast_idx])
+                                            else:
+                                                forecast_val = float(forecasts.iloc[-1])
+                                        elif hasattr(forecasts, '__len__') and len(forecasts) > 0:
+                                            forecast_val = float(forecasts[-1])
+                                    except (IndexError, TypeError, ValueError):
+                                        pass
+
+                                if horizon not in category_forecasts_by_horizon:
+                                    category_forecasts_by_horizon[horizon] = {}
+                                category_forecasts_by_horizon[horizon][category] = forecast_val
+
                     # --- Premium Horizontal Forecast Timeline ---
+                    has_categories = bool(category_forecasts_by_horizon)
+
                     st.markdown(f"""
                     <div class='forecast-card'>
                         <div class='forecast-header'>
                             <div>
                                 <div class='forecast-title'>
-                                    {forecast_days}-Day Forecast Timeline
+                                    {forecast_days}-Day Comprehensive Forecast
                                 </div>
                                 <div class='forecast-subtitle'>
                                     Model: <span>{cached_model}</span> •
                                     From: <span>{base_date.strftime("%b %d, %Y")}</span>
+                                    {" • <span style='color: #10b981;'>+ Category Breakdown</span>" if has_categories else ""}
                                 </div>
                             </div>
                             <div class='forecast-info-badge'>
@@ -1168,20 +1232,22 @@ def page_dashboard():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # Horizontal forecast cards with enhanced design
+                    # Forecast cards - show fewer columns if we have category breakdown
                     max_h = F.shape[1]
-                    forecast_cols = st.columns(min(forecast_days, max_h, 7))  # Max 7 columns to fit screen
+                    num_cols = min(forecast_days, max_h, 4 if has_categories else 7)
+                    forecast_cols = st.columns(num_cols)
 
                     for h in range(min(forecast_days, max_h)):
                         forecast_dt = base_date + pd.Timedelta(days=h+1)
                         forecast_val = float(F[forecast_idx, h])
                         lower_val = float(L[forecast_idx, h])
                         upper_val = float(U[forecast_idx, h])
+                        horizon_num = h + 1
 
-                        # Get accuracy for the current horizon h+1
+                        # Get accuracy for the current horizon
                         horizon_accuracy = np.nan
                         if metrics_df is not None and accuracy_col is not None and "Horizon" in metrics_df.columns:
-                            h_row = metrics_df[metrics_df["Horizon"] == (h + 1)]
+                            h_row = metrics_df[metrics_df["Horizon"] == horizon_num]
                             if not h_row.empty:
                                 horizon_accuracy = h_row[accuracy_col].iloc[0]
 
@@ -1190,20 +1256,45 @@ def page_dashboard():
                         # Determine confidence level color
                         if pd.notna(horizon_accuracy):
                             if horizon_accuracy >= 75:
-                                acc_color = "#10b981"  # Green
+                                acc_color = "#10b981"
                                 acc_bg = "rgba(16, 185, 129, 0.15)"
                             elif horizon_accuracy >= 60:
-                                acc_color = "#f59e0b"  # Amber
+                                acc_color = "#f59e0b"
                                 acc_bg = "rgba(245, 158, 11, 0.15)"
                             else:
-                                acc_color = "#ef4444"  # Red
+                                acc_color = "#ef4444"
                                 acc_bg = "rgba(239, 68, 68, 0.15)"
                         else:
                             acc_color = "#64748b"
                             acc_bg = "rgba(100, 116, 139, 0.15)"
 
-                        # Use modulo to wrap if more than 7 days
-                        col_idx = h % 7
+                        # Get category breakdown for this horizon
+                        horizon_categories = category_forecasts_by_horizon.get(horizon_num, {})
+
+                        # Build category HTML
+                        category_html = ""
+                        if horizon_categories:
+                            category_html = "<div style='border-top: 1px solid rgba(100, 116, 139, 0.3); margin-top: 0.75rem; padding-top: 0.75rem;'>"
+                            category_html += "<div style='font-size: 0.625rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;'>By Category</div>"
+
+                            # Sort categories for consistent display
+                            sorted_cats = sorted(horizon_categories.keys(), key=lambda x: list(category_config.keys()).index(x) if x in category_config else 99)
+
+                            for cat in sorted_cats:
+                                cat_val = horizon_categories[cat]
+                                if pd.notna(cat_val) and cat_val > 0:
+                                    icon = category_config.get(cat, {}).get("icon", "📊")
+                                    color = category_config.get(cat, {}).get("color", "#3b82f6")
+                                    cat_short = cat[:4].upper()  # Shorten for display
+                                    category_html += f"""
+                                    <div style='display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; font-size: 0.75rem;'>
+                                        <span style='color: #94a3b8;'>{icon} {cat_short}</span>
+                                        <span style='color: {color}; font-weight: 700;'>{int(round(cat_val))}</span>
+                                    </div>
+                                    """
+                            category_html += "</div>"
+
+                        col_idx = h % num_cols
                         with forecast_cols[col_idx]:
                             is_primary = (h == 0)
                             primary_class = " forecast-mini-card-primary" if is_primary else ""
@@ -1220,7 +1311,7 @@ def page_dashboard():
                                     {int(forecast_val)}
                                 </div>
                                 <div class='forecast-unit-label'>
-                                    Patients
+                                    Total Patients
                                 </div>
                                 <div class='forecast-accuracy-enhanced' style='background: {acc_bg}; border-color: {acc_color}40; color: {acc_color};'>
                                     ✓ {accuracy_text}
@@ -1228,10 +1319,53 @@ def page_dashboard():
                                 <div class='forecast-range'>
                                     {int(lower_val)} - {int(upper_val)}
                                 </div>
+                                {category_html}
                             </div>
                             """, unsafe_allow_html=True)
 
                     st.markdown("</div>", unsafe_allow_html=True)
+
+                    # --- Category Summary Bar (if categories available) ---
+                    if has_categories:
+                        st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+                        st.markdown("""
+                        <div class='forecast-card' style='padding: 1.5rem;'>
+                            <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0; margin-bottom: 1rem;'>
+                                📊 Category Legend & Daily Totals
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        # Calculate totals across all forecast days
+                        legend_cols = st.columns(len(category_config))
+                        for idx, (cat, config) in enumerate(category_config.items()):
+                            total_for_cat = 0
+                            count = 0
+                            for h_cats in category_forecasts_by_horizon.values():
+                                if cat in h_cats and pd.notna(h_cats[cat]):
+                                    total_for_cat += h_cats[cat]
+                                    count += 1
+                            avg_for_cat = total_for_cat / count if count > 0 else 0
+
+                            with legend_cols[idx]:
+                                if avg_for_cat > 0:
+                                    st.markdown(f"""
+                                    <div style='text-align: center; padding: 0.5rem;'>
+                                        <div style='font-size: 1.5rem;'>{config['icon']}</div>
+                                        <div style='font-size: 0.6875rem; color: #94a3b8; margin-top: 0.25rem;'>{cat[:6]}</div>
+                                        <div style='font-size: 1.125rem; font-weight: 700; color: {config["color"]};'>~{int(round(avg_for_cat))}</div>
+                                        <div style='font-size: 0.5625rem; color: #64748b;'>avg/day</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div style='text-align: center; padding: 0.5rem; opacity: 0.4;'>
+                                        <div style='font-size: 1.5rem;'>{config['icon']}</div>
+                                        <div style='font-size: 0.6875rem; color: #64748b; margin-top: 0.25rem;'>{cat[:6]}</div>
+                                        <div style='font-size: 0.875rem; color: #64748b;'>—</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                     # --- ACTUAL VS FORECAST TIME SERIES GRAPH ---
                     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
@@ -1348,327 +1482,6 @@ def page_dashboard():
                         st.warning(f"⚠️ Could not generate time series comparison graph: {str(e)}")
 
                     st.markdown("</div>", unsafe_allow_html=True)
-
-    # ========================================
-    # REASON FOR VISIT FORECAST SECTION
-    # ========================================
-    st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
-    st.markdown(f"<h2 class='section-header'>🏥 Reason for Visit Forecast</h2>", unsafe_allow_html=True)
-
-    # Check for multi-target forecasting results (SARIMAX or ARIMA)
-    multi_target_results = st.session_state.get("sarimax_multi_target_results") or st.session_state.get("arima_multi_target_results")
-
-    if not multi_target_results:
-        st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
-        st.info("🎯 Train models in Multi-Target mode to view reason for visit forecasts. Enable 'Multi-Target Mode' in the Benchmarks page and select clinical categories.")
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        summary_df = multi_target_results.get("summary")
-        successful_targets = multi_target_results.get("successful_targets", [])
-
-        # Category icons and colors for clinical categories
-        category_icons = {
-            "RESPIRATORY": "🫁", "CARDIAC": "❤️", "TRAUMA": "🩹",
-            "GASTROINTESTINAL": "🤢", "INFECTIOUS": "🦠", "NEUROLOGICAL": "🧠", "OTHER": "📋",
-        }
-        category_colors = {
-            "RESPIRATORY": "#3b82f6", "CARDIAC": "#ef4444", "TRAUMA": "#f59e0b",
-            "GASTROINTESTINAL": "#10b981", "INFECTIOUS": "#8b5cf6", "NEUROLOGICAL": "#ec4899", "OTHER": "#6b7280",
-        }
-
-        # Build forecast results from all successful targets
-        category_results = []
-
-        for target_name in successful_targets:
-            target_data = multi_target_results.get(target_name, {})
-            if not isinstance(target_data, dict) or target_data.get("status") != "success":
-                continue
-
-            # Extract category from target name (e.g., "RESPIRATORY_1" -> "RESPIRATORY")
-            target_upper = target_name.upper()
-            category = None
-            for cat in category_icons.keys():
-                if target_upper.startswith(cat):
-                    category = cat
-                    break
-
-            # If no category match, use the target name itself
-            if category is None:
-                # Try to extract base name before underscore+number
-                parts = target_name.rsplit('_', 1)
-                if len(parts) == 2 and parts[1].isdigit():
-                    category = parts[0].upper()
-                else:
-                    category = target_name.upper()
-
-            # Get forecast values from target_data
-            # Results are stored in "results" key (matching ARIMA structure)
-            results = target_data.get("results", {})
-            forecasts = results.get("forecasts") if results else target_data.get("forecasts")
-            y_test = results.get("y_test") if results else target_data.get("y_test")
-            forecast_lower = results.get("forecast_lower") if results else target_data.get("forecast_lower")
-            forecast_upper = results.get("forecast_upper") if results else target_data.get("forecast_upper")
-
-            # Extract last forecast value (tomorrow's prediction)
-            forecast_val = np.nan
-            lower_val = np.nan
-            upper_val = np.nan
-            actual_last = np.nan
-
-            if forecasts is not None:
-                try:
-                    if hasattr(forecasts, 'iloc') and len(forecasts) > 0:
-                        forecast_val = float(forecasts.iloc[-1])
-                    elif hasattr(forecasts, '__len__') and len(forecasts) > 0:
-                        forecast_val = float(forecasts[-1])
-                except (IndexError, TypeError, ValueError):
-                    pass
-
-            if forecast_lower is not None:
-                try:
-                    if hasattr(forecast_lower, 'iloc') and len(forecast_lower) > 0:
-                        lower_val = float(forecast_lower.iloc[-1])
-                    elif hasattr(forecast_lower, '__len__') and len(forecast_lower) > 0:
-                        lower_val = float(forecast_lower[-1])
-                except (IndexError, TypeError, ValueError):
-                    pass
-
-            if forecast_upper is not None:
-                try:
-                    if hasattr(forecast_upper, 'iloc') and len(forecast_upper) > 0:
-                        upper_val = float(forecast_upper.iloc[-1])
-                    elif hasattr(forecast_upper, '__len__') and len(forecast_upper) > 0:
-                        upper_val = float(forecast_upper[-1])
-                except (IndexError, TypeError, ValueError):
-                    pass
-
-            if y_test is not None:
-                try:
-                    if hasattr(y_test, 'iloc') and len(y_test) > 0:
-                        actual_last = float(y_test.iloc[-1])
-                    elif hasattr(y_test, '__len__') and len(y_test) > 0:
-                        actual_last = float(y_test[-1])
-                except (IndexError, TypeError, ValueError):
-                    pass
-
-            # Get metrics from summary_df
-            accuracy = np.nan
-            mae = np.nan
-            rmse = np.nan
-            if summary_df is not None and not summary_df.empty:
-                target_rows = summary_df[summary_df["Target"] == target_name]
-                if not target_rows.empty:
-                    row = target_rows.iloc[0]
-                    accuracy = row.get("Accuracy_%", np.nan)
-                    mae = row.get("MAE", np.nan)
-                    rmse = row.get("RMSE", np.nan)
-
-            category_results.append({
-                "category": category,
-                "target": target_name,
-                "forecast": forecast_val,
-                "lower": lower_val,
-                "upper": upper_val,
-                "actual_last": actual_last,
-                "accuracy": accuracy,
-                "mae": mae,
-                "rmse": rmse,
-            })
-
-        if category_results:
-            # Calculate total expected patients
-            total_forecast = sum(r["forecast"] for r in category_results if pd.notna(r["forecast"]))
-            has_forecasts = any(pd.notna(r["forecast"]) for r in category_results)
-
-            # Display header
-            st.markdown(f"""
-            <div class='forecast-card'>
-                <div class='forecast-header'>
-                    <div>
-                        <div class='forecast-title'>
-                            {"Expected Patients by Medical Category" if has_forecasts else "Clinical Category Forecast Summary"}
-                        </div>
-                        <div class='forecast-subtitle'>
-                            {"Tomorrow's forecast" if has_forecasts else "Predicted patient arrivals by"} <span style='color: #10b981;'>medical category</span>
-                            {f" • Total: ~{int(total_forecast)} patients" if has_forecasts and total_forecast > 0 else ""}
-                        </div>
-                    </div>
-                    <div class='forecast-info-badge'>
-                        📊 {len(category_results)} Categories Trained
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # Display category cards in a grid
-            num_cols = min(4, len(category_results))
-            cols = st.columns(num_cols)
-
-            for idx, result in enumerate(category_results):
-                col_idx = idx % num_cols
-                if idx > 0 and col_idx == 0:
-                    cols = st.columns(num_cols)
-
-                category = result["category"]
-                forecast = result["forecast"]
-                lower = result["lower"]
-                upper = result["upper"]
-                accuracy = result["accuracy"]
-                actual_last = result["actual_last"]
-                mae = result["mae"]
-                rmse = result["rmse"]
-
-                icon = category_icons.get(category, "📊")
-                color = category_colors.get(category, "#3b82f6")
-
-                # Determine what to display: forecast value OR metrics
-                has_forecast = pd.notna(forecast) and forecast > 0
-
-                if has_forecast:
-                    # Display forecast value prominently
-                    main_value = f"{int(round(forecast))}"
-                    main_label = "Expected Patients"
-
-                    # Confidence based on accuracy
-                    if pd.notna(accuracy):
-                        if accuracy >= 85:
-                            conf_text = f"✓ {accuracy:.0f}%"
-                            conf_color = "#10b981"
-                        elif accuracy >= 70:
-                            conf_text = f"~ {accuracy:.0f}%"
-                            conf_color = "#f59e0b"
-                        else:
-                            conf_text = f"! {accuracy:.0f}%"
-                            conf_color = "#ef4444"
-                    else:
-                        conf_text = "N/A"
-                        conf_color = "#6b7280"
-
-                    # Range display
-                    if pd.notna(lower) and pd.notna(upper):
-                        range_text = f"Range: {int(round(lower))} - {int(round(upper))}"
-                    else:
-                        range_text = ""
-
-                    # Trend calculation
-                    trend_html = ""
-                    if pd.notna(actual_last) and actual_last > 0:
-                        change_pct = ((forecast - actual_last) / actual_last) * 100
-                        if change_pct > 10:
-                            trend_html = f"<div style='margin-top: 0.5rem; font-size: 0.6875rem; color: #ef4444; font-weight: 600;'>↑ +{change_pct:.0f}%</div>"
-                        elif change_pct < -10:
-                            trend_html = f"<div style='margin-top: 0.5rem; font-size: 0.6875rem; color: #10b981; font-weight: 600;'>↓ {change_pct:.0f}%</div>"
-                        else:
-                            trend_html = f"<div style='margin-top: 0.5rem; font-size: 0.6875rem; color: #64748b; font-weight: 600;'>→ Stable</div>"
-
-                    with cols[col_idx]:
-                        st.markdown(f"""
-                        <div class='forecast-mini-card' style='text-align: center; margin-bottom: 1rem; border-left: 3px solid {color};'>
-                            <div style='font-size: 2rem; margin-bottom: 0.5rem;'>{icon}</div>
-                            <div class='forecast-day-name' style='color: {color}; font-size: 0.75rem;'>
-                                {category}
-                            </div>
-                            <div class='forecast-number' style='font-size: 2.5rem; margin: 0.75rem 0;'>
-                                {main_value}
-                            </div>
-                            <div style='font-size: 0.6875rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem;'>
-                                {main_label}
-                            </div>
-                            <div class='forecast-accuracy-enhanced' style='background: rgba(16, 185, 129, 0.15); border-color: {conf_color}40; color: {conf_color}; margin-bottom: 0.5rem;'>
-                                {conf_text}
-                            </div>
-                            <div class='forecast-range' style='font-size: 0.625rem;'>
-                                {range_text}
-                            </div>
-                            {trend_html}
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    # Fallback: display metrics (MAE, RMSE, Accuracy) when no forecast available
-                    mae_display = f"{mae:.2f}" if pd.notna(mae) else "—"
-                    rmse_display = f"{rmse:.2f}" if pd.notna(rmse) else "—"
-                    acc_display = f"{accuracy:.0f}%" if pd.notna(accuracy) else "—"
-
-                    # Determine fit quality
-                    if pd.notna(accuracy):
-                        if accuracy >= 85:
-                            fit_text = "Good Fit"
-                            fit_color = "#10b981"
-                        elif accuracy >= 70:
-                            fit_text = "Moderate"
-                            fit_color = "#f59e0b"
-                        else:
-                            fit_text = "Low Accuracy"
-                            fit_color = "#ef4444"
-                    else:
-                        fit_text = "N/A"
-                        fit_color = "#6b7280"
-
-                    with cols[col_idx]:
-                        st.markdown(f"""
-                        <div class='forecast-mini-card' style='text-align: center; margin-bottom: 1rem; border-left: 3px solid {color};'>
-                            <div style='font-size: 2rem; margin-bottom: 0.5rem;'>{icon}</div>
-                            <div class='forecast-day-name' style='color: {color}; font-size: 0.75rem;'>
-                                {category}
-                            </div>
-                            <div style='margin: 0.75rem 0;'>
-                                <div style='font-size: 0.6875rem; color: #64748b; margin-bottom: 0.25rem;'>MAE</div>
-                                <div style='font-size: 1.5rem; font-weight: 700; color: #e2e8f0;'>{mae_display}</div>
-                            </div>
-                            <div style='margin: 0.5rem 0;'>
-                                <div style='font-size: 0.6875rem; color: #64748b; margin-bottom: 0.25rem;'>RMSE</div>
-                                <div style='font-size: 1.25rem; font-weight: 600; color: #cbd5e1;'>{rmse_display}</div>
-                            </div>
-                            <div class='forecast-accuracy-enhanced' style='background: rgba(16, 185, 129, 0.15); border-color: {fit_color}40; color: {fit_color}; margin-top: 0.75rem;'>
-                                {acc_display}
-                            </div>
-                            <div style='font-size: 0.625rem; color: {fit_color}; margin-top: 0.25rem;'>
-                                {fit_text}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Summary row for stakeholders
-            st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-            st.markdown("""
-            <div class='dashboard-kpi-card' style='padding: 1.5rem;'>
-                <span class='kpi-label' style='margin-bottom: 1rem;'>Forecast Summary</span>
-            """, unsafe_allow_html=True)
-
-            summary_cols = st.columns(4)
-            with summary_cols[0]:
-                if has_forecasts and total_forecast > 0:
-                    st.metric("Total Expected", f"~{int(total_forecast)}", help="Sum of all category forecasts")
-                else:
-                    st.metric("Categories", len(category_results), help="Number of trained categories")
-            with summary_cols[1]:
-                accuracies = [r["accuracy"] for r in category_results if pd.notna(r["accuracy"])]
-                avg_accuracy = np.mean(accuracies) if accuracies else np.nan
-                st.metric("Avg Accuracy", f"{avg_accuracy:.0f}%" if pd.notna(avg_accuracy) else "—")
-            with summary_cols[2]:
-                maes = [r["mae"] for r in category_results if pd.notna(r["mae"])]
-                avg_mae = np.mean(maes) if maes else np.nan
-                st.metric("Avg MAE", f"{avg_mae:.2f}" if pd.notna(avg_mae) else "—", help="Average Mean Absolute Error")
-            with summary_cols[3]:
-                failed = multi_target_results.get("failed_targets", [])
-                if failed:
-                    st.metric("Failed", len(failed), delta_color="inverse", help="Categories that couldn't be forecasted")
-                else:
-                    st.metric("Status", "All OK", help="All categories trained successfully")
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        elif summary_df is not None and not summary_df.empty:
-            # No category_results but we have summary - show info
-            st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
-            st.info("📊 Training completed but forecast data not available. Please re-train models in the Benchmarks page.")
-            st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div class='dashboard-kpi-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
-            st.info("🏥 No clinical category forecasts found. Enable 'Multi-Target Mode' in Benchmarks and train with clinical categories.")
-            st.markdown("</div>", unsafe_allow_html=True)
-
 
     # ========================================
     # SYSTEM OVERVIEW SECTION
