@@ -96,12 +96,17 @@ class FeatureSelectionPipeline:
       - per-feature importances (when applicable)
       - uniform metrics dict: RMSE/MAE/MAPE (train/test)
       - elapsed time
+
+    Multi-target support: when y_multi is provided (dict of target -> Series),
+    importance scores are aggregated (averaged) across all targets for more
+    robust feature selection.
     """
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.results: Dict[int, Dict[str, Any]] = {}
         self.selected_features: Dict[int, List[str]] = {}
+        self.y_multi: Optional[Dict[str, pd.Series]] = None  # Multi-target data
 
     # ---- data prep ----
     def _prepare_data(self, X: pd.DataFrame, y: pd.Series):
@@ -114,6 +119,45 @@ class FeatureSelectionPipeline:
         X_train[num_cols] = scaler.fit_transform(X_train[num_cols])
         X_test[num_cols]  = scaler.transform(X_test[num_cols])
         return X_train, X_test, y_train, y_test
+
+    def _prepare_data_multi(self, X: pd.DataFrame, y_multi: Dict[str, pd.Series]):
+        """Prepare data for all targets. Returns dict of prepared data per target."""
+        prepared = {}
+        test_ratio = 1 - self.config.get("train_test_split", 0.8)
+        random_state = self.config.get("random_state", 42)
+
+        # Get consistent train/test indices using first target
+        first_target = list(y_multi.keys())[0]
+        indices = np.arange(len(X))
+        train_idx, test_idx = train_test_split(
+            indices, test_size=test_ratio, random_state=random_state
+        )
+
+        # Scale X once
+        X_train_base = X.iloc[train_idx].copy()
+        X_test_base = X.iloc[test_idx].copy()
+        scaler = StandardScaler()
+        num_cols = X.select_dtypes(include=[np.number]).columns
+        X_train_base[num_cols] = scaler.fit_transform(X_train_base[num_cols])
+        X_test_base[num_cols] = scaler.transform(X_test_base[num_cols])
+
+        for target_name, y in y_multi.items():
+            y_train = y.iloc[train_idx]
+            y_test = y.iloc[test_idx]
+            prepared[target_name] = (X_train_base.copy(), X_test_base.copy(), y_train, y_test)
+
+        return prepared, X_train_base, X_test_base
+
+    def _aggregate_metrics(self, metrics_list: List[Dict[str, float]]) -> Dict[str, float]:
+        """Average metrics across all targets."""
+        if not metrics_list:
+            return {}
+        keys = metrics_list[0].keys()
+        aggregated = {}
+        for key in keys:
+            values = [m.get(key, np.nan) for m in metrics_list]
+            aggregated[key] = float(np.nanmean(values))
+        return aggregated
 
     # ---- Option 0: Baseline (no selection) ----
     def _baseline(self, X_train, X_test, y_train, y_test):
@@ -250,28 +294,266 @@ class FeatureSelectionPipeline:
         elapsed = time.time() - start
         return selected, imp, metrics, elapsed
 
-    # ---- Public API ----
-    def fit(self, X: pd.DataFrame, y: pd.Series, option: str | int = "all"):
-        X_train, X_test, y_train, y_test = self._prepare_data(X, y)
-        opts = [0,1,2,3] if option == "all" else [option]
+    # ---- Multi-target aggregation methods ----
+    def _permutation_importance_multi(self, X: pd.DataFrame, y_multi: Dict[str, pd.Series]):
+        """
+        Run permutation importance across ALL targets and aggregate importance scores.
+        Returns averaged importance (delta_rmse) across all targets.
+        """
+        start = time.time()
+        prepared, X_train, X_test = self._prepare_data_multi(X, y_multi)
 
-        for opt in opts:
-            if opt == 0:
-                feats, imp, metrics, t = self._baseline(X_train,X_test,y_train,y_test)
-                self.results[0] = {"features":feats,"importances":imp,"metrics":metrics,"time":t,"name":"No Selection"}
-                self.selected_features[0] = feats
-            elif opt == 1:
-                feats, imp, metrics, t = self._permutation_importance(X_train,X_test,y_train,y_test)
-                self.results[1] = {"features":feats,"importances":imp,"metrics":metrics,"time":t,"name":"Permutation Importance"}
-                self.selected_features[1] = feats
-            elif opt == 2:
-                feats, imp, metrics, t = self._lasso_joint(X_train,X_test,y_train,y_test)
-                self.results[2] = {"features":feats,"importances":imp,"metrics":metrics,"time":t,"name":"Lasso (Linear L1)"}
-                self.selected_features[2] = feats
-            elif opt == 3:
-                feats, imp, metrics, t = self._gb_gridsearch(X_train,X_test,y_train,y_test)
-                self.results[3] = {"features":feats,"importances":imp,"metrics":metrics,"time":t,"name":"Gradient Boosting"}
-                self.selected_features[3] = feats
+        all_deltas = []  # List of DataFrames, one per target
+        all_metrics = []
+
+        for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
+            base_model = RandomForestRegressor(
+                n_estimators=self.config.get("rf_n_estimators", 200),
+                random_state=self.config.get("random_state", 42)
+            )
+            base_model.fit(X_tr, y_tr)
+            base_pred = base_model.predict(X_te)
+            base_rmse = _rmse(y_te, base_pred)
+            base_mae = mean_absolute_error(y_te, base_pred)
+            base_mape = _mape(y_te, base_pred)
+
+            deltas = []
+            for col in X_te.columns:
+                Xp = X_te.copy()
+                Xp[col] = np.random.RandomState(42).permutation(Xp[col].values)
+                yhat = base_model.predict(Xp)
+                deltas.append({
+                    "feature": col,
+                    "delta_rmse": _rmse(y_te, yhat) - base_rmse,
+                    "delta_mae": mean_absolute_error(y_te, yhat) - base_mae,
+                    "delta_mape": _mape(y_te, yhat) - base_mape
+                })
+
+            imp_df = pd.DataFrame(deltas)
+            all_deltas.append(imp_df.set_index("feature"))
+            all_metrics.append({
+                "rmse_train": np.nan, "mae_train": np.nan, "mape_train": np.nan,
+                "rmse_test": base_rmse, "mae_test": base_mae, "mape_test": base_mape
+            })
+
+        # Aggregate importances across all targets (average delta values)
+        combined = pd.concat(all_deltas, axis=1)
+        agg_imp = combined.groupby(level=0, axis=1).mean().reset_index()
+        agg_imp.columns = ["feature", "delta_rmse", "delta_mae", "delta_mape"]
+        agg_imp = agg_imp.sort_values("delta_rmse", ascending=False)
+
+        # Selection rule
+        thr = self.config.get("rf_importance_threshold", None)
+        top_n = self.config.get("rf_top_n_features", None)
+        if top_n:
+            selected = agg_imp.head(int(top_n))["feature"].tolist()
+        elif thr is not None:
+            selected = agg_imp[agg_imp["delta_rmse"] > float(thr)]["feature"].tolist()
+            if not selected:
+                selected = agg_imp.head(max(1, int(0.8 * len(agg_imp))))["feature"].tolist()
+        else:
+            selected = agg_imp.head(max(1, int(0.8 * len(agg_imp))))["feature"].tolist()
+
+        # Aggregate metrics across targets
+        aggregated_metrics = self._aggregate_metrics(all_metrics)
+        elapsed = time.time() - start
+        return selected, agg_imp, aggregated_metrics, elapsed
+
+    def _lasso_joint_multi(self, X: pd.DataFrame, y_multi: Dict[str, pd.Series]):
+        """
+        Run Lasso across ALL targets and aggregate coefficients.
+        Returns averaged |coefficient| across all targets.
+        """
+        start = time.time()
+        prepared, X_train, X_test = self._prepare_data_multi(X, y_multi)
+
+        all_coefs = []  # List of coefficient Series, one per target
+        all_metrics = []
+
+        for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
+            lcv = LassoCV(cv=self.config.get("lasso_cv_folds", 5), random_state=42, n_alphas=100)
+            lcv.fit(X_tr, y_tr)
+            alphas = np.unique(np.clip(lcv.alphas_, 1e-6, None))
+
+            grid = []
+            for a in alphas:
+                m = Lasso(alpha=float(a), random_state=42, max_iter=5000)
+                m.fit(X_tr, y_tr)
+                yhat_tr = m.predict(X_tr)
+                yhat_te = m.predict(X_te)
+                rmse_t = _rmse(y_te, yhat_te)
+                mae_t = mean_absolute_error(y_te, yhat_te)
+                mape_t = _mape(y_te, yhat_te)
+                grid.append({"alpha": float(a), "rmse": rmse_t, "mae": mae_t, "mape": mape_t,
+                             "yhat_tr": yhat_tr, "yhat_te": yhat_te, "model": m})
+            grid = pd.DataFrame(grid)
+
+            # Normalize and find best alpha
+            for k in ["rmse", "mae", "mape"]:
+                med = float(np.median(grid[k].to_numpy())) if grid[k].notna().any() else 1.0
+                if med <= 0: med = 1.0
+                grid[f"{k}_n"] = grid[k] / med
+            grid["score"] = grid["rmse_n"] + grid["mae_n"] + grid["mape_n"]
+            best = grid.loc[grid["score"].idxmin()]
+            model = best["model"]
+            yhat_tr = best["yhat_tr"]; yhat_te = best["yhat_te"]
+
+            coefs = pd.Series(np.abs(model.coef_), index=X_tr.columns)
+            all_coefs.append(coefs)
+            all_metrics.append(_metrics_block(y_tr, yhat_tr, y_te, yhat_te))
+
+        # Aggregate coefficients across targets (average)
+        coef_df = pd.concat(all_coefs, axis=1)
+        avg_coefs = coef_df.mean(axis=1)
+        selected = list(avg_coefs[avg_coefs != 0].index)
+
+        # Build importance DataFrame
+        imp = avg_coefs.rename("importance").reset_index().rename(columns={"index": "feature"})
+        imp = imp.sort_values("importance", ascending=False)
+
+        # Aggregate metrics
+        aggregated_metrics = self._aggregate_metrics(all_metrics)
+        elapsed = time.time() - start
+        return selected, imp, aggregated_metrics, elapsed
+
+    def _gb_gridsearch_multi(self, X: pd.DataFrame, y_multi: Dict[str, pd.Series]):
+        """
+        Run Gradient Boosting across ALL targets and aggregate feature importances.
+        Returns averaged importance across all targets.
+        """
+        start = time.time()
+        prepared, X_train, X_test = self._prepare_data_multi(X, y_multi)
+
+        all_importances = []  # List of importance arrays, one per target
+        all_metrics = []
+
+        grid_params = self.config.get("gb_param_grid", {
+            "learning_rate": [0.01, 0.1, 0.2],
+            "max_depth": [3, 5, 7],
+            "n_estimators": [50, 100, 200]
+        })
+
+        for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
+            gbr = GradientBoostingRegressor(random_state=42)
+            gscv = GridSearchCV(gbr, grid_params, cv=self.config.get("cv_folds", 5),
+                                scoring="neg_root_mean_squared_error")
+            gscv.fit(X_tr, y_tr)
+            best = gscv.best_estimator_
+            yhat_tr = best.predict(X_tr)
+            yhat_te = best.predict(X_te)
+
+            importances = getattr(best, "feature_importances_", np.zeros(X_tr.shape[1]))
+            all_importances.append(pd.Series(importances, index=X_tr.columns))
+            all_metrics.append(_metrics_block(y_tr, yhat_tr, y_te, yhat_te))
+
+        # Aggregate importances across targets (average)
+        imp_df = pd.concat(all_importances, axis=1)
+        avg_imp = imp_df.mean(axis=1)
+
+        imp = pd.DataFrame({
+            "feature": avg_imp.index,
+            "importance": avg_imp.values
+        }).sort_values("importance", ascending=False)
+
+        # Selection
+        thr = self.config.get("gb_importance_threshold", 0.0)
+        selected = imp[imp["importance"] > thr]["feature"].tolist()
+        if not selected:
+            selected = imp.head(max(1, int(0.8 * len(imp))))["feature"].tolist()
+
+        # Aggregate metrics
+        aggregated_metrics = self._aggregate_metrics(all_metrics)
+        elapsed = time.time() - start
+        return selected, imp, aggregated_metrics, elapsed
+
+    def _baseline_multi(self, X: pd.DataFrame, y_multi: Dict[str, pd.Series]):
+        """Baseline (no selection) across multiple targets."""
+        start = time.time()
+        prepared, X_train, X_test = self._prepare_data_multi(X, y_multi)
+
+        all_metrics = []
+        for target_name, (X_tr, X_te, y_tr, y_te) in prepared.items():
+            model = DummyRegressor(strategy="mean")
+            model.fit(X_tr, y_tr)
+            yhat_tr = model.predict(X_tr)
+            yhat_te = model.predict(X_te)
+            all_metrics.append(_metrics_block(y_tr, yhat_tr, y_te, yhat_te))
+
+        aggregated_metrics = self._aggregate_metrics(all_metrics)
+        elapsed = time.time() - start
+        return list(X_train.columns), None, aggregated_metrics, elapsed
+
+    # ---- Public API ----
+    def fit(self, X: pd.DataFrame, y: pd.Series, option: str | int = "all", y_multi: Optional[Dict[str, pd.Series]] = None):
+        """
+        Fit feature selection methods.
+
+        Args:
+            X: Feature DataFrame
+            y: Primary target Series (used for single-target fallback)
+            option: Which methods to run ("all", 0, 1, 2, or 3)
+            y_multi: Optional dict of target_name -> Series for multi-target aggregation.
+                     If provided with >1 targets, uses multi-target methods that aggregate
+                     importance scores across all targets.
+        """
+        opts = [0, 1, 2, 3] if option == "all" else [option]
+
+        # Determine if we should use multi-target methods
+        use_multi = y_multi is not None and len(y_multi) > 1
+        self.y_multi = y_multi if use_multi else None
+
+        if use_multi:
+            # Multi-target mode: aggregate across all targets
+            n_targets = len(y_multi)
+            for opt in opts:
+                if opt == 0:
+                    feats, imp, metrics, t = self._baseline_multi(X, y_multi)
+                    self.results[0] = {
+                        "features": feats, "importances": imp, "metrics": metrics,
+                        "time": t, "name": f"No Selection (avg {n_targets} targets)"
+                    }
+                    self.selected_features[0] = feats
+                elif opt == 1:
+                    feats, imp, metrics, t = self._permutation_importance_multi(X, y_multi)
+                    self.results[1] = {
+                        "features": feats, "importances": imp, "metrics": metrics,
+                        "time": t, "name": f"Permutation Importance (avg {n_targets} targets)"
+                    }
+                    self.selected_features[1] = feats
+                elif opt == 2:
+                    feats, imp, metrics, t = self._lasso_joint_multi(X, y_multi)
+                    self.results[2] = {
+                        "features": feats, "importances": imp, "metrics": metrics,
+                        "time": t, "name": f"Lasso (avg {n_targets} targets)"
+                    }
+                    self.selected_features[2] = feats
+                elif opt == 3:
+                    feats, imp, metrics, t = self._gb_gridsearch_multi(X, y_multi)
+                    self.results[3] = {
+                        "features": feats, "importances": imp, "metrics": metrics,
+                        "time": t, "name": f"Gradient Boosting (avg {n_targets} targets)"
+                    }
+                    self.selected_features[3] = feats
+        else:
+            # Single-target mode: use original methods
+            X_train, X_test, y_train, y_test = self._prepare_data(X, y)
+            for opt in opts:
+                if opt == 0:
+                    feats, imp, metrics, t = self._baseline(X_train, X_test, y_train, y_test)
+                    self.results[0] = {"features": feats, "importances": imp, "metrics": metrics, "time": t, "name": "No Selection"}
+                    self.selected_features[0] = feats
+                elif opt == 1:
+                    feats, imp, metrics, t = self._permutation_importance(X_train, X_test, y_train, y_test)
+                    self.results[1] = {"features": feats, "importances": imp, "metrics": metrics, "time": t, "name": "Permutation Importance"}
+                    self.selected_features[1] = feats
+                elif opt == 2:
+                    feats, imp, metrics, t = self._lasso_joint(X_train, X_test, y_train, y_test)
+                    self.results[2] = {"features": feats, "importances": imp, "metrics": metrics, "time": t, "name": "Lasso (Linear L1)"}
+                    self.selected_features[2] = feats
+                elif opt == 3:
+                    feats, imp, metrics, t = self._gb_gridsearch(X_train, X_test, y_train, y_test)
+                    self.results[3] = {"features": feats, "importances": imp, "metrics": metrics, "time": t, "name": "Gradient Boosting"}
+                    self.selected_features[3] = feats
         return self
 
     def summary_table(self) -> pd.DataFrame:
@@ -481,7 +763,9 @@ def page_feature_selection():
     pipe = FeatureSelectionPipeline(config=config)
 
     # Use FE-provided indices if available
-    if isinstance(train_idx, np.ndarray) and isinstance(test_idx, np.ndarray):
+    fe_indices_available = isinstance(train_idx, np.ndarray) and isinstance(test_idx, np.ndarray)
+    if fe_indices_available:
+        # Override _prepare_data for single-target mode
         def _prep_with_idx(X_in, y_in):
             from sklearn.preprocessing import StandardScaler
             X_tr, X_te = X_in.iloc[train_idx].copy(), X_in.iloc[test_idx].copy()
@@ -492,6 +776,23 @@ def page_feature_selection():
             X_te[num_cols] = scaler.transform(X_te[num_cols])
             return X_tr, X_te, y_tr, y_te
         pipe._prepare_data = _prep_with_idx  # type: ignore
+
+        # Override _prepare_data_multi for multi-target mode
+        def _prep_multi_with_idx(X_in, y_multi_in):
+            from sklearn.preprocessing import StandardScaler
+            prepared = {}
+            X_tr = X_in.iloc[train_idx].copy()
+            X_te = X_in.iloc[test_idx].copy()
+            scaler = StandardScaler()
+            num_cols = X_in.select_dtypes(include=[np.number]).columns
+            X_tr[num_cols] = scaler.fit_transform(X_tr[num_cols])
+            X_te[num_cols] = scaler.transform(X_te[num_cols])
+            for target_name, y_series in y_multi_in.items():
+                y_tr = y_series.iloc[train_idx]
+                y_te = y_series.iloc[test_idx]
+                prepared[target_name] = (X_tr.copy(), X_te.copy(), y_tr, y_te)
+            return prepared, X_tr, X_te
+        pipe._prepare_data_multi = _prep_multi_with_idx  # type: ignore
 
     opt_map = {
         "All (0–3)": "all",
@@ -515,8 +816,12 @@ def page_feature_selection():
         st.caption(f"**Excluded from features:** {excluded_str}")
         return
 
+    # Multi-target message
+    if len(selected_targets) > 1:
+        st.info(f"🎯 **Multi-target mode**: Aggregating importance scores across {len(selected_targets)} targets for robust feature selection.")
+
     with st.spinner("Selecting features…"):
-        pipe.fit(X, y, option=opt_choice)
+        pipe.fit(X, y, option=opt_choice, y_multi=y_multi)
 
     # Build ready-to-train datasets: selected + Target_1..7 + datetime columns (from variant)
     filtered_datasets: Dict[int, pd.DataFrame] = {}
