@@ -1161,9 +1161,13 @@ def page_dashboard():
                     }
 
                     # --- PROBABILITY-BASED CATEGORY FORECASTING ---
-                    # Calculate historical proportions from merged_data
+                    # Calculate historical proportions from processed_df (contains clinical categories)
                     category_proportions = {}
-                    merged_df = st.session_state.get("merged_data")
+                    # Use processed_df which contains the aggregated clinical categories
+                    merged_df = st.session_state.get("processed_df")
+                    if merged_df is None or merged_df.empty:
+                        # Fallback to merged_data if processed_df not available
+                        merged_df = st.session_state.get("merged_data")
 
                     if merged_df is not None and not merged_df.empty:
                         # Build a lowercase column map for case-insensitive matching

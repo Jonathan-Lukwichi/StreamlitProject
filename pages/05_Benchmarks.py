@@ -2539,8 +2539,11 @@ def page_benchmarks():
             unsafe_allow_html=True,
         )
 
-        # Calculate category proportions from merged_data
-        merged_df = st.session_state.get("merged_data")
+        # Calculate category proportions from processed_df (contains clinical categories)
+        merged_df = st.session_state.get("processed_df")
+        if merged_df is None or getattr(merged_df, 'empty', True):
+            # Fallback to merged_data if processed_df not available
+            merged_df = st.session_state.get("merged_data")
         category_config = {
             "RESPIRATORY": {"icon": "🫁", "color": "#3b82f6"},
             "CARDIAC": {"icon": "❤️", "color": "#ef4444"},
