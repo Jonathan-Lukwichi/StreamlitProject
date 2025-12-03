@@ -1288,22 +1288,42 @@ def page_dashboard():
                             </div>
                             """, unsafe_allow_html=True)
 
-                            # Category breakdown as separate expander (cleaner rendering)
-                            if horizon_categories:
-                                with st.expander(f"📊 Categories", expanded=False):
-                                    sorted_cats = sorted(horizon_categories.keys(), key=lambda x: list(category_config.keys()).index(x) if x in category_config else 99)
-                                    for cat in sorted_cats:
-                                        cat_val = horizon_categories[cat]
-                                        if pd.notna(cat_val) and cat_val > 0:
-                                            icon = category_config.get(cat, {}).get("icon", "📊")
-                                            color = category_config.get(cat, {}).get("color", "#3b82f6")
-                                            st.markdown(f"<div style='display:flex;justify-content:space-between;padding:2px 0;'><span>{icon} {cat[:4]}</span><span style='color:{color};font-weight:700;'>{int(round(cat_val))}</span></div>", unsafe_allow_html=True)
-
                     st.markdown("</div>", unsafe_allow_html=True)
 
                     # --- Category Breakdown Table (Professional Layout) ---
                     if has_categories:
                         st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+
+                        # Build category accuracy from multi_target_results
+                        category_accuracy = {}
+                        if multi_target_results:
+                            successful_targets = multi_target_results.get("successful_targets", [])
+                            for target_name in successful_targets:
+                                target_data = multi_target_results.get(target_name, {})
+                                if not isinstance(target_data, dict) or target_data.get("status") != "success":
+                                    continue
+
+                                target_upper = target_name.upper()
+                                for cat in category_config.keys():
+                                    if target_upper.startswith(cat + "_"):
+                                        # Get accuracy/metrics from results
+                                        results = target_data.get("results", {})
+                                        metrics = results.get("metrics", {}) if results else target_data.get("metrics", {})
+
+                                        # Try to get accuracy from various sources
+                                        acc = metrics.get("accuracy") or metrics.get("Accuracy_%") or metrics.get("Test_Acc")
+                                        if acc is None:
+                                            # Calculate from MAE if available
+                                            mae = metrics.get("MAE") or metrics.get("mae")
+                                            mean_val = metrics.get("mean") or metrics.get("Mean")
+                                            if mae is not None and mean_val is not None and mean_val > 0:
+                                                acc = max(0, 100 - (mae / mean_val * 100))
+
+                                        if acc is not None and pd.notna(acc):
+                                            if cat not in category_accuracy:
+                                                category_accuracy[cat] = []
+                                            category_accuracy[cat].append(float(acc))
+                                        break
 
                         # Build a DataFrame for the category breakdown by day
                         cat_data = []
@@ -1340,28 +1360,95 @@ def page_dashboard():
                                 height=min(len(cat_data) * 40 + 40, 200)
                             )
 
-                            # Summary row
-                            st.markdown("<div style='margin-top: 0.75rem; border-top: 1px solid rgba(100, 116, 139, 0.2); padding-top: 0.75rem;'>", unsafe_allow_html=True)
-                            summary_cols = st.columns(len(category_config) + 1)
-                            with summary_cols[0]:
-                                st.markdown("<div style='font-size: 0.75rem; color: #94a3b8; font-weight: 600;'>AVG/DAY</div>", unsafe_allow_html=True)
+                            st.markdown("</div>", unsafe_allow_html=True)
 
-                            for idx, (cat, config) in enumerate(category_config.items()):
-                                total_for_cat = 0
-                                count = 0
-                                for h_cats in category_forecasts_by_horizon.values():
-                                    if cat in h_cats and pd.notna(h_cats[cat]):
-                                        total_for_cat += h_cats[cat]
-                                        count += 1
-                                avg_for_cat = total_for_cat / count if count > 0 else 0
+                        # --- Category Summary Cards with Average + Accuracy ---
+                        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+                        st.markdown("""
+                        <div class='forecast-card' style='padding: 1.25rem;'>
+                            <div style='margin-bottom: 1rem;'>
+                                <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0;'>📊 Category Statistics</div>
+                                <div style='font-size: 0.75rem; color: #64748b;'>Average daily arrivals and forecast accuracy per category</div>
+                            </div>
+                        """, unsafe_allow_html=True)
 
-                                with summary_cols[idx + 1]:
-                                    if avg_for_cat > 0:
-                                        st.markdown(f"<div style='text-align:center;'><span style='font-size:1rem;'>{config['icon']}</span><br><span style='color:{config['color']};font-weight:700;'>~{int(round(avg_for_cat))}</span></div>", unsafe_allow_html=True)
-                                    else:
-                                        st.markdown(f"<div style='text-align:center;opacity:0.4;'><span style='font-size:1rem;'>{config['icon']}</span><br><span>—</span></div>", unsafe_allow_html=True)
+                        # Create summary cards for each category
+                        num_cats = len(category_config)
+                        cat_cols = st.columns(num_cats, gap="small")
 
-                            st.markdown("</div></div>", unsafe_allow_html=True)
+                        for idx, (cat, config) in enumerate(category_config.items()):
+                            # Calculate average for category
+                            total_for_cat = 0
+                            count = 0
+                            for h_cats in category_forecasts_by_horizon.values():
+                                if cat in h_cats and pd.notna(h_cats[cat]):
+                                    total_for_cat += h_cats[cat]
+                                    count += 1
+                            avg_for_cat = total_for_cat / count if count > 0 else 0
+
+                            # Get average accuracy for category
+                            cat_acc_list = category_accuracy.get(cat, [])
+                            avg_acc = sum(cat_acc_list) / len(cat_acc_list) if cat_acc_list else None
+
+                            # Determine accuracy color
+                            if avg_acc is not None:
+                                if avg_acc >= 75:
+                                    acc_color = "#10b981"
+                                    acc_bg = "rgba(16, 185, 129, 0.15)"
+                                elif avg_acc >= 60:
+                                    acc_color = "#f59e0b"
+                                    acc_bg = "rgba(245, 158, 11, 0.15)"
+                                else:
+                                    acc_color = "#ef4444"
+                                    acc_bg = "rgba(239, 68, 68, 0.15)"
+                            else:
+                                acc_color = "#64748b"
+                                acc_bg = "rgba(100, 116, 139, 0.15)"
+
+                            with cat_cols[idx]:
+                                if avg_for_cat > 0:
+                                    acc_text = f"{avg_acc:.0f}%" if avg_acc is not None else "N/A"
+                                    st.markdown(f"""
+                                    <div style='
+                                        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
+                                        border-radius: 12px;
+                                        padding: 1rem 0.75rem;
+                                        text-align: center;
+                                        border: 1px solid {config['color']}40;
+                                    '>
+                                        <div style='font-size: 1.5rem; margin-bottom: 0.25rem;'>{config['icon']}</div>
+                                        <div style='font-size: 0.625rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem;'>{cat[:4]}</div>
+                                        <div style='font-size: 1.5rem; font-weight: 800; color: {config['color']}; margin-bottom: 0.25rem;'>~{int(round(avg_for_cat))}</div>
+                                        <div style='font-size: 0.625rem; color: #64748b; margin-bottom: 0.5rem;'>avg/day</div>
+                                        <div style='
+                                            display: inline-block;
+                                            padding: 0.25rem 0.5rem;
+                                            background: {acc_bg};
+                                            border: 1px solid {acc_color}40;
+                                            border-radius: 6px;
+                                            font-size: 0.6875rem;
+                                            font-weight: 700;
+                                            color: {acc_color};
+                                        '>✓ {acc_text}</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div style='
+                                        background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.6));
+                                        border-radius: 12px;
+                                        padding: 1rem 0.75rem;
+                                        text-align: center;
+                                        border: 1px solid rgba(100, 116, 139, 0.2);
+                                        opacity: 0.5;
+                                    '>
+                                        <div style='font-size: 1.5rem; margin-bottom: 0.25rem;'>{config['icon']}</div>
+                                        <div style='font-size: 0.625rem; color: #64748b; text-transform: uppercase;'>{cat[:4]}</div>
+                                        <div style='font-size: 1rem; color: #64748b; margin: 0.5rem 0;'>—</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                     # --- ACTUAL VS FORECAST TIME SERIES GRAPH ---
                     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
