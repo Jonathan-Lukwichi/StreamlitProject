@@ -1214,28 +1214,28 @@ def page_dashboard():
                     has_categories = bool(category_forecasts_by_horizon)
 
                     st.markdown(f"""
-                    <div class='forecast-card'>
-                        <div class='forecast-header'>
+                    <div class='forecast-card' style='padding: 1.5rem;'>
+                        <div class='forecast-header' style='margin-bottom: 1.25rem; padding-bottom: 1rem;'>
                             <div>
-                                <div class='forecast-title'>
-                                    {forecast_days}-Day Comprehensive Forecast
+                                <div class='forecast-title' style='font-size: 1.25rem;'>
+                                    📅 {forecast_days}-Day Patient Forecast
                                 </div>
-                                <div class='forecast-subtitle'>
-                                    Model: <span>{cached_model}</span> •
-                                    From: <span>{base_date.strftime("%b %d, %Y")}</span>
-                                    {" • <span style='color: #10b981;'>+ Category Breakdown</span>" if has_categories else ""}
+                                <div class='forecast-subtitle' style='margin-top: 0.375rem;'>
+                                    Model: <span style='color: #22d3ee;'>{cached_model}</span> •
+                                    Starting: <span style='color: #a78bfa;'>{base_date.strftime("%b %d, %Y")}</span>
+                                    {" • <span style='color: #10b981;'>Categories Available</span>" if has_categories else ""}
                                 </div>
                             </div>
-                            <div class='forecast-info-badge'>
-                                ⚡ AI-Powered Prediction
+                            <div class='forecast-info-badge' style='padding: 0.5rem 0.875rem;'>
+                                ⚡ AI Forecast
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # Forecast cards - show fewer columns if we have category breakdown
+                    # Forecast cards - responsive columns
                     max_h = F.shape[1]
-                    num_cols = min(forecast_days, max_h, 4 if has_categories else 7)
-                    forecast_cols = st.columns(num_cols)
+                    num_cols = min(forecast_days, max_h, 7)  # Always use up to 7 columns for compact view
+                    forecast_cols = st.columns(num_cols, gap="small")
 
                     for h in range(min(forecast_days, max_h)):
                         forecast_dt = base_date + pd.Timedelta(days=h+1)
@@ -1271,101 +1271,97 @@ def page_dashboard():
                         # Get category breakdown for this horizon
                         horizon_categories = category_forecasts_by_horizon.get(horizon_num, {})
 
-                        # Build category HTML
-                        category_html = ""
-                        if horizon_categories:
-                            category_html = "<div style='border-top: 1px solid rgba(100, 116, 139, 0.3); margin-top: 0.75rem; padding-top: 0.75rem;'>"
-                            category_html += "<div style='font-size: 0.625rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;'>By Category</div>"
-
-                            # Sort categories for consistent display
-                            sorted_cats = sorted(horizon_categories.keys(), key=lambda x: list(category_config.keys()).index(x) if x in category_config else 99)
-
-                            for cat in sorted_cats:
-                                cat_val = horizon_categories[cat]
-                                if pd.notna(cat_val) and cat_val > 0:
-                                    icon = category_config.get(cat, {}).get("icon", "📊")
-                                    color = category_config.get(cat, {}).get("color", "#3b82f6")
-                                    cat_short = cat[:4].upper()  # Shorten for display
-                                    category_html += f"""
-                                    <div style='display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; font-size: 0.75rem;'>
-                                        <span style='color: #94a3b8;'>{icon} {cat_short}</span>
-                                        <span style='color: {color}; font-weight: 700;'>{int(round(cat_val))}</span>
-                                    </div>
-                                    """
-                            category_html += "</div>"
-
                         col_idx = h % num_cols
                         with forecast_cols[col_idx]:
                             is_primary = (h == 0)
                             primary_class = " forecast-mini-card-primary" if is_primary else ""
 
+                            # Main forecast card (without category breakdown inside)
                             st.markdown(f"""
-                            <div class='forecast-mini-card{primary_class}' style='text-align: center; margin-bottom: 0.75rem;'>
-                                <div class='forecast-day-name'>
-                                    {forecast_dt.strftime("%a").upper()}
-                                </div>
-                                <div class='forecast-date-badge'>
-                                    {forecast_dt.strftime("%b %d")}
-                                </div>
-                                <div class='forecast-number'>
-                                    {int(forecast_val)}
-                                </div>
-                                <div class='forecast-unit-label'>
-                                    Total Patients
-                                </div>
-                                <div class='forecast-accuracy-enhanced' style='background: {acc_bg}; border-color: {acc_color}40; color: {acc_color};'>
-                                    ✓ {accuracy_text}
-                                </div>
-                                <div class='forecast-range'>
-                                    {int(lower_val)} - {int(upper_val)}
-                                </div>
-                                {category_html}
+                            <div class='forecast-mini-card{primary_class}' style='text-align: center; margin-bottom: 0.5rem;'>
+                                <div class='forecast-day-name'>{forecast_dt.strftime("%a").upper()}</div>
+                                <div class='forecast-date-badge'>{forecast_dt.strftime("%b %d")}</div>
+                                <div class='forecast-number'>{int(forecast_val)}</div>
+                                <div class='forecast-unit-label'>Total Patients</div>
+                                <div class='forecast-accuracy-enhanced' style='background: {acc_bg}; border-color: {acc_color}40; color: {acc_color};'>✓ {accuracy_text}</div>
+                                <div class='forecast-range'>{int(lower_val)} - {int(upper_val)}</div>
                             </div>
                             """, unsafe_allow_html=True)
 
+                            # Category breakdown as separate expander (cleaner rendering)
+                            if horizon_categories:
+                                with st.expander(f"📊 Categories", expanded=False):
+                                    sorted_cats = sorted(horizon_categories.keys(), key=lambda x: list(category_config.keys()).index(x) if x in category_config else 99)
+                                    for cat in sorted_cats:
+                                        cat_val = horizon_categories[cat]
+                                        if pd.notna(cat_val) and cat_val > 0:
+                                            icon = category_config.get(cat, {}).get("icon", "📊")
+                                            color = category_config.get(cat, {}).get("color", "#3b82f6")
+                                            st.markdown(f"<div style='display:flex;justify-content:space-between;padding:2px 0;'><span>{icon} {cat[:4]}</span><span style='color:{color};font-weight:700;'>{int(round(cat_val))}</span></div>", unsafe_allow_html=True)
+
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                    # --- Category Summary Bar (if categories available) ---
+                    # --- Category Breakdown Table (Professional Layout) ---
                     if has_categories:
-                        st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-                        st.markdown("""
-                        <div class='forecast-card' style='padding: 1.5rem;'>
-                            <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0; margin-bottom: 1rem;'>
-                                📊 Category Legend & Daily Totals
-                            </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
 
-                        # Calculate totals across all forecast days
-                        legend_cols = st.columns(len(category_config))
-                        for idx, (cat, config) in enumerate(category_config.items()):
-                            total_for_cat = 0
-                            count = 0
-                            for h_cats in category_forecasts_by_horizon.values():
-                                if cat in h_cats and pd.notna(h_cats[cat]):
-                                    total_for_cat += h_cats[cat]
-                                    count += 1
-                            avg_for_cat = total_for_cat / count if count > 0 else 0
+                        # Build a DataFrame for the category breakdown by day
+                        cat_data = []
+                        for h in range(min(forecast_days, max_h)):
+                            horizon_num = h + 1
+                            forecast_dt = base_date + pd.Timedelta(days=h+1)
+                            row = {"Day": forecast_dt.strftime("%a %b %d")}
+                            horizon_cats = category_forecasts_by_horizon.get(horizon_num, {})
+                            for cat in category_config.keys():
+                                val = horizon_cats.get(cat, np.nan)
+                                row[cat[:4]] = int(round(val)) if pd.notna(val) and val > 0 else "—"
+                            cat_data.append(row)
 
-                            with legend_cols[idx]:
-                                if avg_for_cat > 0:
-                                    st.markdown(f"""
-                                    <div style='text-align: center; padding: 0.5rem;'>
-                                        <div style='font-size: 1.5rem;'>{config['icon']}</div>
-                                        <div style='font-size: 0.6875rem; color: #94a3b8; margin-top: 0.25rem;'>{cat[:6]}</div>
-                                        <div style='font-size: 1.125rem; font-weight: 700; color: {config["color"]};'>~{int(round(avg_for_cat))}</div>
-                                        <div style='font-size: 0.5625rem; color: #64748b;'>avg/day</div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown(f"""
-                                    <div style='text-align: center; padding: 0.5rem; opacity: 0.4;'>
-                                        <div style='font-size: 1.5rem;'>{config['icon']}</div>
-                                        <div style='font-size: 0.6875rem; color: #64748b; margin-top: 0.25rem;'>{cat[:6]}</div>
-                                        <div style='font-size: 0.875rem; color: #64748b;'>—</div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
+                        if cat_data:
+                            cat_df = pd.DataFrame(cat_data)
 
-                        st.markdown("</div>", unsafe_allow_html=True)
+                            st.markdown("""
+                            <div class='forecast-card' style='padding: 1.25rem;'>
+                                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
+                                    <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0;'>🏥 Category Breakdown by Day</div>
+                                    <div style='font-size: 0.75rem; color: #64748b;'>Predicted arrivals per category</div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
+                            # Display category icons as header legend
+                            icon_row = " | ".join([f"{cfg['icon']} {cat[:4]}" for cat, cfg in category_config.items()])
+                            st.caption(f"Legend: {icon_row}")
+
+                            # Use Streamlit dataframe for clean display
+                            st.dataframe(
+                                cat_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                height=min(len(cat_data) * 40 + 40, 200)
+                            )
+
+                            # Summary row
+                            st.markdown("<div style='margin-top: 0.75rem; border-top: 1px solid rgba(100, 116, 139, 0.2); padding-top: 0.75rem;'>", unsafe_allow_html=True)
+                            summary_cols = st.columns(len(category_config) + 1)
+                            with summary_cols[0]:
+                                st.markdown("<div style='font-size: 0.75rem; color: #94a3b8; font-weight: 600;'>AVG/DAY</div>", unsafe_allow_html=True)
+
+                            for idx, (cat, config) in enumerate(category_config.items()):
+                                total_for_cat = 0
+                                count = 0
+                                for h_cats in category_forecasts_by_horizon.values():
+                                    if cat in h_cats and pd.notna(h_cats[cat]):
+                                        total_for_cat += h_cats[cat]
+                                        count += 1
+                                avg_for_cat = total_for_cat / count if count > 0 else 0
+
+                                with summary_cols[idx + 1]:
+                                    if avg_for_cat > 0:
+                                        st.markdown(f"<div style='text-align:center;'><span style='font-size:1rem;'>{config['icon']}</span><br><span style='color:{config['color']};font-weight:700;'>~{int(round(avg_for_cat))}</span></div>", unsafe_allow_html=True)
+                                    else:
+                                        st.markdown(f"<div style='text-align:center;opacity:0.4;'><span style='font-size:1rem;'>{config['icon']}</span><br><span>—</span></div>", unsafe_allow_html=True)
+
+                            st.markdown("</div></div>", unsafe_allow_html=True)
 
                     # --- ACTUAL VS FORECAST TIME SERIES GRAPH ---
                     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
