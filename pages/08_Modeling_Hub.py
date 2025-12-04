@@ -4201,21 +4201,21 @@ def page_hyperparameter_tuning():
                 # HEADER: OVERALL WINNER
                 # =====================================================================
                 st.markdown(
-                f"""
-                <div style='
-                    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
-                    border: 2px solid rgba(34, 197, 94, 0.5);
-                    border-radius: 16px;
-                    padding: 1.5rem 2rem;
-                    margin-bottom: 2rem;
-                    text-align: center;
-                '>
-                    <div style='font-size: 2.5rem; margin-bottom: 0.5rem;'>🏆</div>
-                    <div style='font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem;'>Overall Best Model</div>
-                    <div style='font-size: 2rem; font-weight: 800; color: #22c55e;'>{overall_best}</div>
-                    <div style='font-size: 0.875rem; color: #64748b; margin-top: 0.5rem;'>Winner in {wins[overall_best]} of 4 metrics</div>
-                </div>
-                """,
+                    f"""
+                    <div style='
+                        background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
+                        border: 2px solid rgba(34, 197, 94, 0.5);
+                        border-radius: 16px;
+                        padding: 1.5rem 2rem;
+                        margin-bottom: 2rem;
+                        text-align: center;
+                    '>
+                        <div style='font-size: 2.5rem; margin-bottom: 0.5rem;'>🏆</div>
+                        <div style='font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem;'>Overall Best Model</div>
+                        <div style='font-size: 2rem; font-weight: 800; color: #22c55e;'>{overall_best}</div>
+                        <div style='font-size: 0.875rem; color: #64748b; margin-top: 0.5rem;'>Winner in {wins[overall_best]} of 4 metrics</div>
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
 
