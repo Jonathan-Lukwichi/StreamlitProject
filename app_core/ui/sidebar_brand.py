@@ -347,3 +347,75 @@ def sidebar_info_card(title: str, value: str, icon: str = "ℹ️") -> None:
     """
 
     st.sidebar.markdown(card_html, unsafe_allow_html=True)
+
+
+def render_cache_management() -> None:
+    """
+    Renders cache management UI in the sidebar.
+    Shows cache status and provides clear cache button.
+    """
+    try:
+        from app_core.cache import get_cache_info, has_cached_data, clear_cache
+        from app_core.state.session import clear_session_and_cache
+
+        # Section divider
+        sidebar_section_divider("CACHE")
+
+        cache_info = get_cache_info()
+        has_cache = has_cached_data()
+
+        if has_cache:
+            # Show cache status
+            st.sidebar.markdown(
+                f"""
+                <div style='
+                    margin: 0.5rem 0;
+                    padding: 0.75rem;
+                    border-radius: 10px;
+                    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05));
+                    border: 1px solid rgba(34, 197, 94, 0.2);
+                '>
+                    <div style='display: flex; align-items: center; gap: 0.5rem;'>
+                        <span style='color: #22c55e; font-size: 1rem;'>💾</span>
+                        <span style='color: #22c55e; font-size: 0.8rem; font-weight: 600;'>Cache Active</span>
+                    </div>
+                    <div style='color: #94a3b8; font-size: 0.75rem; margin-top: 0.5rem;'>
+                        {cache_info['item_count']} items • {cache_info['total_size_mb']:.1f} MB
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            # Clear cache button
+            if st.sidebar.button("🗑️ Clear Cache", use_container_width=True, key="clear_cache_btn"):
+                clear_session_and_cache()
+                st.sidebar.success("Cache cleared!")
+                st.rerun()
+        else:
+            st.sidebar.markdown(
+                """
+                <div style='
+                    margin: 0.5rem 0;
+                    padding: 0.75rem;
+                    border-radius: 10px;
+                    background: rgba(100, 116, 139, 0.1);
+                    border: 1px solid rgba(100, 116, 139, 0.2);
+                '>
+                    <div style='display: flex; align-items: center; gap: 0.5rem;'>
+                        <span style='color: #94a3b8; font-size: 1rem;'>💾</span>
+                        <span style='color: #94a3b8; font-size: 0.8rem; font-weight: 600;'>No Cached Data</span>
+                    </div>
+                    <div style='color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;'>
+                        Run data preparation to save results
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    except ImportError:
+        # Cache module not available
+        pass
+    except Exception as e:
+        st.sidebar.warning(f"Cache error: {e}")

@@ -63,6 +63,9 @@ logs/
 *.cache
 nul
 
+# Application Cache (persisted session data)
+.cache/
+
 # Environment Variables (sensitive credentials)
 .env
 .env.local

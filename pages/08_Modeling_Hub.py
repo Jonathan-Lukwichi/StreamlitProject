@@ -21,7 +21,8 @@ from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
-from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
+from app_core.cache import save_to_cache, get_cache_manager
 from app_core.plots import build_multihorizon_results_dashboard
 
 # ============================================================================
@@ -41,6 +42,8 @@ st.set_page_config(
 apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
+add_logout_button()
+render_cache_management()
 
 # Fluorescent effects + Custom Tab Styling
 st.markdown(f"""
@@ -2267,6 +2270,15 @@ def page_ml():
 
                         # Store results in session state
                         st.session_state["ml_mh_results"] = results
+
+                        # Auto-save to cache for persistence
+                        try:
+                            cache_mgr = get_cache_manager()
+                            proc_df = st.session_state.get("processed_df")
+                            data_hash = cache_mgr._compute_data_hash(proc_df) if proc_df is not None else None
+                            save_to_cache("ml_mh_results", results, data_hash)
+                        except Exception:
+                            pass  # Cache save is optional
                     except Exception as e:
                         st.error(f"❌ **Training failed with error:**\n\n```\n{str(e)}\n```")
                         import traceback
@@ -2603,33 +2615,37 @@ def create_sklearn_ann_wrapper():
     return ANNWrapper()
 
 def get_param_grid(model_type: str, cfg: dict):
-    """Get parameter grid for Grid Search based on model type"""
+    """Get parameter grid for Grid Search based on model type.
+
+    Optimized grids for faster training:
+    - XGBoost: 8 combinations (was 108)
+    - LSTM: 8 combinations (was 72)
+    - ANN: 8 combinations (was 72)
+    """
 
     if model_type == "XGBoost":
         return {
-            'n_estimators': [100, 300, 500],
-            'max_depth': [3, 6, 9],
-            'learning_rate': [0.01, 0.1, 0.3],
-            'subsample': [0.8, 1.0],
-            'colsample_bytree': [0.8, 1.0],
+            'n_estimators': [200, 400],
+            'max_depth': [4, 8],
+            'learning_rate': [0.05, 0.1],
         }
 
     elif model_type == "LSTM":
         return {
-            'lookback_window': [7, 14, 21],
-            'lstm_hidden_units': [32, 64, 128],
-            'lstm_layers': [1, 2],
-            'dropout': [0.1, 0.2],
-            'lstm_epochs': [30, 50],
+            'lookback_window': [7, 14],
+            'lstm_hidden_units': [64, 128],
+            'lstm_layers': [2],
+            'dropout': [0.2],
+            'lstm_epochs': [30],
         }
 
     elif model_type == "ANN":
         return {
-            'ann_hidden_layers': [2, 3, 4],
-            'ann_neurons': [32, 64, 128],
-            'ann_activation': ['relu', 'tanh'],
-            'dropout': [0.1, 0.2],
-            'ann_epochs': [20, 30],
+            'ann_hidden_layers': [2, 3],
+            'ann_neurons': [64, 128],
+            'ann_activation': ['relu'],
+            'dropout': [0.2],
+            'ann_epochs': [25],
         }
 
     return {}
@@ -3793,7 +3809,7 @@ def page_hyperparameter_tuning():
                             with st.expander("🔍 Error Details"):
                                 st.code(traceback.format_exc())
 
-        elif opt_mode == "All Models":
+        elif opt_mode == "All Models (XGBoost + LSTM + ANN)":
             # PHASE 3: Optimize all three models sequentially
             st.markdown(f"### 🚀 Running {search_method} for All Models")
 
@@ -3874,6 +3890,8 @@ def page_hyperparameter_tuning():
 
                             elif search_method == "Random Search":
                                 param_distributions = get_param_distributions(model_type, cfg)
+                                # Use cfg fallback for n_iter in case variable not in scope
+                                _n_iter = cfg.get("tuning_n_iter", 20)
 
                                 with st.spinner(f"⏳ Optimizing {model_type}..."):
                                     results = run_random_search_optimization(
@@ -3883,10 +3901,13 @@ def page_hyperparameter_tuning():
                                         n_splits=n_splits,
                                         primary_metric=optimization_metric,
                                         param_distributions=param_distributions,
-                                        n_iter=n_iter
+                                        n_iter=_n_iter
                                     )
 
                             elif search_method == "Bayesian Optimization":
+                                # Use cfg fallback for n_iter in case variable not in scope
+                                _n_trials = cfg.get("tuning_n_iter", 30)
+
                                 with st.spinner(f"⏳ Optimizing {model_type}..."):
                                     results = run_bayesian_optimization(
                                         model_type=model_type,
@@ -3894,7 +3915,7 @@ def page_hyperparameter_tuning():
                                         y_train=y_train,
                                         n_splits=n_splits,
                                         primary_metric=optimization_metric,
-                                        n_trials=n_iter
+                                        n_trials=_n_trials
                                     )
 
                             # Store results
@@ -4121,117 +4142,221 @@ def page_hyperparameter_tuning():
                                         st.code(failed['traceback'])
 
     # Display "All Models" optimization results
-    elif opt_mode == "All Models":
+    elif opt_mode == "All Models (XGBoost + LSTM + ANN)":
         all_model_results = st.session_state.get("opt_all_models_results", {})
 
         if all_model_results:
             st.divider()
-            st.markdown("### 📊 All Models Comparison")
 
-            # Create comparison table with all metrics
-            comparison_data = []
-            for model_name, results in all_model_results.items():
-                all_scores = results['all_scores']
-                comparison_data.append({
-                    "Model": model_name,
-                    "RMSE": all_scores['RMSE'],
-                    "MAE": all_scores['MAE'],
-                    "MAPE": all_scores['MAPE'],
-                    "Accuracy": all_scores['Accuracy']
+            # =====================================================================
+            # PROFESSIONAL MODEL COMPARISON DASHBOARD
+            # =====================================================================
+
+            try:
+                # Create comparison data with validation
+                comparison_data = []
+                for model_name, results in all_model_results.items():
+                    if 'all_scores' not in results:
+                        st.warning(f"⚠️ Missing scores for {model_name}")
+                        continue
+                    all_scores = results['all_scores']
+                    # Validate scores are numeric and not NaN/Inf
+                    rmse = all_scores.get('RMSE', float('nan'))
+                    mae = all_scores.get('MAE', float('nan'))
+                    mape = all_scores.get('MAPE', float('nan'))
+                    accuracy = all_scores.get('Accuracy', float('nan'))
+
+                    comparison_data.append({
+                        "Model": model_name,
+                        "RMSE": rmse if pd.notna(rmse) and np.isfinite(rmse) else 999999,
+                        "MAE": mae if pd.notna(mae) and np.isfinite(mae) else 999999,
+                        "MAPE (%)": mape if pd.notna(mape) and np.isfinite(mape) else 999999,
+                        "Accuracy (%)": accuracy if pd.notna(accuracy) and np.isfinite(accuracy) else 0
+                    })
+
+                if len(comparison_data) == 0:
+                    st.error("❌ No valid model results to compare.")
+                    return
+
+                comparison_df = pd.DataFrame(comparison_data)
+
+                # Determine overall best model (based on number of wins)
+                best_rmse_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
+                best_mae_model = comparison_df.loc[comparison_df['MAE'].idxmin(), 'Model']
+                best_mape_model = comparison_df.loc[comparison_df['MAPE (%)'].idxmin(), 'Model']
+                best_accuracy_model = comparison_df.loc[comparison_df['Accuracy (%)'].idxmax(), 'Model']
+
+                # Count wins per model
+                wins = {}
+                for model in comparison_df['Model']:
+                    wins[model] = 0
+                wins[best_rmse_model] += 1
+                wins[best_mae_model] += 1
+                wins[best_mape_model] += 1
+                wins[best_accuracy_model] += 1
+
+                overall_best = max(wins, key=wins.get)
+
+                # =====================================================================
+                # HEADER: OVERALL WINNER
+                # =====================================================================
+                st.markdown(
+                f"""
+                <div style='
+                    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
+                    border: 2px solid rgba(34, 197, 94, 0.5);
+                    border-radius: 16px;
+                    padding: 1.5rem 2rem;
+                    margin-bottom: 2rem;
+                    text-align: center;
+                '>
+                    <div style='font-size: 2.5rem; margin-bottom: 0.5rem;'>🏆</div>
+                    <div style='font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem;'>Overall Best Model</div>
+                    <div style='font-size: 2rem; font-weight: 800; color: #22c55e;'>{overall_best}</div>
+                    <div style='font-size: 0.875rem; color: #64748b; margin-top: 0.5rem;'>Winner in {wins[overall_best]} of 4 metrics</div>
+                </div>
+                """,
+                    unsafe_allow_html=True
+                )
+
+                # =====================================================================
+                # SECTION 1: PERFORMANCE METRICS COMPARISON TABLE
+                # =====================================================================
+                st.markdown("### 📊 Performance Metrics Comparison")
+
+                # Styled comparison table with highlighting
+                def highlight_best_values(row):
+                    styles = [''] * len(row)
+                    model_col_idx = comparison_df.columns.get_loc('Model')
+
+                    # Highlight best RMSE (lowest)
+                    if row['Model'] == best_rmse_model:
+                        styles[comparison_df.columns.get_loc('RMSE')] = 'background-color: rgba(34, 197, 94, 0.3); font-weight: bold; color: #16a34a;'
+                    # Highlight best MAE (lowest)
+                    if row['Model'] == best_mae_model:
+                        styles[comparison_df.columns.get_loc('MAE')] = 'background-color: rgba(34, 197, 94, 0.3); font-weight: bold; color: #16a34a;'
+                    # Highlight best MAPE (lowest)
+                    if row['Model'] == best_mape_model:
+                        styles[comparison_df.columns.get_loc('MAPE (%)')] = 'background-color: rgba(34, 197, 94, 0.3); font-weight: bold; color: #16a34a;'
+                    # Highlight best Accuracy (highest)
+                    if row['Model'] == best_accuracy_model:
+                        styles[comparison_df.columns.get_loc('Accuracy (%)')] = 'background-color: rgba(34, 197, 94, 0.3); font-weight: bold; color: #16a34a;'
+                    # Highlight overall winner row
+                    if row['Model'] == overall_best:
+                        styles[model_col_idx] = 'background-color: rgba(234, 179, 8, 0.2); font-weight: bold;'
+                    return styles
+
+                styled_df = comparison_df.style.apply(highlight_best_values, axis=1).format({
+                    'RMSE': '{:.4f}',
+                    'MAE': '{:.4f}',
+                    'MAPE (%)': '{:.2f}',
+                    'Accuracy (%)': '{:.2f}'
                 })
 
-            comparison_df = pd.DataFrame(comparison_data)
+                st.dataframe(styled_df, use_container_width=True, hide_index=True, height=150)
 
-            # Display metrics in KPI cards for each model
-            st.markdown("#### 🏆 Performance Metrics by Model")
+                st.caption("🟢 Green = Best value for that metric | 🟡 Yellow = Overall winner")
 
-            # Display each model's results
-            for model_name in all_model_results.keys():
-                with st.expander(f"📈 {model_name} Results", expanded=True):
-                    results = all_model_results[model_name]
-                    all_scores = results['all_scores']
+                # =====================================================================
+                # SECTION 2: METRIC WINNERS SUMMARY
+                # =====================================================================
+                st.markdown("### 🥇 Best Model by Metric")
 
-                    # Two columns: parameters and metrics
-                    col1, col2 = st.columns([1, 2])
+                metric_cols = st.columns(4)
 
-                    with col1:
-                        st.markdown("**Best Parameters**")
-                        best_params_df = pd.DataFrame(
+                with metric_cols[0]:
+                    rmse_val = comparison_df[comparison_df['Model'] == best_rmse_model]['RMSE'].values[0]
+                    st.markdown(
+                        f"""
+                        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1));
+                                    border-radius: 12px; padding: 1rem; text-align: center; border: 1px solid rgba(59, 130, 246, 0.3);'>
+                            <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;'>Best RMSE</div>
+                            <div style='font-size: 1.25rem; font-weight: 700; color: #3b82f6; margin: 0.25rem 0;'>{best_rmse_model}</div>
+                            <div style='font-size: 1rem; color: #64748b;'>{rmse_val:.4f}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with metric_cols[1]:
+                    mae_val = comparison_df[comparison_df['Model'] == best_mae_model]['MAE'].values[0]
+                    st.markdown(
+                        f"""
+                        <div style='background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(6, 182, 212, 0.1));
+                                    border-radius: 12px; padding: 1rem; text-align: center; border: 1px solid rgba(34, 211, 238, 0.3);'>
+                            <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;'>Best MAE</div>
+                            <div style='font-size: 1.25rem; font-weight: 700; color: #22d3ee; margin: 0.25rem 0;'>{best_mae_model}</div>
+                            <div style='font-size: 1rem; color: #64748b;'>{mae_val:.4f}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with metric_cols[2]:
+                    mape_val = comparison_df[comparison_df['Model'] == best_mape_model]['MAPE (%)'].values[0]
+                    st.markdown(
+                        f"""
+                        <div style='background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.1));
+                                    border-radius: 12px; padding: 1rem; text-align: center; border: 1px solid rgba(251, 191, 36, 0.3);'>
+                            <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;'>Best MAPE</div>
+                            <div style='font-size: 1.25rem; font-weight: 700; color: #fbbf24; margin: 0.25rem 0;'>{best_mape_model}</div>
+                            <div style='font-size: 1rem; color: #64748b;'>{mape_val:.2f}%</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with metric_cols[3]:
+                    acc_val = comparison_df[comparison_df['Model'] == best_accuracy_model]['Accuracy (%)'].values[0]
+                    st.markdown(
+                        f"""
+                        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(22, 163, 74, 0.1));
+                                    border-radius: 12px; padding: 1rem; text-align: center; border: 1px solid rgba(34, 197, 94, 0.3);'>
+                            <div style='font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;'>Best Accuracy</div>
+                            <div style='font-size: 1.25rem; font-weight: 700; color: #22c55e; margin: 0.25rem 0;'>{best_accuracy_model}</div>
+                            <div style='font-size: 1rem; color: #64748b;'>{acc_val:.2f}%</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                # =====================================================================
+                # SECTION 3: BEST PARAMETERS PER MODEL
+                # =====================================================================
+                st.markdown("### ⚙️ Best Hyperparameters")
+
+                param_cols = st.columns(len(all_model_results))
+
+                for idx, (model_name, results) in enumerate(all_model_results.items()):
+                    with param_cols[idx]:
+                        is_winner = model_name == overall_best
+                        border_color = "rgba(34, 197, 94, 0.5)" if is_winner else "rgba(100, 116, 139, 0.3)"
+                        header_bg = "rgba(34, 197, 94, 0.1)" if is_winner else "rgba(100, 116, 139, 0.1)"
+
+                        # Model header
+                        winner_badge = " 🏆" if is_winner else ""
+                        st.markdown(
+                            f"""
+                            <div style='background: {header_bg}; border: 1px solid {border_color};
+                                        border-radius: 12px 12px 0 0; padding: 0.75rem; text-align: center;'>
+                                <div style='font-weight: 700; font-size: 1rem;'>{model_name}{winner_badge}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                        # Parameters table
+                        params_df = pd.DataFrame(
                             list(results['best_params'].items()),
                             columns=['Parameter', 'Value']
                         )
-                        st.dataframe(best_params_df, use_container_width=True, hide_index=True)
+                        st.dataframe(params_df, use_container_width=True, hide_index=True, height=200)
 
-                    with col2:
-                        st.markdown("**Performance Metrics**")
-                        metric_cols = st.columns(4)
-                        with metric_cols[0]:
-                            st.plotly_chart(
-                                _create_kpi_indicator("RMSE", all_scores['RMSE'], "", PRIMARY_COLOR),
-                                use_container_width=True,
-                                key=f"all_rmse_{model_name}"
-                            )
-                        with metric_cols[1]:
-                            st.plotly_chart(
-                                _create_kpi_indicator("MAE", all_scores['MAE'], "", SECONDARY_COLOR),
-                                use_container_width=True,
-                                key=f"all_mae_{model_name}"
-                            )
-                        with metric_cols[2]:
-                            st.plotly_chart(
-                                _create_kpi_indicator("MAPE", all_scores['MAPE'], "%", WARNING_COLOR),
-                                use_container_width=True,
-                                key=f"all_mape_{model_name}"
-                            )
-                        with metric_cols[3]:
-                            st.plotly_chart(
-                                _create_kpi_indicator("Accuracy", all_scores['Accuracy'], "%", SUCCESS_COLOR),
-                                use_container_width=True,
-                                key=f"all_acc_{model_name}"
-                            )
-
-            # Overall comparison table
-            st.markdown("#### 📋 Side-by-Side Comparison")
-
-            # Find best model for each metric
-            best_rmse_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
-            best_mae_model = comparison_df.loc[comparison_df['MAE'].idxmin(), 'Model']
-            best_mape_model = comparison_df.loc[comparison_df['MAPE'].idxmin(), 'Model']
-            best_accuracy_model = comparison_df.loc[comparison_df['Accuracy'].idxmax(), 'Model']
-
-            # Format comparison table
-            def highlight_best(row):
-                styles = [''] * len(row)
-                if row['Model'] == best_rmse_model:
-                    styles[comparison_df.columns.get_loc('RMSE')] = 'background-color: rgba(34, 197, 94, 0.2)'
-                if row['Model'] == best_mae_model:
-                    styles[comparison_df.columns.get_loc('MAE')] = 'background-color: rgba(34, 197, 94, 0.2)'
-                if row['Model'] == best_mape_model:
-                    styles[comparison_df.columns.get_loc('MAPE')] = 'background-color: rgba(34, 197, 94, 0.2)'
-                if row['Model'] == best_accuracy_model:
-                    styles[comparison_df.columns.get_loc('Accuracy')] = 'background-color: rgba(34, 197, 94, 0.2)'
-                return styles
-
-            styled_df = comparison_df.style.apply(highlight_best, axis=1).format({
-                'RMSE': '{:.4f}',
-                'MAE': '{:.4f}',
-                'MAPE': '{:.2f}',
-                'Accuracy': '{:.2f}'
-            })
-
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
-            # Best model summary
-            st.markdown("#### 🥇 Best Models by Metric")
-            summary_cols = st.columns(4)
-            with summary_cols[0]:
-                st.metric("Best RMSE", best_rmse_model, f"{comparison_df[comparison_df['Model'] == best_rmse_model]['RMSE'].values[0]:.4f}")
-            with summary_cols[1]:
-                st.metric("Best MAE", best_mae_model, f"{comparison_df[comparison_df['Model'] == best_mae_model]['MAE'].values[0]:.4f}")
-            with summary_cols[2]:
-                st.metric("Best MAPE", best_mape_model, f"{comparison_df[comparison_df['Model'] == best_mape_model]['MAPE'].values[0]:.2f}%")
-            with summary_cols[3]:
-                st.metric("Best Accuracy", best_accuracy_model, f"{comparison_df[comparison_df['Model'] == best_accuracy_model]['Accuracy'].values[0]:.2f}%")
+            except Exception as e:
+                st.error(f"❌ Error displaying comparison results: {str(e)}")
+                import traceback
+                with st.expander("🔍 Error Details"):
+                    st.code(traceback.format_exc())
 
     # Debug panel
     debug_panel()

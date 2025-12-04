@@ -11,7 +11,7 @@ from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
 )
-from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
 
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
@@ -68,6 +68,7 @@ def page_dashboard():
     inject_sidebar_style()
     render_sidebar_brand()
     add_logout_button()
+    render_cache_management()
 
     # Enhanced Dashboard Styling - Power BI Inspired
     st.markdown("""

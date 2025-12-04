@@ -16,7 +16,8 @@ from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BODY_TEXT,
 )
-from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
+from app_core.cache import save_to_cache, get_cache_manager
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -606,6 +607,7 @@ def page_data_preparation_studio():
     inject_sidebar_style()
     render_sidebar_brand()
     add_logout_button()
+    render_cache_management()
 
     # Apply fluorescent effects + Custom Tab Styling
     st.markdown(f"""
@@ -1134,6 +1136,14 @@ def page_data_preparation_studio():
                             use_aggregated_categories=use_aggregated_categories
                         )
                         st.session_state["processed_df"] = processed
+
+                        # Auto-save to cache for persistence across app restarts
+                        cache_mgr = get_cache_manager()
+                        data_hash = cache_mgr._compute_data_hash(md)
+                        save_to_cache("merged_data", md, data_hash)
+                        save_to_cache("processed_df", processed, data_hash)
+                        save_to_cache("aggregated_categories_enabled", use_aggregated_categories, data_hash)
+
                         st.markdown(
                             f"""
                             <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05)); border-radius: 16px; border: 1px solid rgba(34, 197, 94, 0.2); margin: 1.5rem 0;'>
