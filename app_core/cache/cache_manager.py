@@ -13,6 +13,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+# Check if pyarrow is available for parquet support
+try:
+    import pyarrow  # noqa: F401
+    HAS_PYARROW = True
+except ImportError:
+    HAS_PYARROW = False
+
 # Default cache directory
 DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / ".cache"
 
@@ -111,19 +118,22 @@ class CacheManager:
             if value is None:
                 return False
 
-            # Use parquet for DataFrames (faster, smaller)
-            if isinstance(value, pd.DataFrame):
+            # Use parquet for DataFrames if pyarrow is available (faster, smaller)
+            # Fall back to pickle if pyarrow is not installed
+            if isinstance(value, pd.DataFrame) and HAS_PYARROW:
                 path = self._get_parquet_path(key)
                 value.to_parquet(path, index=True)
+                file_type = "parquet"
             else:
                 path = self._get_cache_path(key)
                 with open(path, "wb") as f:
                     pickle.dump(value, f)
+                file_type = "pickle"
 
             # Update metadata
             self._metadata[key] = {
                 "path": str(path),
-                "type": "parquet" if isinstance(value, pd.DataFrame) else "pickle",
+                "type": file_type,
                 "saved_at": datetime.now().isoformat(),
                 "data_hash": data_hash,
             }
@@ -154,7 +164,7 @@ class CacheManager:
             if not path.exists():
                 return None
 
-            if meta["type"] == "parquet":
+            if meta["type"] == "parquet" and HAS_PYARROW:
                 return pd.read_parquet(path)
             else:
                 with open(path, "rb") as f:
