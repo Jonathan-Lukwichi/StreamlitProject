@@ -85,7 +85,9 @@ class SupabaseService:
 
     def fetch_all(self, order_by: Optional[str] = None, ascending: bool = True) -> pd.DataFrame:
         """
-        Fetch all records from the table.
+        Fetch ALL records from the table (handles Supabase 1000 row limit).
+
+        Uses pagination to fetch all records when table has more than 1000 rows.
 
         Args:
             order_by: Column to order by (optional)
@@ -98,15 +100,31 @@ class SupabaseService:
             return pd.DataFrame()
 
         try:
-            query = self.client.table(self.table_name).select("*")
+            all_data = []
+            batch_size = 1000
+            offset = 0
 
-            if order_by:
-                query = query.order(order_by, desc=not ascending)
+            while True:
+                query = self.client.table(self.table_name).select("*")
 
-            response = query.execute()
+                if order_by:
+                    query = query.order(order_by, desc=not ascending)
 
-            if response.data:
-                return pd.DataFrame(response.data)
+                # Fetch batch with range
+                query = query.range(offset, offset + batch_size - 1)
+                response = query.execute()
+
+                if response.data:
+                    all_data.extend(response.data)
+                    # If we got fewer than batch_size, we've reached the end
+                    if len(response.data) < batch_size:
+                        break
+                    offset += batch_size
+                else:
+                    break
+
+            if all_data:
+                return pd.DataFrame(all_data)
             return pd.DataFrame()
 
         except Exception as e:
@@ -120,7 +138,7 @@ class SupabaseService:
         end_date: str
     ) -> pd.DataFrame:
         """
-        Fetch records within a date range.
+        Fetch ALL records within a date range (handles Supabase 1000 row limit).
 
         Args:
             date_column: Name of the date column
@@ -134,17 +152,31 @@ class SupabaseService:
             return pd.DataFrame()
 
         try:
-            response = (
-                self.client.table(self.table_name)
-                .select("*")
-                .gte(date_column, start_date)
-                .lte(date_column, end_date)
-                .order(date_column)
-                .execute()
-            )
+            all_data = []
+            batch_size = 1000
+            offset = 0
 
-            if response.data:
-                return pd.DataFrame(response.data)
+            while True:
+                response = (
+                    self.client.table(self.table_name)
+                    .select("*")
+                    .gte(date_column, start_date)
+                    .lte(date_column, end_date)
+                    .order(date_column)
+                    .range(offset, offset + batch_size - 1)
+                    .execute()
+                )
+
+                if response.data:
+                    all_data.extend(response.data)
+                    if len(response.data) < batch_size:
+                        break
+                    offset += batch_size
+                else:
+                    break
+
+            if all_data:
+                return pd.DataFrame(all_data)
             return pd.DataFrame()
 
         except Exception as e:
