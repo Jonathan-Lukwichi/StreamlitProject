@@ -341,62 +341,72 @@ if staff_df is not None and not staff_df.empty:
     st.divider()
     st.markdown("### 📊 Staff Data Overview")
 
-    # Key metrics
+    # Key metrics - using MIN-MAX ranges for staff (more meaningful than decimals)
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
-        avg_doctors = staff_df["Doctors_on_Duty"].mean() if "Doctors_on_Duty" in staff_df.columns else 0
-        st.markdown(f"""
-        <div class="staff-metric-card">
-            <div class="staff-metric-value">{avg_doctors:.1f}</div>
-            <div class="staff-metric-label">Avg Doctors/Day</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if "Doctors_on_Duty" in staff_df.columns:
+            min_doc = int(staff_df["Doctors_on_Duty"].min())
+            max_doc = int(staff_df["Doctors_on_Duty"].max())
+            st.markdown(f"""
+            <div class="staff-metric-card">
+                <div class="staff-metric-value">{min_doc}-{max_doc}</div>
+                <div class="staff-metric-label">Doctors/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col2:
-        avg_nurses = staff_df["Nurses_on_Duty"].mean() if "Nurses_on_Duty" in staff_df.columns else 0
-        st.markdown(f"""
-        <div class="staff-metric-card">
-            <div class="staff-metric-value">{avg_nurses:.1f}</div>
-            <div class="staff-metric-label">Avg Nurses/Day</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if "Nurses_on_Duty" in staff_df.columns:
+            min_nurse = int(staff_df["Nurses_on_Duty"].min())
+            max_nurse = int(staff_df["Nurses_on_Duty"].max())
+            st.markdown(f"""
+            <div class="staff-metric-card">
+                <div class="staff-metric-value">{min_nurse}-{max_nurse}</div>
+                <div class="staff-metric-label">Nurses/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col3:
-        avg_support = staff_df["Support_Staff_on_Duty"].mean() if "Support_Staff_on_Duty" in staff_df.columns else 0
-        st.markdown(f"""
-        <div class="staff-metric-card">
-            <div class="staff-metric-value">{avg_support:.1f}</div>
-            <div class="staff-metric-label">Avg Support Staff</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if "Support_Staff_on_Duty" in staff_df.columns:
+            min_support = int(staff_df["Support_Staff_on_Duty"].min())
+            max_support = int(staff_df["Support_Staff_on_Duty"].max())
+            st.markdown(f"""
+            <div class="staff-metric-card">
+                <div class="staff-metric-value">{min_support}-{max_support}</div>
+                <div class="staff-metric-label">Support Staff</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col4:
-        avg_overtime = staff_df["Overtime_Hours"].mean() if "Overtime_Hours" in staff_df.columns else 0
-        st.markdown(f"""
-        <div class="staff-metric-card">
-            <div class="staff-metric-value">{avg_overtime:.1f}h</div>
-            <div class="staff-metric-label">Avg Overtime</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if "Overtime_Hours" in staff_df.columns:
+            total_overtime = int(staff_df["Overtime_Hours"].sum())
+            st.markdown(f"""
+            <div class="staff-metric-card">
+                <div class="staff-metric-value">{total_overtime:,}h</div>
+                <div class="staff-metric-label">Total Overtime</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col5:
-        shortage_pct = (staff_df["Staff_Shortage_Flag"].mean() * 100) if "Staff_Shortage_Flag" in staff_df.columns else 0
-        st.markdown(f"""
-        <div class="staff-metric-card">
-            <div class="staff-metric-value">{shortage_pct:.1f}%</div>
-            <div class="staff-metric-label">Shortage Days</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if "Staff_Shortage_Flag" in staff_df.columns:
+            shortage_days = int(staff_df["Staff_Shortage_Flag"].sum())
+            total_days = len(staff_df)
+            st.markdown(f"""
+            <div class="staff-metric-card">
+                <div class="staff-metric-value">{shortage_days}/{total_days}</div>
+                <div class="staff-metric-label">Shortage Days</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # Data preview
-    with st.expander("📋 View Data", expanded=False):
-        st.dataframe(staff_df, use_container_width=True, height=400)
+    # Data preview - only first 10 rows
+    with st.expander("📋 Data Preview (First 10 Rows)", expanded=False):
+        st.dataframe(staff_df.head(10), use_container_width=True)
+        st.caption(f"Showing 10 of {len(staff_df):,} total records")
 
-        # Download option
+        # Download option for full dataset
         csv = staff_df.to_csv(index=False)
         st.download_button(
-            label="📥 Download as CSV",
+            label="📥 Download Full Dataset as CSV",
             data=csv,
             file_name="staff_scheduling_data.csv",
             mime="text/csv"
