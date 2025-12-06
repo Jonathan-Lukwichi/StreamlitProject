@@ -89,9 +89,16 @@ class StaffSchedulingService(SupabaseService):
             if "Date" in df.columns:
                 df["Date"] = pd.to_datetime(df["Date"])
 
-            # Drop Supabase-specific columns if present
-            cols_to_drop = ["id", "created_at", "updated_at"]
+            # Drop Supabase-specific columns (UUID, timestamps, etc.)
+            cols_to_drop = ["id", "id_numeric", "created_at", "updated_at"]
             df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors="ignore")
+
+            # Convert boolean Staff_Shortage_Flag to integer (1/0)
+            if "Staff_Shortage_Flag" in df.columns:
+                df["Staff_Shortage_Flag"] = df["Staff_Shortage_Flag"].astype(int)
+
+            # Add simple integer ID column (1, 2, 3, ...)
+            df.insert(0, "ID", range(1, len(df) + 1))
 
             return df
 
