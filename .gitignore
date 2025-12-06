@@ -33,7 +33,8 @@ forecast_env_py311/
 .streamlit/
 
 # Data Files (exclude large datasets and sensitive data)
-data/
+# Note: /data/ excludes root data folder, not app_core/data/
+/data/
 *.csv
 *.xlsx
 *.xls
