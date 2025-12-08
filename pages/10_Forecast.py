@@ -184,20 +184,49 @@ def detect_date_column(df: pd.DataFrame) -> Optional[str]:
 def detect_target_columns(df: pd.DataFrame) -> List[str]:
     """
     Auto-detect target columns in any dataset.
-    Looks for numeric columns that could be forecasted.
+    Prioritizes Target_1 to Target_7 columns for forecasting.
     """
     targets = []
 
-    # Common target patterns
-    target_patterns = [
-        "target", "arrival", "patient", "count", "total", "demand",
-        "sales", "revenue", "quantity", "volume", "value", "amount"
+    # -------------------------------------------------------------------------
+    # PRIORITY 1: Look for Target_1 through Target_7 (main forecast targets)
+    # -------------------------------------------------------------------------
+    main_targets = []
+    for i in range(1, 8):  # Target_1 to Target_7
+        target_col = f"Target_{i}"
+        if target_col in df.columns and pd.api.types.is_numeric_dtype(df[target_col]):
+            main_targets.append(target_col)
+
+    # If we found Target_1 to Target_7, return only those
+    if main_targets:
+        return main_targets
+
+    # -------------------------------------------------------------------------
+    # PRIORITY 2: Look for Total_Arrivals or similar main target
+    # -------------------------------------------------------------------------
+    main_arrival_cols = ["Total_Arrivals", "total_arrivals", "Arrivals", "arrivals"]
+    for col in main_arrival_cols:
+        if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
+            targets.append(col)
+
+    if targets:
+        return targets
+
+    # -------------------------------------------------------------------------
+    # PRIORITY 3: Fallback - general target detection
+    # -------------------------------------------------------------------------
+    # Patterns to EXCLUDE (not main targets)
+    exclude_patterns = [
+        "id", "index", "lag", "rolling", "diff", "feature",
+        "precipitation", "temp", "humidity", "wind", "weather",
+        "_1", "_2", "_3", "_4", "_5", "_6", "_7", "_8", "_9",  # Sub-columns like CARDIAC_1
+        "day_of", "month", "year", "week", "quarter", "is_",  # Date features
     ]
 
-    # Clinical category patterns (for healthcare datasets)
-    clinical_patterns = [
-        "respiratory", "cardiac", "trauma", "gastrointestinal",
-        "infectious", "neurological", "other"
+    # Patterns that ARE targets
+    target_patterns = [
+        "target", "arrival", "patient", "count", "demand",
+        "sales", "revenue", "quantity", "volume"
     ]
 
     for col in df.columns:
@@ -207,24 +236,22 @@ def detect_target_columns(df: pd.DataFrame) -> List[str]:
         if not pd.api.types.is_numeric_dtype(df[col]):
             continue
 
-        # Check for target patterns
+        # Skip if matches exclude patterns
+        if any(pattern in col_lower for pattern in exclude_patterns):
+            continue
+
+        # Include if matches target patterns
         if any(pattern in col_lower for pattern in target_patterns):
             targets.append(col)
-        elif any(pattern in col_lower for pattern in clinical_patterns):
-            targets.append(col)
-        # Check for Target_N pattern
-        elif col_lower.startswith("target_"):
-            targets.append(col)
 
-    # If no targets found, use all numeric columns except obvious features
+    # If still no targets, use numeric columns with basic filtering
     if not targets:
-        exclude_patterns = ["id", "index", "lag", "rolling", "diff", "feature"]
         for col in df.select_dtypes(include=[np.number]).columns:
             col_lower = col.lower()
             if not any(pattern in col_lower for pattern in exclude_patterns):
                 targets.append(col)
 
-    return targets[:10]  # Limit to 10 targets
+    return targets[:7]  # Limit to 7 targets (matching Target_1 to Target_7)
 
 
 # =============================================================================
