@@ -32,3 +32,6 @@ prophet>=1.1.5
 
 # Database
 supabase>=2.0.0
+
+# Optimization
+pulp>=2.7.0  # Linear/Mixed-Integer Programming solver

@@ -1,14 +1,17 @@
 # =============================================================================
 # 11_Staff_Scheduling_Optimization.py
-# Staff Scheduling Optimization with Supabase Integration
-# Fetches staff data from Supabase and integrates with forecasting outputs
+# Staff Scheduling Optimization with MILP Solver
+# Implements Deterministic MILP with Clinical Category Integration
 # =============================================================================
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Dict, List
 
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
@@ -22,8 +25,29 @@ from app_core.data.staff_scheduling_service import (
     check_supabase_connection
 )
 
+# Import optimization module
+try:
+    from app_core.optimization import (
+        CostParameters,
+        StaffingRatios,
+        DEFAULT_COST_PARAMS,
+        DEFAULT_STAFFING_RATIOS,
+        CLINICAL_CATEGORIES,
+        CATEGORY_PRIORITIES,
+        StaffSchedulingMILP,
+        OptimizationResult,
+        solve_staff_scheduling,
+        SolutionAnalyzer,
+        analyze_historical_costs,
+        compare_before_after,
+    )
+    OPTIMIZATION_AVAILABLE = True
+except ImportError as e:
+    OPTIMIZATION_AVAILABLE = False
+    OPTIMIZATION_ERROR = str(e)
+
 # ============================================================================
-# AUTHENTICATION CHECK - USER OR ADMIN
+# AUTHENTICATION CHECK
 # ============================================================================
 from app_core.auth.authentication import require_authentication
 from app_core.auth.navigation import configure_sidebar_navigation, add_logout_button
@@ -40,90 +64,67 @@ apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
 
-# Fluorescent effects
+# =============================================================================
+# CUSTOM CSS FOR OPTIMIZATION PAGE
+# =============================================================================
 st.markdown("""
 <style>
-/* ========================================
-   FLUORESCENT EFFECTS FOR STAFF SCHEDULING
-   ======================================== */
-
-@keyframes float-orb {
-    0%, 100% {
-        transform: translate(0, 0) scale(1);
-        opacity: 0.25;
-    }
-    50% {
-        transform: translate(30px, -30px) scale(1.05);
-        opacity: 0.35;
-    }
+/* Optimization cards */
+.opt-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
 }
 
-.fluorescent-orb {
-    position: fixed;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 0;
-    filter: blur(70px);
+.opt-card-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #60a5fa;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.orb-1 {
-    width: 350px;
-    height: 350px;
-    background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
-    top: 15%;
-    right: 20%;
-    animation: float-orb 25s ease-in-out infinite;
+.opt-metric {
+    text-align: center;
+    padding: 0.75rem;
 }
 
-.orb-2 {
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
-    bottom: 20%;
-    left: 15%;
-    animation: float-orb 30s ease-in-out infinite;
-    animation-delay: 5s;
+.opt-metric-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #22c55e;
 }
 
-@keyframes sparkle {
-    0%, 100% {
-        opacity: 0;
-        transform: scale(0);
-    }
-    50% {
-        opacity: 0.6;
-        transform: scale(1);
-    }
+.opt-metric-value.negative {
+    color: #ef4444;
 }
 
-.sparkle {
-    position: fixed;
-    width: 3px;
-    height: 3px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 2;
-    animation: sparkle 3s ease-in-out infinite;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+.opt-metric-value.neutral {
+    color: #60a5fa;
 }
 
-.sparkle-1 { top: 25%; left: 35%; animation-delay: 0s; }
-.sparkle-2 { top: 65%; left: 70%; animation-delay: 1s; }
-.sparkle-3 { top: 45%; left: 15%; animation-delay: 2s; }
-
-@media (max-width: 768px) {
-    .fluorescent-orb {
-        width: 200px !important;
-        height: 200px !important;
-        filter: blur(50px);
-    }
-    .sparkle {
-        display: none;
-    }
+.opt-metric-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
 }
 
-/* Staff metrics cards */
+/* Comparison table */
+.comparison-improved {
+    color: #22c55e;
+    font-weight: 600;
+}
+
+.comparison-worse {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* Staff metric cards */
 .staff-metric-card {
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
     border: 1px solid rgba(59, 130, 246, 0.3);
@@ -171,35 +172,49 @@ st.markdown("""
     color: #ef4444;
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
+
+/* Category badges */
+.category-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0.125rem;
+}
+
+.category-high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.category-medium { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.category-low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
 </style>
-
-<!-- Fluorescent Floating Orbs -->
-<div class="fluorescent-orb orb-1"></div>
-<div class="fluorescent-orb orb-2"></div>
-
-<!-- Sparkle Particles -->
-<div class="sparkle sparkle-1"></div>
-<div class="sparkle sparkle-2"></div>
-<div class="sparkle sparkle-3"></div>
 """, unsafe_allow_html=True)
 
-# Premium Hero Header
+# =============================================================================
+# HEADER
+# =============================================================================
 st.markdown(
     f"""
     <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
       <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>👥</div>
       <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Staff Scheduling Optimization</h1>
       <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
-        Optimize hospital staff schedules based on demand forecasts, availability, and skill requirements with advanced scheduling algorithms
+        Deterministic MILP Optimization with Clinical Category Integration<br>
+        <span style='color: #94a3b8; font-size: 0.9rem;'>Minimize costs while meeting patient demand across all clinical categories</span>
       </p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# -------------------------------------------------------------
+# Check if optimization module is available
+if not OPTIMIZATION_AVAILABLE:
+    st.error(f"Optimization module not available: {OPTIMIZATION_ERROR}")
+    st.info("Please install PuLP: `pip install pulp`")
+    st.stop()
+
+# =============================================================================
 # SUPABASE CONNECTION STATUS
-# -------------------------------------------------------------
+# =============================================================================
 is_connected = check_supabase_connection()
 
 col1, col2 = st.columns([3, 1])
@@ -215,345 +230,765 @@ with col2:
             unsafe_allow_html=True
         )
 
-# -------------------------------------------------------------
-# DATA SOURCE SELECTION
-# -------------------------------------------------------------
-st.markdown("### Data Source")
+# =============================================================================
+# TABS FOR ORGANIZATION
+# =============================================================================
+tab_data, tab_config, tab_optimize, tab_results = st.tabs([
+    "📊 Data Source",
+    "⚙️ Configuration",
+    "🚀 Optimize",
+    "📈 Results & Comparison"
+])
 
-data_source = st.radio(
-    "Select data source:",
-    ["🔗 Supabase (Cloud Database)", "📂 Upload File (CSV/Excel)"],
-    horizontal=True,
-    index=0 if is_connected else 1
-)
+# Initialize session state
+if "staff_df" not in st.session_state:
+    st.session_state["staff_df"] = None
+if "optimization_result" not in st.session_state:
+    st.session_state["optimization_result"] = None
+if "historical_analysis" not in st.session_state:
+    st.session_state["historical_analysis"] = None
+if "cost_params" not in st.session_state:
+    st.session_state["cost_params"] = DEFAULT_COST_PARAMS
+if "staffing_ratios" not in st.session_state:
+    st.session_state["staffing_ratios"] = DEFAULT_STAFFING_RATIOS
 
-staff_df = None
+# =============================================================================
+# TAB 1: DATA SOURCE
+# =============================================================================
+with tab_data:
+    st.markdown("### 📊 Staff Data Source")
 
-if "Supabase" in data_source:
-    # ===== SUPABASE DATA FETCH =====
-    if is_connected:
-        with st.expander("📊 Supabase Data Options", expanded=True):
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                fetch_mode = st.selectbox(
-                    "Fetch mode",
-                    ["All Data", "Date Range", "Latest N Days"]
-                )
-
-            with col2:
-                if fetch_mode == "Date Range":
-                    start_date = st.date_input("Start date", date.today() - timedelta(days=365))
-                elif fetch_mode == "Latest N Days":
-                    n_days = st.number_input("Number of days", min_value=7, max_value=365, value=90)
-                else:
-                    st.info("Fetching all available data")
-
-            with col3:
-                if fetch_mode == "Date Range":
-                    end_date = st.date_input("End date", date.today())
-                else:
-                    st.empty()
-
-            if st.button("🔄 Fetch Data from Supabase", type="primary"):
-                with st.spinner("Fetching data from Supabase..."):
-                    service = StaffSchedulingService()
-
-                    if fetch_mode == "All Data":
-                        staff_df = service.fetch_staff_data()
-                    elif fetch_mode == "Date Range":
-                        staff_df = service.fetch_staff_data(start_date, end_date)
-                    else:  # Latest N Days
-                        staff_df = pd.DataFrame(service.get_latest_records(n_days))
-                        if not staff_df.empty:
-                            # Rename columns after fetch
-                            column_mapping = {
-                                "date": "Date",
-                                "doctors_on_duty": "Doctors_on_Duty",
-                                "nurses_on_duty": "Nurses_on_Duty",
-                                "support_staff_on_duty": "Support_Staff_on_Duty",
-                                "overtime_hours": "Overtime_Hours",
-                                "average_shift_length_hours": "Average_Shift_Length_Hours",
-                                "staff_shortage_flag": "Staff_Shortage_Flag",
-                                "staff_utilization_rate": "Staff_Utilization_Rate"
-                            }
-                            staff_df = staff_df.rename(columns=column_mapping)
-
-                    if staff_df is not None and not staff_df.empty:
-                        st.session_state["staff_roster_df"] = staff_df
-                        st.success(f"✅ Loaded {len(staff_df)} records from Supabase")
-                    else:
-                        st.warning("No data found in Supabase. The table might be empty.")
-
-        # Load from session state if available
-        if "staff_roster_df" in st.session_state:
-            staff_df = st.session_state["staff_roster_df"]
-    else:
-        st.warning(
-            "⚠️ Supabase is not connected. Please configure your credentials in `.streamlit/secrets.toml`:\n\n"
-            "```toml\n"
-            "[supabase]\n"
-            'url = "https://your-project.supabase.co"\n'
-            'key = "your-anon-key"\n'
-            "```"
-        )
-
-else:
-    # ===== FILE UPLOAD FALLBACK =====
-    uploaded_file = st.file_uploader(
-        "📂 Upload staff roster (CSV or Excel)",
-        type=["csv", "xlsx"]
+    data_source = st.radio(
+        "Select data source:",
+        ["🔗 Supabase (Cloud Database)", "📂 Upload File (CSV/Excel)"],
+        horizontal=True,
+        index=0 if is_connected else 1
     )
 
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.endswith(".csv"):
-                staff_df = pd.read_csv(uploaded_file)
-            else:
-                staff_df = pd.read_excel(uploaded_file)
+    staff_df = None
 
-            st.session_state["staff_roster_df"] = staff_df
-            st.success(f"✅ Loaded {len(staff_df)} records from file")
+    if "Supabase" in data_source:
+        if is_connected:
+            with st.expander("📊 Supabase Data Options", expanded=True):
+                col1, col2, col3 = st.columns(3)
 
-            # Option to upload to Supabase
-            if is_connected:
-                st.markdown("---")
-                st.markdown("**💾 Save to Supabase?**")
-                col1, col2 = st.columns(2)
                 with col1:
-                    replace_existing = st.checkbox("Replace existing data", value=False)
+                    fetch_mode = st.selectbox(
+                        "Fetch mode",
+                        ["All Data", "Date Range", "Latest N Days"]
+                    )
+
                 with col2:
-                    if st.button("Upload to Supabase"):
+                    if fetch_mode == "Date Range":
+                        start_date = st.date_input("Start date", date.today() - timedelta(days=365))
+                    elif fetch_mode == "Latest N Days":
+                        n_days = st.number_input("Number of days", min_value=7, max_value=365, value=90)
+                    else:
+                        st.info("Fetching all available data")
+
+                with col3:
+                    if fetch_mode == "Date Range":
+                        end_date = st.date_input("End date", date.today())
+
+                if st.button("🔄 Fetch Data from Supabase", type="primary"):
+                    with st.spinner("Fetching data from Supabase..."):
                         service = StaffSchedulingService()
-                        if service.upload_dataframe(staff_df, replace_existing):
-                            st.success("✅ Data uploaded to Supabase successfully!")
+
+                        if fetch_mode == "All Data":
+                            staff_df = service.fetch_staff_data()
+                        elif fetch_mode == "Date Range":
+                            staff_df = service.fetch_staff_data(start_date, end_date)
                         else:
-                            st.error("Failed to upload data to Supabase")
-        except Exception as e:
-            st.error(f"Error loading file: {e}")
-    elif "staff_roster_df" in st.session_state:
-        staff_df = st.session_state["staff_roster_df"]
+                            staff_df = pd.DataFrame(service.get_latest_records(n_days))
+                            if not staff_df.empty:
+                                column_mapping = {
+                                    "date": "Date",
+                                    "doctors_on_duty": "Doctors_on_Duty",
+                                    "nurses_on_duty": "Nurses_on_Duty",
+                                    "support_staff_on_duty": "Support_Staff_on_Duty",
+                                    "overtime_hours": "Overtime_Hours",
+                                    "average_shift_length_hours": "Average_Shift_Length_Hours",
+                                    "staff_shortage_flag": "Staff_Shortage_Flag",
+                                    "staff_utilization_rate": "Staff_Utilization_Rate"
+                                }
+                                staff_df = staff_df.rename(columns=column_mapping)
 
-# -------------------------------------------------------------
-# DISPLAY DATA & STATISTICS
-# -------------------------------------------------------------
-if staff_df is not None and not staff_df.empty:
+                        if staff_df is not None and not staff_df.empty:
+                            st.session_state["staff_df"] = staff_df
+                            st.success(f"✅ Loaded {len(staff_df)} records from Supabase")
+                        else:
+                            st.warning("No data found in Supabase.")
+
+            if "staff_df" in st.session_state and st.session_state["staff_df"] is not None:
+                staff_df = st.session_state["staff_df"]
+        else:
+            st.warning("⚠️ Supabase is not connected. Please configure credentials.")
+
+    else:
+        uploaded_file = st.file_uploader("📂 Upload staff roster (CSV or Excel)", type=["csv", "xlsx"])
+
+        if uploaded_file is not None:
+            try:
+                if uploaded_file.name.endswith(".csv"):
+                    staff_df = pd.read_csv(uploaded_file)
+                else:
+                    staff_df = pd.read_excel(uploaded_file)
+
+                st.session_state["staff_df"] = staff_df
+                st.success(f"✅ Loaded {len(staff_df)} records from file")
+            except Exception as e:
+                st.error(f"Error loading file: {e}")
+        elif "staff_df" in st.session_state:
+            staff_df = st.session_state["staff_df"]
+
+    # Display data overview
+    if st.session_state.get("staff_df") is not None:
+        staff_df = st.session_state["staff_df"]
+        st.divider()
+        st.markdown("### 📊 Staff Data Overview")
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            if "Doctors_on_Duty" in staff_df.columns:
+                min_doc = int(staff_df["Doctors_on_Duty"].min())
+                max_doc = int(staff_df["Doctors_on_Duty"].max())
+                st.markdown(f"""
+                <div class="staff-metric-card">
+                    <div class="staff-metric-value">{min_doc}-{max_doc}</div>
+                    <div class="staff-metric-label">Doctors/Day</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with col2:
+            if "Nurses_on_Duty" in staff_df.columns:
+                min_nurse = int(staff_df["Nurses_on_Duty"].min())
+                max_nurse = int(staff_df["Nurses_on_Duty"].max())
+                st.markdown(f"""
+                <div class="staff-metric-card">
+                    <div class="staff-metric-value">{min_nurse}-{max_nurse}</div>
+                    <div class="staff-metric-label">Nurses/Day</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with col3:
+            if "Support_Staff_on_Duty" in staff_df.columns:
+                min_support = int(staff_df["Support_Staff_on_Duty"].min())
+                max_support = int(staff_df["Support_Staff_on_Duty"].max())
+                st.markdown(f"""
+                <div class="staff-metric-card">
+                    <div class="staff-metric-value">{min_support}-{max_support}</div>
+                    <div class="staff-metric-label">Support Staff</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with col4:
+            if "Overtime_Hours" in staff_df.columns:
+                total_overtime = int(staff_df["Overtime_Hours"].sum())
+                st.markdown(f"""
+                <div class="staff-metric-card">
+                    <div class="staff-metric-value">{total_overtime:,}h</div>
+                    <div class="staff-metric-label">Total Overtime</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with col5:
+            if "Staff_Shortage_Flag" in staff_df.columns:
+                shortage_days = int(staff_df["Staff_Shortage_Flag"].sum())
+                total_days = len(staff_df)
+                st.markdown(f"""
+                <div class="staff-metric-card">
+                    <div class="staff-metric-value">{shortage_days}/{total_days}</div>
+                    <div class="staff-metric-label">Shortage Days</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with st.expander("📋 Data Preview (First 10 Rows)", expanded=False):
+            st.dataframe(staff_df.head(10), use_container_width=True)
+            st.caption(f"Showing 10 of {len(staff_df):,} total records")
+
+# =============================================================================
+# TAB 2: CONFIGURATION
+# =============================================================================
+with tab_config:
+    st.markdown("### ⚙️ Optimization Configuration")
+
+    col_cost, col_ratio = st.columns(2)
+
+    with col_cost:
+        st.markdown("#### 💰 Cost Parameters (USD)")
+
+        with st.expander("Hourly Rates", expanded=True):
+            doctor_rate = st.number_input(
+                "Doctor Hourly Rate ($)",
+                min_value=50.0, max_value=500.0, value=150.0, step=10.0
+            )
+            nurse_rate = st.number_input(
+                "Nurse Hourly Rate ($)",
+                min_value=20.0, max_value=200.0, value=45.0, step=5.0
+            )
+            support_rate = st.number_input(
+                "Support Staff Hourly Rate ($)",
+                min_value=10.0, max_value=100.0, value=25.0, step=5.0
+            )
+
+        with st.expander("Multipliers & Penalties", expanded=True):
+            overtime_mult = st.number_input(
+                "Overtime Multiplier",
+                min_value=1.0, max_value=3.0, value=1.5, step=0.1
+            )
+            agency_mult = st.number_input(
+                "Agency Staff Multiplier",
+                min_value=1.0, max_value=4.0, value=2.0, step=0.1
+            )
+            understaffing_penalty = st.number_input(
+                "Understaffing Penalty ($/patient-hr)",
+                min_value=50.0, max_value=1000.0, value=200.0, step=25.0
+            )
+            overstaffing_penalty = st.number_input(
+                "Overstaffing Penalty ($/staff-hr)",
+                min_value=1.0, max_value=100.0, value=15.0, step=1.0
+            )
+
+        with st.expander("Shift Configuration", expanded=False):
+            shift_length = st.number_input(
+                "Shift Length (hours)",
+                min_value=4.0, max_value=12.0, value=8.0, step=1.0
+            )
+            max_overtime = st.number_input(
+                "Max Overtime per Staff (hours/day)",
+                min_value=0.0, max_value=8.0, value=4.0, step=0.5
+            )
+
+        # Update cost params
+        cost_params = CostParameters(
+            doctor_hourly_rate=doctor_rate,
+            nurse_hourly_rate=nurse_rate,
+            support_hourly_rate=support_rate,
+            overtime_multiplier=overtime_mult,
+            agency_multiplier=agency_mult,
+            understaffing_penalty_base=understaffing_penalty,
+            overstaffing_penalty=overstaffing_penalty,
+            shift_length=shift_length,
+            max_overtime_hours=max_overtime,
+        )
+        st.session_state["cost_params"] = cost_params
+
+    with col_ratio:
+        st.markdown("#### 👥 Staffing Ratios (Patients per Staff)")
+
+        staffing_ratios = StaffingRatios()
+
+        with st.expander("Staff Availability Constraints", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                min_doctors = st.number_input("Min Doctors", min_value=1, max_value=50, value=5)
+                min_nurses = st.number_input("Min Nurses", min_value=1, max_value=100, value=15)
+                min_support = st.number_input("Min Support", min_value=1, max_value=50, value=8)
+            with col2:
+                max_doctors = st.number_input("Max Doctors", min_value=5, max_value=100, value=20)
+                max_nurses = st.number_input("Max Nurses", min_value=10, max_value=200, value=50)
+                max_support = st.number_input("Max Support", min_value=5, max_value=100, value=30)
+
+            nurse_ratio = st.number_input(
+                "Nurse-to-Doctor Ratio",
+                min_value=1.0, max_value=10.0, value=3.0, step=0.5,
+                help="Minimum nurses per doctor"
+            )
+
+        staffing_ratios.min_doctors = min_doctors
+        staffing_ratios.max_doctors = max_doctors
+        staffing_ratios.min_nurses = min_nurses
+        staffing_ratios.max_nurses = max_nurses
+        staffing_ratios.min_support = min_support
+        staffing_ratios.max_support = max_support
+        staffing_ratios.nurse_to_doctor_ratio = nurse_ratio
+
+        with st.expander("Category-Specific Ratios", expanded=False):
+            st.markdown("**Patients per Staff Member (by Category)**")
+            st.caption("Lower ratio = more staff needed (higher acuity)")
+
+            for category in CLINICAL_CATEGORIES:
+                st.markdown(f"**{category}** (Priority: {CATEGORY_PRIORITIES[category]})")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    doc_ratio = st.number_input(
+                        f"Doc 1:{staffing_ratios.get_ratio(category, 'Doctors'):.0f}",
+                        min_value=1, max_value=20,
+                        value=int(staffing_ratios.get_ratio(category, "Doctors")),
+                        key=f"doc_{category}"
+                    )
+                    staffing_ratios.set_ratio(category, "Doctors", doc_ratio)
+                with col2:
+                    nurse_ratio_cat = st.number_input(
+                        f"Nurse 1:{staffing_ratios.get_ratio(category, 'Nurses'):.0f}",
+                        min_value=1, max_value=15,
+                        value=int(staffing_ratios.get_ratio(category, "Nurses")),
+                        key=f"nurse_{category}"
+                    )
+                    staffing_ratios.set_ratio(category, "Nurses", nurse_ratio_cat)
+                with col3:
+                    support_ratio = st.number_input(
+                        f"Support 1:{staffing_ratios.get_ratio(category, 'Support'):.0f}",
+                        min_value=1, max_value=25,
+                        value=int(staffing_ratios.get_ratio(category, "Support")),
+                        key=f"support_{category}"
+                    )
+                    staffing_ratios.set_ratio(category, "Support", support_ratio)
+
+        st.session_state["staffing_ratios"] = staffing_ratios
+
+    # Display current configuration summary
     st.divider()
-    st.markdown("### 📊 Staff Data Overview")
+    st.markdown("### 📋 Configuration Summary")
 
-    # Key metrics - using MIN-MAX ranges for staff (more meaningful than decimals)
-    col1, col2, col3, col4, col5 = st.columns(5)
-
+    col1, col2 = st.columns(2)
     with col1:
-        if "Doctors_on_Duty" in staff_df.columns:
-            min_doc = int(staff_df["Doctors_on_Duty"].min())
-            max_doc = int(staff_df["Doctors_on_Duty"].max())
-            st.markdown(f"""
-            <div class="staff-metric-card">
-                <div class="staff-metric-value">{min_doc}-{max_doc}</div>
-                <div class="staff-metric-label">Doctors/Day</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    with col2:
-        if "Nurses_on_Duty" in staff_df.columns:
-            min_nurse = int(staff_df["Nurses_on_Duty"].min())
-            max_nurse = int(staff_df["Nurses_on_Duty"].max())
-            st.markdown(f"""
-            <div class="staff-metric-card">
-                <div class="staff-metric-value">{min_nurse}-{max_nurse}</div>
-                <div class="staff-metric-label">Nurses/Day</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    with col3:
-        if "Support_Staff_on_Duty" in staff_df.columns:
-            min_support = int(staff_df["Support_Staff_on_Duty"].min())
-            max_support = int(staff_df["Support_Staff_on_Duty"].max())
-            st.markdown(f"""
-            <div class="staff-metric-card">
-                <div class="staff-metric-value">{min_support}-{max_support}</div>
-                <div class="staff-metric-label">Support Staff</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    with col4:
-        if "Overtime_Hours" in staff_df.columns:
-            total_overtime = int(staff_df["Overtime_Hours"].sum())
-            st.markdown(f"""
-            <div class="staff-metric-card">
-                <div class="staff-metric-value">{total_overtime:,}h</div>
-                <div class="staff-metric-label">Total Overtime</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    with col5:
-        if "Staff_Shortage_Flag" in staff_df.columns:
-            shortage_days = int(staff_df["Staff_Shortage_Flag"].sum())
-            total_days = len(staff_df)
-            st.markdown(f"""
-            <div class="staff-metric-card">
-                <div class="staff-metric-value">{shortage_days}/{total_days}</div>
-                <div class="staff-metric-label">Shortage Days</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # Data preview - only first 10 rows
-    with st.expander("📋 Data Preview (First 10 Rows)", expanded=False):
-        st.dataframe(staff_df.head(10), use_container_width=True)
-        st.caption(f"Showing 10 of {len(staff_df):,} total records")
-
-        # Download option for full dataset
-        csv = staff_df.to_csv(index=False)
-        st.download_button(
-            label="📥 Download Full Dataset as CSV",
-            data=csv,
-            file_name="staff_scheduling_data.csv",
-            mime="text/csv"
+        st.markdown("**Cost Parameters (USD)**")
+        st.dataframe(
+            pd.DataFrame([cost_params.to_dict()]).T.reset_index().rename(
+                columns={"index": "Parameter", 0: "Value"}
+            ),
+            use_container_width=True,
+            hide_index=True
         )
 
-# -------------------------------------------------------------
-# INTEGRATION WITH FORECASTING
-# -------------------------------------------------------------
-st.divider()
-st.markdown("### 🔗 Forecasting Integration")
+    with col2:
+        st.markdown("**Staffing Ratios by Category**")
+        st.dataframe(staffing_ratios.to_dataframe(), use_container_width=True, hide_index=True)
 
-# Check for forecasting results
-has_forecast = "forecast_results" in st.session_state or "multi_target_results" in st.session_state
+# =============================================================================
+# TAB 3: OPTIMIZE
+# =============================================================================
+with tab_optimize:
+    st.markdown("### 🚀 Run Optimization")
 
-if has_forecast:
-    st.success("✅ Forecasting results detected! Staff requirements can be calculated based on predicted patient arrivals.")
+    staff_df = st.session_state.get("staff_df")
 
-    with st.expander("🎯 Staff-to-Patient Ratio Configuration", expanded=True):
+    if staff_df is None or staff_df.empty:
+        st.warning("⚠️ Please load staff data first (Tab 1: Data Source)")
+    else:
+        # Demand source selection
+        st.markdown("#### 📈 Demand Forecast Source")
+
+        demand_source = st.radio(
+            "Select demand source:",
+            [
+                "🔮 ML Forecast (from Dashboard/Modeling Hub)",
+                "📊 Historical Average (from Supabase data)",
+                "✏️ Manual Input"
+            ],
+            horizontal=True
+        )
+
+        planning_horizon = st.slider("Planning Horizon (days)", min_value=3, max_value=14, value=7)
+
+        # Get demand based on source
+        total_demand = None
+        category_demand = None
+        category_proportions = None
+
+        if "ML Forecast" in demand_source:
+            # Check for forecast data in session state
+            forecast_results = st.session_state.get("forecast_results") or st.session_state.get("multi_target_results")
+
+            if forecast_results:
+                st.success("✅ ML Forecast detected!")
+
+                # Extract total demand from Target_1
+                if isinstance(forecast_results, dict) and "Target_1" in forecast_results:
+                    target_1 = forecast_results["Target_1"]
+                    if "forecast" in target_1:
+                        total_demand = list(target_1["forecast"])[:planning_horizon]
+
+                        # Pad if needed
+                        while len(total_demand) < planning_horizon:
+                            total_demand.append(total_demand[-1])
+
+                        st.write(f"**Total Demand Forecast:** {[round(d, 1) for d in total_demand]}")
+
+                # Check for category proportions from processed data
+                processed_df = st.session_state.get("processed_df")
+                if processed_df is not None:
+                    # Calculate proportions from clinical categories if available
+                    cat_cols = [c for c in processed_df.columns if c.upper() in CLINICAL_CATEGORIES]
+                    if cat_cols:
+                        total = processed_df[cat_cols].sum().sum()
+                        if total > 0:
+                            category_proportions = {}
+                            for cat in CLINICAL_CATEGORIES:
+                                matching = [c for c in cat_cols if cat in c.upper()]
+                                if matching:
+                                    category_proportions[cat] = processed_df[matching].sum().sum() / total
+                                else:
+                                    category_proportions[cat] = 0
+
+                            st.write("**Category Proportions:**")
+                            prop_df = pd.DataFrame([{k: f"{v:.1%}" for k, v in category_proportions.items()}])
+                            st.dataframe(prop_df, hide_index=True)
+            else:
+                st.warning("No ML forecast found. Please run forecasting first in Dashboard or Modeling Hub.")
+                st.info("Using historical average as fallback.")
+                demand_source = "📊 Historical Average"
+
+        if "Historical Average" in demand_source:
+            # Calculate from Supabase data
+            avg_doctors = staff_df["Doctors_on_Duty"].mean() if "Doctors_on_Duty" in staff_df.columns else 10
+            avg_nurses = staff_df["Nurses_on_Duty"].mean() if "Nurses_on_Duty" in staff_df.columns else 25
+            avg_support = staff_df["Support_Staff_on_Duty"].mean() if "Support_Staff_on_Duty" in staff_df.columns else 15
+
+            # Estimate patients using average ratios
+            estimated_daily = (
+                avg_doctors * 8 +
+                avg_nurses * 4 +
+                avg_support * 10
+            ) / 3
+
+            total_demand = [estimated_daily] * planning_horizon
+            st.info(f"Estimated daily demand from historical staffing: ~{estimated_daily:.0f} patients")
+
+            # Default equal proportions
+            category_proportions = {cat: 1/len(CLINICAL_CATEGORIES) for cat in CLINICAL_CATEGORIES}
+
+        if "Manual Input" in demand_source:
+            st.markdown("**Enter Daily Demand:**")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                total_demand = []
+                for day in range(planning_horizon):
+                    demand = st.number_input(
+                        f"Day {day + 1} Total Patients",
+                        min_value=10, max_value=500, value=100,
+                        key=f"demand_day_{day}"
+                    )
+                    total_demand.append(demand)
+
+            with col2:
+                st.markdown("**Category Proportions (must sum to 1):**")
+                category_proportions = {}
+                remaining = 1.0
+
+                for i, cat in enumerate(CLINICAL_CATEGORIES[:-1]):
+                    prop = st.slider(
+                        f"{cat}",
+                        min_value=0.0, max_value=remaining, value=min(0.14, remaining),
+                        step=0.01, key=f"prop_{cat}"
+                    )
+                    category_proportions[cat] = prop
+                    remaining -= prop
+
+                # Last category gets the remainder
+                category_proportions[CLINICAL_CATEGORIES[-1]] = max(0, remaining)
+                st.write(f"{CLINICAL_CATEGORIES[-1]}: {remaining:.2f}")
+
+        st.divider()
+
+        # Optimization execution
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            st.markdown("#### Solver Settings")
+            time_limit = st.number_input("Time Limit (seconds)", min_value=10, max_value=300, value=60)
+            gap_tolerance = st.number_input("Optimality Gap (%)", min_value=0.1, max_value=10.0, value=1.0) / 100
+
+            run_optimization = st.button("🚀 Run MILP Optimization", type="primary", use_container_width=True)
+
+        with col2:
+            if run_optimization and total_demand is not None:
+                with st.spinner("Running MILP optimization..."):
+                    try:
+                        # Run optimization
+                        solver = StaffSchedulingMILP(
+                            cost_params=st.session_state["cost_params"],
+                            staffing_ratios=st.session_state["staffing_ratios"],
+                        )
+
+                        solver.set_demand_forecast(
+                            total_demand=total_demand,
+                            category_proportions=category_proportions,
+                            category_demand=category_demand,
+                        )
+
+                        solver.build_model()
+                        result = solver.solve(time_limit=time_limit, gap=gap_tolerance)
+
+                        st.session_state["optimization_result"] = result
+
+                        # Also run historical analysis for comparison
+                        historical = analyze_historical_costs(
+                            staff_df,
+                            cost_params=st.session_state["cost_params"],
+                            n_days=planning_horizon
+                        )
+                        st.session_state["historical_analysis"] = historical
+
+                        if result.is_optimal:
+                            st.success(f"✅ Optimization Complete! Status: {result.status}")
+                            st.balloons()
+                        else:
+                            st.warning(f"⚠️ Optimization finished with status: {result.status}")
+
+                        # Show quick summary
+                        st.markdown("#### Quick Summary")
+                        summary = result.get_summary()
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Cost", summary["Total Cost"])
+                        with col2:
+                            st.metric("Solve Time", summary["Solve Time"])
+                        with col3:
+                            st.metric("Status", summary["Status"])
+
+                    except Exception as e:
+                        st.error(f"Optimization failed: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+
+# =============================================================================
+# TAB 4: RESULTS & COMPARISON
+# =============================================================================
+with tab_results:
+    st.markdown("### 📈 Optimization Results & Before/After Comparison")
+
+    result = st.session_state.get("optimization_result")
+    historical = st.session_state.get("historical_analysis")
+
+    if result is None:
+        st.info("Run optimization first (Tab 3: Optimize) to see results.")
+    else:
+        # Before/After Comparison
+        st.markdown("## 🔄 Before vs After Comparison")
+
+        if historical is not None:
+            analyzer = SolutionAnalyzer(st.session_state["cost_params"])
+            comparison_df = analyzer.compare_before_after(historical, result)
+
+            # Key metrics cards
+            col1, col2, col3, col4 = st.columns(4)
+
+            cost_savings = historical.total_cost - result.total_cost
+            savings_pct = (cost_savings / historical.total_cost * 100) if historical.total_cost > 0 else 0
+
+            with col1:
+                savings_class = "negative" if cost_savings < 0 else ""
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">💰 Cost Savings</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value {savings_class}">${cost_savings:,.0f}</div>
+                        <div class="opt-metric-label">{savings_pct:+.1f}% vs Historical</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">📊 Before (Historical)</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value neutral">${historical.total_cost:,.0f}</div>
+                        <div class="opt-metric-label">Total Cost</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">✅ After (Optimized)</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value">${result.total_cost:,.0f}</div>
+                        <div class="opt-metric-label">Total Cost</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col4:
+                avg_coverage = result.daily_summary["Coverage_%"].mean() if result.daily_summary is not None else 100
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">🎯 Demand Coverage</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value">{avg_coverage:.1f}%</div>
+                        <div class="opt-metric-label">Avg Daily Coverage</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Comparison table
+            st.markdown("### 📋 Detailed Comparison")
+            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # Cost Breakdown
+        st.markdown("## 💵 Cost Breakdown")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Pie chart of optimized costs
+            cost_data = {
+                "Category": ["Regular Labor", "Overtime", "Understaffing Penalty", "Overstaffing Penalty"],
+                "Cost": [
+                    result.regular_labor_cost,
+                    result.overtime_cost,
+                    result.understaffing_penalty,
+                    result.overstaffing_penalty
+                ]
+            }
+            cost_df = pd.DataFrame(cost_data)
+
+            fig_pie = px.pie(
+                cost_df,
+                values="Cost",
+                names="Category",
+                title="Optimized Cost Distribution",
+                color_discrete_sequence=px.colors.sequential.Blues_r
+            )
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col2:
+            # Bar chart comparison
+            if historical is not None:
+                compare_data = {
+                    "Category": ["Regular Labor", "Overtime", "Penalties"],
+                    "Before": [
+                        historical.regular_labor_cost,
+                        historical.overtime_cost,
+                        historical.estimated_shortage_cost
+                    ],
+                    "After": [
+                        result.regular_labor_cost,
+                        result.overtime_cost,
+                        result.understaffing_penalty + result.overstaffing_penalty
+                    ]
+                }
+                compare_df = pd.DataFrame(compare_data)
+
+                fig_bar = go.Figure(data=[
+                    go.Bar(name='Before (Historical)', x=compare_df["Category"], y=compare_df["Before"], marker_color='#ef4444'),
+                    go.Bar(name='After (Optimized)', x=compare_df["Category"], y=compare_df["After"], marker_color='#22c55e')
+                ])
+                fig_bar.update_layout(
+                    barmode='group',
+                    title="Cost Comparison by Category",
+                    yaxis_title="Cost ($)",
+                    template="plotly_dark"
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.divider()
+
+        # Staff Schedule
+        st.markdown("## 👥 Optimized Staff Schedule")
+
+        if result.staff_schedule is not None:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**Daily Staff Assignments**")
+                st.dataframe(result.staff_schedule, use_container_width=True, hide_index=True)
+
+            with col2:
+                # Line chart of staff over time
+                fig_staff = go.Figure()
+                for col in ["Doctors", "Nurses", "Support"]:
+                    if col in result.staff_schedule.columns:
+                        fig_staff.add_trace(go.Scatter(
+                            x=result.staff_schedule["Day"],
+                            y=result.staff_schedule[col],
+                            mode='lines+markers',
+                            name=col
+                        ))
+
+                fig_staff.update_layout(
+                    title="Staff Schedule Over Planning Horizon",
+                    xaxis_title="Day",
+                    yaxis_title="Staff Count",
+                    template="plotly_dark"
+                )
+                st.plotly_chart(fig_staff, use_container_width=True)
+
+        # Overtime Schedule
+        if result.overtime_schedule is not None:
+            st.markdown("**Overtime Hours by Day**")
+            st.dataframe(result.overtime_schedule, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # Category Coverage
+        st.markdown("## 🏥 Clinical Category Coverage")
+
+        if result.category_coverage is not None:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.dataframe(result.category_coverage, use_container_width=True, hide_index=True)
+
+            with col2:
+                fig_coverage = px.bar(
+                    result.category_coverage,
+                    x="Category",
+                    y="Coverage_%",
+                    color="Coverage_%",
+                    color_continuous_scale=["#ef4444", "#fbbf24", "#22c55e"],
+                    title="Coverage by Clinical Category"
+                )
+                fig_coverage.add_hline(y=100, line_dash="dash", line_color="white", annotation_text="100% Target")
+                fig_coverage.update_layout(template="plotly_dark")
+                st.plotly_chart(fig_coverage, use_container_width=True)
+
+        # Daily Summary
+        if result.daily_summary is not None:
+            st.markdown("### 📅 Daily Summary")
+            st.dataframe(result.daily_summary, use_container_width=True, hide_index=True)
+
+        # Download results
+        st.divider()
+        st.markdown("### 📥 Export Results")
+
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            patients_per_doctor = st.number_input(
-                "Patients per Doctor",
-                min_value=1, max_value=50, value=10,
-                help="Maximum patients one doctor can handle per shift"
-            )
+            if result.staff_schedule is not None:
+                csv = result.staff_schedule.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Staff Schedule",
+                    data=csv,
+                    file_name="optimized_staff_schedule.csv",
+                    mime="text/csv"
+                )
 
         with col2:
-            patients_per_nurse = st.number_input(
-                "Patients per Nurse",
-                min_value=1, max_value=20, value=5,
-                help="Maximum patients one nurse can handle per shift"
-            )
+            if result.daily_summary is not None:
+                csv = result.daily_summary.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Daily Summary",
+                    data=csv,
+                    file_name="optimization_daily_summary.csv",
+                    mime="text/csv"
+                )
 
         with col3:
-            patients_per_support = st.number_input(
-                "Patients per Support Staff",
-                min_value=1, max_value=30, value=15,
-                help="Maximum patients one support staff can handle"
-            )
+            if result.category_coverage is not None:
+                csv = result.category_coverage.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Category Coverage",
+                    data=csv,
+                    file_name="category_coverage.csv",
+                    mime="text/csv"
+                )
 
-        if st.button("📊 Calculate Staff Requirements", type="primary"):
-            # Get forecast data
-            forecast_data = st.session_state.get("forecast_results") or st.session_state.get("multi_target_results", {})
-
-            if isinstance(forecast_data, dict) and "Target_1" in forecast_data:
-                # Multi-target results
-                target_1 = forecast_data["Target_1"]
-                if "forecast" in target_1:
-                    predicted_patients = target_1["forecast"]
-
-                    # Calculate required staff
-                    required_doctors = np.ceil(predicted_patients / patients_per_doctor)
-                    required_nurses = np.ceil(predicted_patients / patients_per_nurse)
-                    required_support = np.ceil(predicted_patients / patients_per_support)
-
-                    # Create requirements DataFrame
-                    req_df = pd.DataFrame({
-                        "Day": [f"Day {i+1}" for i in range(len(predicted_patients))],
-                        "Predicted_Patients": predicted_patients,
-                        "Required_Doctors": required_doctors.astype(int),
-                        "Required_Nurses": required_nurses.astype(int),
-                        "Required_Support": required_support.astype(int),
-                        "Total_Staff": (required_doctors + required_nurses + required_support).astype(int)
-                    })
-
-                    st.session_state["staff_requirements"] = req_df
-
-                    st.markdown("#### 📋 Staff Requirements Forecast")
-                    st.dataframe(req_df, use_container_width=True)
-
-                    # Summary
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total Doctors Needed", f"{req_df['Required_Doctors'].sum()}")
-                    with col2:
-                        st.metric("Total Nurses Needed", f"{req_df['Required_Nurses'].sum()}")
-                    with col3:
-                        st.metric("Total Support Needed", f"{req_df['Required_Support'].sum()}")
-                else:
-                    st.warning("Forecast data format not recognized")
-            else:
-                st.warning("Unable to extract forecast values. Please run forecasting first.")
-else:
-    st.info(
-        "💡 **Tip:** Run patient arrival forecasting first (Dashboard or Modeling Hub) to enable "
-        "automatic staff requirement calculations based on predicted demand."
-    )
-
-# -------------------------------------------------------------
-# OPTIMIZATION SETTINGS
-# -------------------------------------------------------------
+# =============================================================================
+# FOOTER
+# =============================================================================
 st.divider()
-st.markdown("### ⚙️ Optimization Settings")
-
-c1, c2 = st.columns(2)
-with c1:
-    st.date_input("Scheduling start date", date.today())
-    st.number_input("Planning horizon (days)", min_value=1, max_value=60, value=7)
-
-with c2:
-    st.multiselect(
-        "Optimization objectives",
-        ["Minimize overtime", "Balance shifts", "Match patient demand", "Maximize fairness"],
-        default=["Minimize overtime", "Match patient demand"],
-    )
-
-# Constraint configuration
-st.subheader("Constraints")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.checkbox("Respect staff availability", value=True)
-with col2:
-    st.checkbox("Enforce maximum weekly hours", value=True)
-with col3:
-    st.checkbox("Include skill matching", value=False)
-
-# Optimization mode
-st.subheader("Solver Configuration")
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.radio("Mode", ["Automatic (solver-based)", "Manual (user-guided)"], index=0)
-with c2:
-    st.selectbox("Solver type", ["Linear Programming (PuLP)", "Genetic Algorithm", "Constraint Programming"])
-with c3:
-    st.number_input("Max iterations", min_value=10, max_value=5000, value=200)
-
-# Execution buttons
-st.divider()
-left, right = st.columns([1, 2])
-with left:
-    run_btn = st.button("🚀 Run Optimization", type="primary", disabled=staff_df is None)
-    save_btn = st.button("💾 Save Schedule", disabled=True)
-
-    if run_btn:
-        st.info("🔧 Optimization engine coming soon! This will integrate with PuLP/OR-Tools.")
-
-with right:
-    st.markdown("### Schedule Preview")
-    if "schedule_fig" in st.session_state:
-        st.plotly_chart(st.session_state["schedule_fig"], use_container_width=True)
-    elif "schedule_solution_df" in st.session_state:
-        st.dataframe(st.session_state["schedule_solution_df"], use_container_width=True)
-    elif "staff_requirements" in st.session_state:
-        st.dataframe(st.session_state["staff_requirements"], use_container_width=True)
-    else:
-        st.info("Run optimization to see the schedule preview here.")
-
-st.divider()
-st.caption("Staff Scheduling Optimization powered by Supabase. Optimization engine (PuLP/OR-Tools) integration coming soon.")
+st.caption(
+    "Staff Scheduling Optimization powered by PuLP MILP Solver. "
+    "Deterministic optimization with clinical category integration. "
+    "All costs in USD."
+)
