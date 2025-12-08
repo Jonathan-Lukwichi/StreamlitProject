@@ -252,6 +252,305 @@ if "cost_params" not in st.session_state:
 if "staffing_ratios" not in st.session_state:
     st.session_state["staffing_ratios"] = DEFAULT_STAFFING_RATIOS
 
+
+# =============================================================================
+# UNIFIED FORECAST DETECTOR
+# Detects forecast results from Modeling Hub (ML) and Benchmarks (ARIMA/SARIMAX)
+# =============================================================================
+def detect_forecast_sources() -> dict:
+    """
+    Scan session state for all available forecast sources.
+    Returns dict with source info and normalized data.
+    """
+    sources = []
+
+    # -------------------------------------------------------------------------
+    # ML MODELS (from 08_Modeling_Hub.py)
+    # -------------------------------------------------------------------------
+
+    # Single ML model results
+    ml_results = st.session_state.get("ml_mh_results")
+    if ml_results is not None:
+        sources.append({
+            "name": "ML Model (Single)",
+            "key": "ml_mh_results",
+            "data": ml_results,
+            "type": "ml"
+        })
+
+    # Per-model ML results (XGBoost, LSTM, ANN)
+    for model_name in ["XGBoost", "LSTM", "ANN", "LightGBM", "RandomForest"]:
+        model_key = f"ml_mh_results_{model_name}"
+        model_results = st.session_state.get(model_key)
+        if model_results is not None:
+            sources.append({
+                "name": f"ML: {model_name}",
+                "key": model_key,
+                "data": model_results,
+                "type": "ml"
+            })
+
+    # Optimized model results
+    for model_name in ["XGBoost", "LSTM", "ANN", "LightGBM", "RandomForest"]:
+        opt_key = f"opt_results_{model_name}"
+        opt_results = st.session_state.get(opt_key)
+        if opt_results is not None:
+            sources.append({
+                "name": f"ML Optimized: {model_name}",
+                "key": opt_key,
+                "data": opt_results,
+                "type": "ml_optimized"
+            })
+
+    # All models combined results
+    all_models = st.session_state.get("opt_all_models_results")
+    if all_models is not None:
+        sources.append({
+            "name": "ML: All Models Combined",
+            "key": "opt_all_models_results",
+            "data": all_models,
+            "type": "ml_all"
+        })
+
+    # -------------------------------------------------------------------------
+    # STATISTICAL MODELS (from 05_Benchmarks.py)
+    # -------------------------------------------------------------------------
+
+    # SARIMAX single target
+    sarimax_results = st.session_state.get("sarimax_results")
+    if sarimax_results is not None:
+        sources.append({
+            "name": "SARIMAX (Single Target)",
+            "key": "sarimax_results",
+            "data": sarimax_results,
+            "type": "sarimax"
+        })
+
+    # ARIMA single target
+    arima_results = st.session_state.get("arima_mh_results")
+    if arima_results is not None:
+        sources.append({
+            "name": "ARIMA (Single Target)",
+            "key": "arima_mh_results",
+            "data": arima_results,
+            "type": "arima"
+        })
+
+    # SARIMAX multi-target
+    sarimax_multi = st.session_state.get("sarimax_multi_target_results")
+    if sarimax_multi is not None:
+        sources.append({
+            "name": "SARIMAX (Multi-Target)",
+            "key": "sarimax_multi_target_results",
+            "data": sarimax_multi,
+            "type": "sarimax_multi"
+        })
+
+    # ARIMA multi-target
+    arima_multi = st.session_state.get("arima_multi_target_results")
+    if arima_multi is not None:
+        sources.append({
+            "name": "ARIMA (Multi-Target)",
+            "key": "arima_multi_target_results",
+            "data": arima_multi,
+            "type": "arima_multi"
+        })
+
+    # -------------------------------------------------------------------------
+    # LEGACY KEYS (backwards compatibility)
+    # -------------------------------------------------------------------------
+    legacy_results = st.session_state.get("forecast_results")
+    if legacy_results is not None:
+        sources.append({
+            "name": "Forecast Results (Legacy)",
+            "key": "forecast_results",
+            "data": legacy_results,
+            "type": "legacy"
+        })
+
+    multi_target = st.session_state.get("multi_target_results")
+    if multi_target is not None:
+        sources.append({
+            "name": "Multi-Target Results (Legacy)",
+            "key": "multi_target_results",
+            "data": multi_target,
+            "type": "legacy_multi"
+        })
+
+    return sources
+
+
+def extract_demand_from_source(source: dict, horizon: int = 7) -> tuple:
+    """
+    Extract total demand forecast and category proportions from a source.
+
+    Returns:
+        (total_demand_list, category_proportions_dict, source_info_str)
+    """
+    data = source["data"]
+    source_type = source["type"]
+    source_name = source["name"]
+
+    total_demand = None
+    category_proportions = None
+    info = ""
+
+    try:
+        # ---------------------------------------------------------------------
+        # ML Models (typically have 'predictions' or 'forecast' keys)
+        # ---------------------------------------------------------------------
+        if source_type in ["ml", "ml_optimized", "ml_all"]:
+            # ML results structure varies, try common patterns
+            if isinstance(data, dict):
+                # Check for predictions array
+                if "predictions" in data:
+                    preds = data["predictions"]
+                    if isinstance(preds, (list, np.ndarray)):
+                        total_demand = list(preds)[:horizon]
+                        info = f"Using predictions from {source_name}"
+
+                # Check for forecast key
+                elif "forecast" in data:
+                    forecast = data["forecast"]
+                    if isinstance(forecast, (list, np.ndarray)):
+                        total_demand = list(forecast)[:horizon]
+                        info = f"Using forecast from {source_name}"
+
+                # Check for test_predictions (from backtesting)
+                elif "test_predictions" in data:
+                    preds = data["test_predictions"]
+                    if hasattr(preds, "values"):
+                        total_demand = list(preds.values)[:horizon]
+                    else:
+                        total_demand = list(preds)[:horizon]
+                    info = f"Using test predictions from {source_name}"
+
+                # Multi-target ML results - look for Target_1
+                elif any(k.startswith("Target_") for k in data.keys()):
+                    for target_key in ["Target_1", "target_1", "Total_Arrivals"]:
+                        if target_key in data:
+                            target_data = data[target_key]
+                            if isinstance(target_data, dict) and "forecast" in target_data:
+                                total_demand = list(target_data["forecast"])[:horizon]
+                            elif isinstance(target_data, dict) and "predictions" in target_data:
+                                total_demand = list(target_data["predictions"])[:horizon]
+                            info = f"Using {target_key} from {source_name}"
+                            break
+
+        # ---------------------------------------------------------------------
+        # SARIMAX / ARIMA Single Target
+        # ---------------------------------------------------------------------
+        elif source_type in ["sarimax", "arima"]:
+            if isinstance(data, dict):
+                # Check for forecast in results
+                if "forecast" in data:
+                    fc = data["forecast"]
+                    if hasattr(fc, "values"):
+                        total_demand = list(fc.values)[:horizon]
+                    elif isinstance(fc, (list, np.ndarray)):
+                        total_demand = list(fc)[:horizon]
+                    info = f"Using forecast from {source_name}"
+
+                # Check for results_df with predictions
+                elif "results_df" in data:
+                    results_df = data["results_df"]
+                    if hasattr(results_df, "columns"):
+                        # Look for prediction column
+                        pred_cols = [c for c in results_df.columns if "pred" in c.lower() or "forecast" in c.lower()]
+                        if pred_cols:
+                            total_demand = list(results_df[pred_cols[0]].tail(horizon).values)
+                            info = f"Using {pred_cols[0]} from {source_name}"
+
+                # Check for future_forecast (out-of-sample)
+                elif "future_forecast" in data:
+                    ff = data["future_forecast"]
+                    if hasattr(ff, "values"):
+                        total_demand = list(ff.values)[:horizon]
+                    elif isinstance(ff, (list, np.ndarray)):
+                        total_demand = list(ff)[:horizon]
+                    info = f"Using future forecast from {source_name}"
+
+        # ---------------------------------------------------------------------
+        # Multi-Target SARIMAX / ARIMA
+        # ---------------------------------------------------------------------
+        elif source_type in ["sarimax_multi", "arima_multi"]:
+            if isinstance(data, dict):
+                # Look for Target_1 or first successful target
+                target_keys = [k for k in data.keys() if k.startswith("Target_")]
+
+                # Also check for successful_targets list
+                successful = data.get("successful_targets", [])
+                if successful:
+                    target_keys = successful
+
+                if target_keys:
+                    first_target = target_keys[0] if isinstance(target_keys[0], str) else f"Target_{target_keys[0]}"
+                    target_data = data.get(first_target, data.get("Target_1"))
+
+                    if isinstance(target_data, dict):
+                        if "forecast" in target_data:
+                            fc = target_data["forecast"]
+                            if hasattr(fc, "values"):
+                                total_demand = list(fc.values)[:horizon]
+                            else:
+                                total_demand = list(fc)[:horizon]
+                        elif "predictions" in target_data:
+                            preds = target_data["predictions"]
+                            if hasattr(preds, "values"):
+                                total_demand = list(preds.values)[:horizon]
+                            else:
+                                total_demand = list(preds)[:horizon]
+                        info = f"Using {first_target} from {source_name}"
+
+        # ---------------------------------------------------------------------
+        # Legacy format
+        # ---------------------------------------------------------------------
+        elif source_type in ["legacy", "legacy_multi"]:
+            if isinstance(data, dict):
+                if "Target_1" in data:
+                    target_1 = data["Target_1"]
+                    if isinstance(target_1, dict) and "forecast" in target_1:
+                        total_demand = list(target_1["forecast"])[:horizon]
+                        info = f"Using Target_1 from {source_name}"
+                elif "forecast" in data:
+                    total_demand = list(data["forecast"])[:horizon]
+                    info = f"Using forecast from {source_name}"
+
+        # Pad demand if shorter than horizon
+        if total_demand is not None and len(total_demand) < horizon:
+            last_val = total_demand[-1] if total_demand else 100
+            while len(total_demand) < horizon:
+                total_demand.append(last_val)
+
+        # Try to get category proportions from processed_df
+        processed_df = st.session_state.get("processed_df")
+        if processed_df is not None and total_demand is not None:
+            cat_cols_upper = {c.upper(): c for c in processed_df.columns}
+            category_proportions = {}
+            total_cat = 0
+
+            for cat in CLINICAL_CATEGORIES:
+                matching_cols = [cat_cols_upper[k] for k in cat_cols_upper if cat in k]
+                if matching_cols:
+                    cat_sum = processed_df[matching_cols].sum().sum()
+                    category_proportions[cat] = cat_sum
+                    total_cat += cat_sum
+
+            if total_cat > 0:
+                category_proportions = {k: v/total_cat for k, v in category_proportions.items()}
+            else:
+                category_proportions = None
+
+        # Fallback: equal proportions
+        if category_proportions is None:
+            category_proportions = {cat: 1/len(CLINICAL_CATEGORIES) for cat in CLINICAL_CATEGORIES}
+
+    except Exception as e:
+        info = f"Error extracting from {source_name}: {str(e)}"
+        total_demand = None
+
+    return total_demand, category_proportions, info
+
 # =============================================================================
 # TAB 1: DATA SOURCE
 # =============================================================================
@@ -589,45 +888,54 @@ with tab_optimize:
         category_proportions = None
 
         if "ML Forecast" in demand_source:
-            # Check for forecast data in session state
-            forecast_results = st.session_state.get("forecast_results") or st.session_state.get("multi_target_results")
+            # Use unified forecast detector
+            forecast_sources = detect_forecast_sources()
 
-            if forecast_results:
-                st.success("✅ ML Forecast detected!")
+            if forecast_sources:
+                st.success(f"✅ {len(forecast_sources)} forecast source(s) detected!")
 
-                # Extract total demand from Target_1
-                if isinstance(forecast_results, dict) and "Target_1" in forecast_results:
-                    target_1 = forecast_results["Target_1"]
-                    if "forecast" in target_1:
-                        total_demand = list(target_1["forecast"])[:planning_horizon]
+                # Show available sources in expander
+                with st.expander("📊 Available Forecast Sources", expanded=True):
+                    source_names = [s["name"] for s in forecast_sources]
+                    st.markdown("**Detected sources:**")
+                    for i, name in enumerate(source_names, 1):
+                        st.markdown(f"  {i}. {name}")
 
-                        # Pad if needed
-                        while len(total_demand) < planning_horizon:
-                            total_demand.append(total_demand[-1])
+                # Let user select source
+                selected_source_name = st.selectbox(
+                    "Select forecast source to use:",
+                    options=[s["name"] for s in forecast_sources],
+                    index=0,
+                    key="forecast_source_selector"
+                )
 
-                        st.write(f"**Total Demand Forecast:** {[round(d, 1) for d in total_demand]}")
+                # Find selected source
+                selected_source = next(s for s in forecast_sources if s["name"] == selected_source_name)
 
-                # Check for category proportions from processed data
-                processed_df = st.session_state.get("processed_df")
-                if processed_df is not None:
-                    # Calculate proportions from clinical categories if available
-                    cat_cols = [c for c in processed_df.columns if c.upper() in CLINICAL_CATEGORIES]
-                    if cat_cols:
-                        total = processed_df[cat_cols].sum().sum()
-                        if total > 0:
-                            category_proportions = {}
-                            for cat in CLINICAL_CATEGORIES:
-                                matching = [c for c in cat_cols if cat in c.upper()]
-                                if matching:
-                                    category_proportions[cat] = processed_df[matching].sum().sum() / total
-                                else:
-                                    category_proportions[cat] = 0
+                # Extract demand from selected source
+                total_demand, category_proportions, extract_info = extract_demand_from_source(
+                    selected_source, horizon=planning_horizon
+                )
 
-                            st.write("**Category Proportions:**")
-                            prop_df = pd.DataFrame([{k: f"{v:.1%}" for k, v in category_proportions.items()}])
-                            st.dataframe(prop_df, hide_index=True)
+                if total_demand is not None:
+                    st.info(f"ℹ️ {extract_info}")
+                    st.write(f"**Total Demand Forecast ({planning_horizon} days):** {[round(d, 1) for d in total_demand]}")
+
+                    # Show category proportions
+                    if category_proportions:
+                        st.write("**Category Proportions:**")
+                        prop_df = pd.DataFrame([{k: f"{v:.1%}" for k, v in category_proportions.items()}])
+                        st.dataframe(prop_df, hide_index=True)
+                else:
+                    st.warning(f"Could not extract forecast from {selected_source_name}. {extract_info}")
+                    st.info("Try selecting a different source or use Historical Average.")
             else:
-                st.warning("No ML forecast found. Please run forecasting first in Dashboard or Modeling Hub.")
+                st.warning("No forecast found. Please run forecasting first in:")
+                st.markdown("""
+                - **Dashboard** (01_Dashboard.py) - Quick forecasts
+                - **Benchmarks** (05_Benchmarks.py) - ARIMA/SARIMAX models
+                - **Modeling Hub** (08_Modeling_Hub.py) - XGBoost, LSTM, ANN
+                """)
                 st.info("Using historical average as fallback.")
                 demand_source = "📊 Historical Average"
 
