@@ -255,127 +255,209 @@ if "staffing_ratios" not in st.session_state:
 
 # =============================================================================
 # UNIFIED FORECAST DETECTOR
-# Detects forecast results from Modeling Hub (ML) and Benchmarks (ARIMA/SARIMAX)
+# Detects forecast results from ALL trained models:
+# - Modeling Hub (08): XGBoost, LSTM, ANN, LightGBM, RandomForest, etc.
+# - Benchmarks (05): ARIMA, SARIMAX (single & multi-target)
+# - Dashboard (01): Quick forecasts
 # =============================================================================
-def detect_forecast_sources() -> dict:
+def detect_forecast_sources() -> list:
     """
-    Scan session state for all available forecast sources.
-    Returns dict with source info and normalized data.
+    Dynamically scan session state for ALL available forecast sources.
+    This function finds any trained model results regardless of model name.
+
+    Returns:
+        List of dicts with source info and data
     """
     sources = []
+    found_keys = set()  # Track found keys to avoid duplicates
 
     # -------------------------------------------------------------------------
-    # ML MODELS (from 08_Modeling_Hub.py)
+    # DYNAMIC SCAN: Find ALL ml_mh_results_* keys (any model name)
+    # -------------------------------------------------------------------------
+    for key in st.session_state.keys():
+        if key.startswith("ml_mh_results_") and key not in found_keys:
+            model_name = key.replace("ml_mh_results_", "")
+            data = st.session_state.get(key)
+            if data is not None:
+                sources.append({
+                    "name": f"ML: {model_name}",
+                    "key": key,
+                    "data": data,
+                    "type": "ml"
+                })
+                found_keys.add(key)
+
+    # -------------------------------------------------------------------------
+    # DYNAMIC SCAN: Find ALL opt_results_* keys (optimized models)
+    # -------------------------------------------------------------------------
+    for key in st.session_state.keys():
+        if key.startswith("opt_results_") and key not in found_keys:
+            model_name = key.replace("opt_results_", "")
+            data = st.session_state.get(key)
+            if data is not None:
+                sources.append({
+                    "name": f"ML Optimized: {model_name}",
+                    "key": key,
+                    "data": data,
+                    "type": "ml_optimized"
+                })
+                found_keys.add(key)
+
+    # -------------------------------------------------------------------------
+    # DYNAMIC SCAN: Find ALL backtest_results_* keys
+    # -------------------------------------------------------------------------
+    for key in st.session_state.keys():
+        if key.startswith("backtest_results_") and key not in found_keys:
+            model_name = key.replace("backtest_results_", "")
+            data = st.session_state.get(key)
+            if data is not None:
+                sources.append({
+                    "name": f"ML Backtest: {model_name}",
+                    "key": key,
+                    "data": data,
+                    "type": "ml_backtest"
+                })
+                found_keys.add(key)
+
+    # -------------------------------------------------------------------------
+    # ML MODELS - Standard keys (from 08_Modeling_Hub.py)
     # -------------------------------------------------------------------------
 
-    # Single ML model results
-    ml_results = st.session_state.get("ml_mh_results")
-    if ml_results is not None:
-        sources.append({
-            "name": "ML Model (Single)",
-            "key": "ml_mh_results",
-            "data": ml_results,
-            "type": "ml"
-        })
-
-    # Per-model ML results (XGBoost, LSTM, ANN)
-    for model_name in ["XGBoost", "LSTM", "ANN", "LightGBM", "RandomForest"]:
-        model_key = f"ml_mh_results_{model_name}"
-        model_results = st.session_state.get(model_key)
-        if model_results is not None:
+    # Single ML model results (generic)
+    if "ml_mh_results" not in found_keys:
+        ml_results = st.session_state.get("ml_mh_results")
+        if ml_results is not None:
             sources.append({
-                "name": f"ML: {model_name}",
-                "key": model_key,
-                "data": model_results,
+                "name": "ML Model (Latest)",
+                "key": "ml_mh_results",
+                "data": ml_results,
                 "type": "ml"
             })
-
-    # Optimized model results
-    for model_name in ["XGBoost", "LSTM", "ANN", "LightGBM", "RandomForest"]:
-        opt_key = f"opt_results_{model_name}"
-        opt_results = st.session_state.get(opt_key)
-        if opt_results is not None:
-            sources.append({
-                "name": f"ML Optimized: {model_name}",
-                "key": opt_key,
-                "data": opt_results,
-                "type": "ml_optimized"
-            })
+            found_keys.add("ml_mh_results")
 
     # All models combined results
-    all_models = st.session_state.get("opt_all_models_results")
-    if all_models is not None:
-        sources.append({
-            "name": "ML: All Models Combined",
-            "key": "opt_all_models_results",
-            "data": all_models,
-            "type": "ml_all"
-        })
+    if "opt_all_models_results" not in found_keys:
+        all_models = st.session_state.get("opt_all_models_results")
+        if all_models is not None:
+            sources.append({
+                "name": "ML: All Models Combined",
+                "key": "opt_all_models_results",
+                "data": all_models,
+                "type": "ml_all"
+            })
+            found_keys.add("opt_all_models_results")
 
     # -------------------------------------------------------------------------
     # STATISTICAL MODELS (from 05_Benchmarks.py)
     # -------------------------------------------------------------------------
 
     # SARIMAX single target
-    sarimax_results = st.session_state.get("sarimax_results")
-    if sarimax_results is not None:
-        sources.append({
-            "name": "SARIMAX (Single Target)",
-            "key": "sarimax_results",
-            "data": sarimax_results,
-            "type": "sarimax"
-        })
+    if "sarimax_results" not in found_keys:
+        sarimax_results = st.session_state.get("sarimax_results")
+        if sarimax_results is not None:
+            sources.append({
+                "name": "SARIMAX (Single Target)",
+                "key": "sarimax_results",
+                "data": sarimax_results,
+                "type": "sarimax"
+            })
+            found_keys.add("sarimax_results")
 
     # ARIMA single target
-    arima_results = st.session_state.get("arima_mh_results")
-    if arima_results is not None:
-        sources.append({
-            "name": "ARIMA (Single Target)",
-            "key": "arima_mh_results",
-            "data": arima_results,
-            "type": "arima"
-        })
+    if "arima_mh_results" not in found_keys:
+        arima_results = st.session_state.get("arima_mh_results")
+        if arima_results is not None:
+            sources.append({
+                "name": "ARIMA (Single Target)",
+                "key": "arima_mh_results",
+                "data": arima_results,
+                "type": "arima"
+            })
+            found_keys.add("arima_mh_results")
 
     # SARIMAX multi-target
-    sarimax_multi = st.session_state.get("sarimax_multi_target_results")
-    if sarimax_multi is not None:
-        sources.append({
-            "name": "SARIMAX (Multi-Target)",
-            "key": "sarimax_multi_target_results",
-            "data": sarimax_multi,
-            "type": "sarimax_multi"
-        })
+    if "sarimax_multi_target_results" not in found_keys:
+        sarimax_multi = st.session_state.get("sarimax_multi_target_results")
+        if sarimax_multi is not None:
+            sources.append({
+                "name": "SARIMAX (Multi-Target)",
+                "key": "sarimax_multi_target_results",
+                "data": sarimax_multi,
+                "type": "sarimax_multi"
+            })
+            found_keys.add("sarimax_multi_target_results")
 
     # ARIMA multi-target
-    arima_multi = st.session_state.get("arima_multi_target_results")
-    if arima_multi is not None:
-        sources.append({
-            "name": "ARIMA (Multi-Target)",
-            "key": "arima_multi_target_results",
-            "data": arima_multi,
-            "type": "arima_multi"
-        })
+    if "arima_multi_target_results" not in found_keys:
+        arima_multi = st.session_state.get("arima_multi_target_results")
+        if arima_multi is not None:
+            sources.append({
+                "name": "ARIMA (Multi-Target)",
+                "key": "arima_multi_target_results",
+                "data": arima_multi,
+                "type": "arima_multi"
+            })
+            found_keys.add("arima_multi_target_results")
+
+    # -------------------------------------------------------------------------
+    # DASHBOARD FORECASTS (from 01_Dashboard.py)
+    # -------------------------------------------------------------------------
+
+    # Dashboard forecast results
+    if "dashboard_forecast" not in found_keys:
+        dash_forecast = st.session_state.get("dashboard_forecast")
+        if dash_forecast is not None:
+            sources.append({
+                "name": "Dashboard Forecast",
+                "key": "dashboard_forecast",
+                "data": dash_forecast,
+                "type": "dashboard"
+            })
+            found_keys.add("dashboard_forecast")
 
     # -------------------------------------------------------------------------
     # LEGACY KEYS (backwards compatibility)
     # -------------------------------------------------------------------------
-    legacy_results = st.session_state.get("forecast_results")
-    if legacy_results is not None:
-        sources.append({
-            "name": "Forecast Results (Legacy)",
-            "key": "forecast_results",
-            "data": legacy_results,
-            "type": "legacy"
-        })
+    if "forecast_results" not in found_keys:
+        legacy_results = st.session_state.get("forecast_results")
+        if legacy_results is not None:
+            sources.append({
+                "name": "Forecast Results (Legacy)",
+                "key": "forecast_results",
+                "data": legacy_results,
+                "type": "legacy"
+            })
+            found_keys.add("forecast_results")
 
-    multi_target = st.session_state.get("multi_target_results")
-    if multi_target is not None:
-        sources.append({
-            "name": "Multi-Target Results (Legacy)",
-            "key": "multi_target_results",
-            "data": multi_target,
-            "type": "legacy_multi"
-        })
+    if "multi_target_results" not in found_keys:
+        multi_target = st.session_state.get("multi_target_results")
+        if multi_target is not None:
+            sources.append({
+                "name": "Multi-Target Results (Legacy)",
+                "key": "multi_target_results",
+                "data": multi_target,
+                "type": "legacy_multi"
+            })
+            found_keys.add("multi_target_results")
+
+    # -------------------------------------------------------------------------
+    # CATCH-ALL: Scan for any other forecast-related keys
+    # -------------------------------------------------------------------------
+    forecast_patterns = ["forecast", "prediction", "model_results"]
+    for key in st.session_state.keys():
+        if key not in found_keys:
+            key_lower = key.lower()
+            if any(pattern in key_lower for pattern in forecast_patterns):
+                data = st.session_state.get(key)
+                # Only add if it looks like forecast data (dict with results)
+                if isinstance(data, dict) and len(data) > 0:
+                    sources.append({
+                        "name": f"Other: {key}",
+                        "key": key,
+                        "data": data,
+                        "type": "other"
+                    })
+                    found_keys.add(key)
 
     return sources
 
@@ -398,8 +480,9 @@ def extract_demand_from_source(source: dict, horizon: int = 7) -> tuple:
     try:
         # ---------------------------------------------------------------------
         # ML Models (typically have 'predictions' or 'forecast' keys)
+        # Includes: ml, ml_optimized, ml_all, ml_backtest, dashboard, other
         # ---------------------------------------------------------------------
-        if source_type in ["ml", "ml_optimized", "ml_all"]:
+        if source_type in ["ml", "ml_optimized", "ml_all", "ml_backtest", "dashboard", "other"]:
             # ML results structure varies, try common patterns
             if isinstance(data, dict):
                 # Check for predictions array
