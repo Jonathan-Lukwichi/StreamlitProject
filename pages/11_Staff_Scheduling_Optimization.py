@@ -256,6 +256,7 @@ if "staffing_ratios" not in st.session_state:
 # =============================================================================
 # UNIFIED FORECAST DETECTOR
 # Detects forecast results from ALL trained models:
+# - Forecast Hub (10): Generated forecasts using rolling/walk-forward approach
 # - Modeling Hub (08): XGBoost, LSTM, ANN, LightGBM, RandomForest, etc.
 # - Benchmarks (05): ARIMA, SARIMAX (single & multi-target)
 # - Dashboard (01): Quick forecasts
@@ -270,6 +271,35 @@ def detect_forecast_sources() -> list:
     """
     sources = []
     found_keys = set()  # Track found keys to avoid duplicates
+
+    # -------------------------------------------------------------------------
+    # FORECAST HUB (10_Forecast.py) - PRIORITY SOURCE
+    # These are actual generated forecasts ready for consumption
+    # -------------------------------------------------------------------------
+    if "forecast_hub_demand" not in found_keys:
+        forecast_hub = st.session_state.get("forecast_hub_demand")
+        if forecast_hub is not None:
+            model_name = forecast_hub.get("model", "Unknown")
+            sources.append({
+                "name": f"Forecast Hub: {model_name}",
+                "key": "forecast_hub_demand",
+                "data": forecast_hub,
+                "type": "forecast_hub"
+            })
+            found_keys.add("forecast_hub_demand")
+
+    # Also check for forecast_hub_results (full results)
+    if "forecast_hub_results" not in found_keys:
+        forecast_hub_full = st.session_state.get("forecast_hub_results")
+        if forecast_hub_full is not None and "forecast_hub_demand" not in found_keys:
+            model_name = forecast_hub_full.get("model_name", "Unknown")
+            sources.append({
+                "name": f"Forecast Hub: {model_name} (Full)",
+                "key": "forecast_hub_results",
+                "data": forecast_hub_full,
+                "type": "forecast_hub_full"
+            })
+            found_keys.add("forecast_hub_results")
 
     # -------------------------------------------------------------------------
     # DYNAMIC SCAN: Find ALL ml_mh_results_* keys (any model name)
@@ -479,10 +509,51 @@ def extract_demand_from_source(source: dict, horizon: int = 7) -> tuple:
 
     try:
         # ---------------------------------------------------------------------
+        # FORECAST HUB (10_Forecast.py) - PRIORITY SOURCE
+        # Standardized format with direct forecast values
+        # ---------------------------------------------------------------------
+        if source_type == "forecast_hub":
+            # forecast_hub_demand format: {model, forecast, dates, targets}
+            if isinstance(data, dict):
+                if "forecast" in data:
+                    total_demand = list(data["forecast"])[:horizon]
+                    info = f"Using forecast from {source_name}"
+
+                # Try to get category proportions from targets
+                if "targets" in data:
+                    targets = data["targets"]
+                    # Look for clinical category targets
+                    for cat in CLINICAL_CATEGORIES:
+                        for target_name, values in targets.items():
+                            if cat.lower() in target_name.lower():
+                                if category_proportions is None:
+                                    category_proportions = {}
+                                if isinstance(values, (list, np.ndarray)) and len(values) > 0:
+                                    category_proportions[cat] = np.mean(values)
+
+        elif source_type == "forecast_hub_full":
+            # forecast_hub_results format: {model_name, forecast_values, target_forecasts, ...}
+            if isinstance(data, dict):
+                if "forecast_values" in data:
+                    total_demand = list(data["forecast_values"])[:horizon]
+                    info = f"Using forecast from {source_name}"
+
+                # Try to get category proportions from target_forecasts
+                if "target_forecasts" in data:
+                    targets = data["target_forecasts"]
+                    for cat in CLINICAL_CATEGORIES:
+                        for target_name, values in targets.items():
+                            if cat.lower() in target_name.lower():
+                                if category_proportions is None:
+                                    category_proportions = {}
+                                if isinstance(values, (list, np.ndarray)) and len(values) > 0:
+                                    category_proportions[cat] = np.mean(values)
+
+        # ---------------------------------------------------------------------
         # ML Models (typically have 'predictions' or 'forecast' keys)
         # Includes: ml, ml_optimized, ml_all, ml_backtest, dashboard, other
         # ---------------------------------------------------------------------
-        if source_type in ["ml", "ml_optimized", "ml_all", "ml_backtest", "dashboard", "other"]:
+        elif source_type in ["ml", "ml_optimized", "ml_all", "ml_backtest", "dashboard", "other"]:
             # ML results structure varies, try common patterns
             if isinstance(data, dict):
                 # Check for predictions array
