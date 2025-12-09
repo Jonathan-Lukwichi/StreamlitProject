@@ -29,7 +29,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 import streamlit as st
 
-from .supabase_client import SupabaseClient
+from .supabase_client import get_cached_supabase_client
 
 
 # Table name in Supabase
@@ -43,12 +43,12 @@ class InventoryService:
 
     def __init__(self):
         """Initialize with Supabase client."""
-        self.client = SupabaseClient()
+        self.supabase = get_cached_supabase_client()
         self.table = INVENTORY_TABLE
 
     def is_connected(self) -> bool:
         """Check if Supabase connection is active."""
-        return self.client.is_connected()
+        return self.supabase is not None
 
     def fetch_all(self, limit: int = None) -> pd.DataFrame:
         """
@@ -71,7 +71,7 @@ class InventoryService:
             while True:
                 # Fetch batch
                 response = (
-                    self.client.supabase
+                    self.supabase
                     .table(self.table)
                     .select("*")
                     .order("Date")
@@ -133,7 +133,7 @@ class InventoryService:
 
             while True:
                 response = (
-                    self.client.supabase
+                    self.supabase
                     .table(self.table)
                     .select("*")
                     .gte("Date", start_str)
@@ -178,7 +178,7 @@ class InventoryService:
 
         try:
             response = (
-                self.client.supabase
+                self.supabase
                 .table(self.table)
                 .select("*")
                 .order("Date", desc=True)
@@ -309,7 +309,7 @@ class InventoryService:
             batch_size = 500
             for i in range(0, len(records), batch_size):
                 batch = records[i:i + batch_size]
-                self.client.supabase.table(self.table).insert(batch).execute()
+                self.supabase.table(self.table).insert(batch).execute()
 
             return True
 
