@@ -3,8 +3,10 @@
 # =============================================================================
 from __future__ import annotations
 import inspect
+import os
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -16,12 +18,29 @@ except Exception:
     OneHotEncoder = None
     MinMaxScaler = None
 
+try:
+    import joblib
+    JOBLIB_AVAILABLE = True
+except ImportError:
+    JOBLIB_AVAILABLE = False
+
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+
+# Import temporal split module
+try:
+    from app_core.pipelines import (
+        compute_temporal_split,
+        validate_temporal_split,
+        TemporalSplitResult,
+    )
+    TEMPORAL_SPLIT_AVAILABLE = True
+except ImportError:
+    TEMPORAL_SPLIT_AVAILABLE = False
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -149,17 +168,108 @@ def _safe_concat(base: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:
     out = out.loc[:, ~out.columns.duplicated()]
     return out
 
-def _split_indices(df: pd.DataFrame, date_col: str, ratio: float = 0.8) -> Tuple[np.ndarray, np.ndarray]:
+# Legacy function (kept for fallback if temporal_split not available)
+def _split_indices_legacy(df: pd.DataFrame, date_col: str, ratio: float = 0.8) -> Tuple[np.ndarray, np.ndarray]:
+    """Legacy ratio-based split (fallback only)."""
     n = len(df)
     n_tr = int(np.floor(n*ratio))
     return np.arange(n_tr), np.arange(n_tr, n)
 
+
+def _get_temporal_split(
+    df: pd.DataFrame,
+    date_col: str,
+    train_ratio: float = 0.70,
+    cal_ratio: float = 0.15
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[TemporalSplitResult]]:
+    """
+    Compute temporal split using the academically-rigorous pipeline module.
+
+    Returns:
+        Tuple of (train_idx, cal_idx, test_idx, split_result)
+        If temporal_split module not available, cal_idx will be empty.
+    """
+    if TEMPORAL_SPLIT_AVAILABLE:
+        split_result = compute_temporal_split(
+            df=df,
+            date_col=date_col,
+            train_ratio=train_ratio,
+            cal_ratio=cal_ratio,
+            verbose=False
+        )
+        return (
+            split_result.train_idx,
+            split_result.cal_idx,
+            split_result.test_idx,
+            split_result
+        )
+    else:
+        # Fallback to legacy 2-way split
+        train_idx, test_idx = _split_indices_legacy(df, date_col, train_ratio + cal_ratio)
+        return train_idx, np.array([], dtype=int), test_idx, None
+
+
+# ============================================================================
+# TRANSFORMER PERSISTENCE (Academic Best Practice: Save scalers for inference)
+# ============================================================================
+TRANSFORMERS_DIR = Path("app_core/pipelines/saved_transformers")
+
+def _ensure_transformers_dir():
+    """Create directory for saving transformers if it doesn't exist."""
+    if not TRANSFORMERS_DIR.exists():
+        TRANSFORMERS_DIR.mkdir(parents=True, exist_ok=True)
+
+def _save_transformer(transformer, name: str, variant: str = "A") -> Optional[str]:
+    """
+    Save a fitted transformer (scaler/encoder) for later inference.
+
+    Academic Reference:
+        Prevents data leakage by ensuring production uses the SAME transformer
+        fitted on training data only.
+    """
+    if not JOBLIB_AVAILABLE:
+        return None
+
+    _ensure_transformers_dir()
+    filepath = TRANSFORMERS_DIR / f"{name}_{variant}.joblib"
+    try:
+        joblib.dump(transformer, filepath)
+        return str(filepath)
+    except Exception as e:
+        st.warning(f"Could not save transformer {name}: {e}")
+        return None
+
+def _load_transformer(name: str, variant: str = "A"):
+    """Load a previously saved transformer."""
+    if not JOBLIB_AVAILABLE:
+        return None
+
+    filepath = TRANSFORMERS_DIR / f"{name}_{variant}.joblib"
+    if filepath.exists():
+        return joblib.load(filepath)
+    return None
+
 # === PIPELINES ================================================================
-def _build_variant_A(base, date_col, targets, train_idx, test_idx, apply_scaling=True):
+def _build_variant_A(base, date_col, targets, train_idx, cal_idx, test_idx, apply_scaling=True, save_transformers=True):
+    """
+    Build Variant A: One-Hot Encoded categorical calendar features.
+
+    Academic Notes:
+        - OneHotEncoder fitted ONLY on train_idx (prevents data leakage)
+        - MinMaxScaler fitted ONLY on train_idx
+        - Transformers saved for inference consistency
+    """
     cal = _calendar_frame(base, date_col)
     cat_df = cal[["month","quarter","day_of_week","year"]]
+
+    # Fit OHE on training data ONLY
     ohe = _make_ohe()
     ohe.fit(cat_df.iloc[train_idx])
+
+    # Save OHE for later inference
+    if save_transformers:
+        _save_transformer(ohe, "ohe", variant="A")
+
     names = ohe.get_feature_names_out(["month","quarter","day_of_week","year"])
     arr = ohe.transform(cat_df)
     if hasattr(arr, "toarray"): arr = arr.toarray()
@@ -168,29 +278,59 @@ def _build_variant_A(base, date_col, targets, train_idx, test_idx, apply_scaling
     cal_keep = cal[keep]
     A = _safe_concat(base, cal_keep)
     A = _safe_concat(A, ohe_df)
+
     if apply_scaling and MinMaxScaler is not None:
         exclude = set([date_col] + targets + [c for c in A.columns if c.startswith("ED_")])
         exclude.update({"is_weekend","is_holiday","is_month_end","is_quarter_end","is_year_end"})
         num_cols = A.select_dtypes(include=[np.number]).columns
         scale_cols = [c for c in num_cols if c not in exclude]
         if scale_cols:
+            # Fit scaler on training data ONLY (Academic Best Practice)
             scaler = MinMaxScaler().fit(A.loc[train_idx, scale_cols])
+
+            # Save scaler for later inference
+            if save_transformers:
+                _save_transformer(scaler, "scaler", variant="A")
+                # Also save the column names for reference
+                _save_transformer(scale_cols, "scale_cols", variant="A")
+
+            # Transform ALL data (train, cal, test) using train-fitted scaler
             A.loc[:, scale_cols] = scaler.transform(A.loc[:, scale_cols])
+
     A = A.loc[:, ~A.columns.duplicated()]
     return A
 
-def _build_variant_B(base, date_col, targets, train_idx, test_idx, apply_scaling=True):
+
+def _build_variant_B(base, date_col, targets, train_idx, cal_idx, test_idx, apply_scaling=True, save_transformers=True):
+    """
+    Build Variant B: Cyclical (sin/cos) encoded calendar features.
+
+    Academic Notes:
+        - Cyclical encoding doesn't require fitting (mathematical transform)
+        - MinMaxScaler fitted ONLY on train_idx
+        - Transformer saved for inference consistency
+    """
     cal = _calendar_frame(base, date_col)
     cyc = _cyclical_block(base, date_col, cal)
     B = _safe_concat(base, cyc)
+
     if apply_scaling and MinMaxScaler is not None:
         exclude = set([date_col] + targets + [c for c in B.columns if c.startswith("ED_")])
         exclude.update({"is_weekend","is_holiday","is_month_end","is_quarter_end","is_year_end"})
         num_cols = B.select_dtypes(include=[np.number]).columns
         scale_cols = [c for c in num_cols if c not in exclude]
         if scale_cols:
+            # Fit scaler on training data ONLY (Academic Best Practice)
             scaler = MinMaxScaler().fit(B.loc[train_idx, scale_cols])
+
+            # Save scaler for later inference
+            if save_transformers:
+                _save_transformer(scaler, "scaler", variant="B")
+                _save_transformer(scale_cols, "scale_cols", variant="B")
+
+            # Transform ALL data using train-fitted scaler
             B.loc[:, scale_cols] = scaler.transform(B.loc[:, scale_cols])
+
     B = B.loc[:, ~B.columns.duplicated()]
     return B
 
@@ -206,45 +346,199 @@ def page_feature_engineering():
     targets = _guess_targets(base)
     base = _ensure_dt_sorted(base, date_col)
 
+    # =========================================================================
+    # STEP 1: TEMPORAL SPLIT CONFIGURATION
+    # Academic Reference: Bergmeir & Benítez (2012), Tashman (2000)
+    # =========================================================================
+    st.markdown("### 📊 Step 1: Temporal Data Split")
+
+    if TEMPORAL_SPLIT_AVAILABLE:
+        st.info("""
+        **Academic Temporal Split** (Date-based, not random)
+
+        - **Train Set (70%)**: Model learns patterns from this data
+        - **Calibration Set (15%)**: Used for Conformal Prediction intervals (coverage guarantee)
+        - **Test Set (15%)**: Final holdout for unbiased evaluation
+
+        *References: Bergmeir & Benítez (2012), Romano et al. (2019)*
+        """)
+
+        col_split1, col_split2 = st.columns(2)
+        with col_split1:
+            train_ratio = st.slider(
+                "Training Set Ratio",
+                min_value=0.50,
+                max_value=0.80,
+                value=0.70,
+                step=0.05,
+                help="Proportion of data for training (recommended: 70%)"
+            )
+        with col_split2:
+            cal_ratio = st.slider(
+                "Calibration Set Ratio",
+                min_value=0.05,
+                max_value=0.25,
+                value=0.15,
+                step=0.05,
+                help="Proportion for calibration (needed for Conformal Prediction)"
+            )
+
+        # Compute test ratio
+        test_ratio = 1.0 - train_ratio - cal_ratio
+        if test_ratio < 0.05:
+            st.warning(f"⚠️ Test set too small ({test_ratio:.0%}). Reduce train or calibration ratio.")
+            test_ratio = 0.05
+
+        # Show split preview
+        min_date = base[date_col].min()
+        max_date = base[date_col].max()
+        total_days = (max_date - min_date).days
+
+        from datetime import timedelta
+        train_end = min_date + timedelta(days=int(total_days * train_ratio))
+        cal_end = min_date + timedelta(days=int(total_days * (train_ratio + cal_ratio)))
+
+        col_prev1, col_prev2, col_prev3 = st.columns(3)
+        with col_prev1:
+            st.metric("Train", f"{train_ratio:.0%}", f"{min_date.strftime('%Y-%m-%d')} → {train_end.strftime('%Y-%m-%d')}")
+        with col_prev2:
+            st.metric("Calibration", f"{cal_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {cal_end.strftime('%Y-%m-%d')}")
+        with col_prev3:
+            st.metric("Test", f"{test_ratio:.0%}", f"{cal_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
+
+        # Compute temporal split
+        train_idx, cal_idx, test_idx, split_result = _get_temporal_split(
+            base, date_col, train_ratio, cal_ratio
+        )
+
+    else:
+        st.warning("⚠️ Temporal split module not available. Using legacy ratio-based split.")
+        train_ratio = st.slider("Train ratio", 0.5, 0.95, 0.8, 0.05)
+        train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
+        cal_idx = np.array([], dtype=int)
+        split_result = None
+
+    st.markdown("---")
+
+    # =========================================================================
+    # STEP 2: FEATURE ENGINEERING OPTIONS
+    # =========================================================================
+    st.markdown("### 🧪 Step 2: Feature Engineering Options")
+
     c1, c2, c3 = st.columns(3)
     with c1:
         skip_engineering = st.checkbox("Skip Feature Engineering", value=False)
     with c2:
         apply_scaling = st.checkbox("Apply Min–Max Scaling", value=True)
     with c3:
-        ratio = st.slider("Train ratio", 0.5, 0.95, 0.8, 0.05)
+        save_transformers = st.checkbox("Save Transformers", value=True,
+                                        help="Save scalers/encoders for production inference")
 
-    train_idx, test_idx = _split_indices(base, date_col, ratio)
+    st.markdown("---")
+
+    # =========================================================================
+    # STEP 3: GENERATE DATASET
+    # =========================================================================
+    st.markdown("### 🚀 Step 3: Generate Dataset")
 
     run = st.button("🚀 Generate Dataset", type="primary")
     if not run:
         st.dataframe(base.head(10), use_container_width=True)
         return
 
-    with st.spinner("Processing..."):
+    with st.spinner("Processing features..."):
         if skip_engineering:
             A_full = base.copy()
             B_full = base.copy()
             variant_used = "Original dataset (no feature engineering)"
         else:
-            A_full = _build_variant_A(base, date_col, targets, train_idx, test_idx, apply_scaling)
-            B_full = _build_variant_B(base, date_col, targets, train_idx, test_idx, apply_scaling)
+            A_full = _build_variant_A(base, date_col, targets, train_idx, cal_idx, test_idx,
+                                      apply_scaling, save_transformers)
+            B_full = _build_variant_B(base, date_col, targets, train_idx, cal_idx, test_idx,
+                                      apply_scaling, save_transformers)
             variant_used = "Feature engineered (deduplicated)"
 
+        # Validate temporal split if available
+        if TEMPORAL_SPLIT_AVAILABLE and split_result is not None:
+            is_valid, issues = validate_temporal_split(
+                df=base,
+                train_idx=train_idx,
+                cal_idx=cal_idx,
+                test_idx=test_idx,
+                date_col=date_col
+            )
+            if not is_valid:
+                st.error(f"⚠️ Temporal split validation failed: {issues}")
+
+    # =========================================================================
+    # STORE IN SESSION STATE (with cal_idx for Conformal Prediction)
+    # =========================================================================
     st.session_state["feature_engineering"] = {
-        "summary": {"variant_used": variant_used, "apply_scaling": apply_scaling,
-                    "skip_engineering": skip_engineering, "train_size": len(train_idx), "test_size": len(test_idx)},
-        "A": A_full, "B": B_full, "train_idx": train_idx, "test_idx": test_idx
+        "summary": {
+            "variant_used": variant_used,
+            "apply_scaling": apply_scaling,
+            "skip_engineering": skip_engineering,
+            "train_size": len(train_idx),
+            "cal_size": len(cal_idx),
+            "test_size": len(test_idx),
+            "train_ratio": train_ratio if TEMPORAL_SPLIT_AVAILABLE else train_ratio,
+            "cal_ratio": cal_ratio if TEMPORAL_SPLIT_AVAILABLE else 0.0,
+            "transformers_saved": save_transformers and not skip_engineering,
+        },
+        "A": A_full,
+        "B": B_full,
+        "train_idx": train_idx,
+        "cal_idx": cal_idx,    # NEW: Calibration indices for Conformal Prediction
+        "test_idx": test_idx,
+        "split_result": split_result,  # Full TemporalSplitResult object
     }
 
+    # Also store split result at top level for easy access by other pages
+    if split_result is not None:
+        st.session_state["temporal_split"] = split_result
+
+    # =========================================================================
+    # DISPLAY RESULTS
+    # =========================================================================
     st.success(f"✅ Dataset ready: {variant_used}")
-    tab1, tab2 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)"])
+
+    # Show split summary
+    if TEMPORAL_SPLIT_AVAILABLE:
+        col_sum1, col_sum2, col_sum3 = st.columns(3)
+        with col_sum1:
+            st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
+        with col_sum2:
+            st.metric("Calibration Records", f"{len(cal_idx):,}", f"{len(cal_idx)/len(base)*100:.1f}%")
+        with col_sum3:
+            st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
+
+        if save_transformers and not skip_engineering:
+            st.info(f"💾 Transformers saved to: `{TRANSFORMERS_DIR}/`")
+
+    tab1, tab2, tab3 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)", "Split Details"])
     with tab1:
         st.dataframe(A_full.head(20), use_container_width=True)
         st.download_button("⬇️ Download Variant A", A_full.to_csv(index=False).encode(), "variant_A.csv", "text/csv")
     with tab2:
         st.dataframe(B_full.head(20), use_container_width=True)
         st.download_button("⬇️ Download Variant B", B_full.to_csv(index=False).encode(), "variant_B.csv", "text/csv")
+    with tab3:
+        if split_result is not None:
+            st.markdown("#### Temporal Split Summary")
+            st.json({
+                "date_column": split_result.date_col,
+                "train_start": str(split_result.train_start),
+                "train_end": str(split_result.train_end),
+                "cal_start": str(split_result.cal_start),
+                "cal_end": str(split_result.cal_end),
+                "test_start": str(split_result.test_start),
+                "test_end": str(split_result.test_end),
+                "train_records": len(split_result.train_idx),
+                "cal_records": len(split_result.cal_idx),
+                "test_records": len(split_result.test_idx),
+            })
+        else:
+            st.info("Temporal split details not available (using legacy split).")
 
 # === ENTRYPOINT ===============================================================
 def main():
