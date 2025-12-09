@@ -648,6 +648,16 @@ def _download(label: str, data: bytes, name: str, mime: str="text/csv"):
 
 # ---------- Session helpers ----------
 def _variants_from_session():
+    """
+    Get dataset variants and split indices from Feature Engineering.
+
+    Returns:
+        tuple: (variants, train_idx, cal_idx, test_idx)
+            - variants: Dict of dataset names to DataFrames
+            - train_idx: Training set indices (from temporal split)
+            - cal_idx: Calibration set indices (for CQR in Modeling Hub)
+            - test_idx: Test set indices (from temporal split)
+    """
     fe = st.session_state.get("feature_engineering", {})
     variants = {}
     if isinstance(fe, dict):
@@ -658,7 +668,7 @@ def _variants_from_session():
     proc = st.session_state.get("processed_df")
     if isinstance(proc, pd.DataFrame) and not proc.empty:
         variants["Original (Processed)"] = proc
-    return variants, fe.get("train_idx"), fe.get("test_idx")
+    return variants, fe.get("train_idx"), fe.get("cal_idx"), fe.get("test_idx")
 
 def _pick_target(df: pd.DataFrame) -> List[str]:
     """Return all available Target columns (Target_1 through Target_7)."""
@@ -685,7 +695,7 @@ def page_feature_selection():
         unsafe_allow_html=True,
     )
 
-    variants, train_idx, test_idx = _variants_from_session()
+    variants, train_idx, cal_idx, test_idx = _variants_from_session()
     if not variants:
         st.warning("No engineered datasets found. Please run **Advanced Feature Engineering** first.")
         return
@@ -845,7 +855,11 @@ def page_feature_selection():
         "filtered_datasets": filtered_datasets,
         "variant": variant_name,
         "targets": selected_targets,  # Now stores list of targets
-        "primary_target": primary_target
+        "primary_target": primary_target,
+        # Pass through split indices from Feature Engineering for CQR
+        "train_idx": train_idx,
+        "cal_idx": cal_idx,  # Calibration set for CQR (Conformal Prediction)
+        "test_idx": test_idx,
     }
 
     st.success(f"✅ Done! Feature selection completed for **{len(selected_targets)} target(s)**: {', '.join(selected_targets)}")

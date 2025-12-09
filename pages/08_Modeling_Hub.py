@@ -25,6 +25,21 @@ from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.cache import save_to_cache, get_cache_manager
 from app_core.plots import build_multihorizon_results_dashboard
 
+# =============================================================================
+# CONFORMAL PREDICTION IMPORTS (CQR for Prediction Intervals)
+# =============================================================================
+try:
+    from app_core.pipelines import (
+        CQRPipeline,
+        simple_conformal_intervals,
+        calculate_rpiw,
+        PredictionInterval,
+        RPIWResult,
+    )
+    CQR_AVAILABLE = True
+except ImportError:
+    CQR_AVAILABLE = False
+
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
 # ============================================================================
@@ -843,6 +858,385 @@ def _render_category_statistics_compact():
 
     st.markdown(f"<div style='display: flex; flex-wrap: wrap; gap: 0.25rem;'>{badges_html}</div></div>", unsafe_allow_html=True)
 
+
+# =============================================================================
+# CONFORMAL PREDICTION (CQR) HELPER FUNCTIONS
+# =============================================================================
+
+def _get_calibration_data():
+    """
+    Get calibration indices and data from Feature Engineering session state.
+
+    Returns:
+        tuple: (cal_idx, split_result, available) - calibration indices, split result, and availability flag
+    """
+    fe = st.session_state.get("feature_engineering", {})
+
+    cal_idx = fe.get("cal_idx")
+    split_result = fe.get("split_result")
+
+    # Check if calibration data is available
+    available = (
+        cal_idx is not None and
+        isinstance(cal_idx, np.ndarray) and
+        len(cal_idx) > 0
+    )
+
+    return cal_idx, split_result, available
+
+
+def _compute_cqr_intervals(
+    y_cal: np.ndarray,
+    pred_cal: np.ndarray,
+    pred_test: np.ndarray,
+    y_test: np.ndarray,
+    alpha: float = 0.1
+) -> dict:
+    """
+    Compute CQR prediction intervals for ML model predictions.
+
+    Uses simple conformal prediction since ML models produce point forecasts only.
+
+    Args:
+        y_cal: Actual values on calibration set
+        pred_cal: Predictions on calibration set
+        pred_test: Predictions on test set
+        y_test: Actual values on test set
+        alpha: Significance level (0.1 = 90% coverage)
+
+    Returns:
+        dict with keys: intervals (PredictionInterval), rpiw (RPIWResult), success (bool)
+    """
+    if not CQR_AVAILABLE:
+        return {"success": False, "error": "CQR module not available"}
+
+    try:
+        # Use simple conformal prediction (symmetric intervals around point forecast)
+        intervals = simple_conformal_intervals(
+            y_cal=np.asarray(y_cal),
+            pred_cal=np.asarray(pred_cal),
+            pred_test=np.asarray(pred_test),
+            alpha=alpha
+        )
+
+        # Calculate RPIW
+        rpiw_result = calculate_rpiw(np.asarray(y_test), intervals)
+
+        return {
+            "success": True,
+            "intervals": intervals,
+            "rpiw": rpiw_result,
+            "coverage": rpiw_result.coverage,
+            "mean_width": intervals.mean_width,
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _render_cqr_metrics(rpiw_result: "RPIWResult", model_name: str = "Model"):
+    """
+    Render CQR/RPIW metrics as compact KPI cards.
+
+    Args:
+        rpiw_result: RPIWResult from CQR calculation
+        model_name: Name of the model for display
+    """
+    if rpiw_result is None:
+        return
+
+    # Coverage color based on validity
+    if rpiw_result.is_valid:
+        cov_color = SUCCESS_COLOR
+        cov_status = "Valid"
+    else:
+        cov_color = WARNING_COLOR
+        cov_status = f"Below target ({rpiw_result.coverage_gap:.1%} gap)"
+
+    st.markdown(f"""
+    <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.05));
+                border: 1px solid rgba(139, 92, 246, 0.3);
+                border-radius: 12px;
+                padding: 1rem;
+                margin: 1rem 0;'>
+        <div style='display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;'>
+            <span style='font-size: 1.25rem;'>📊</span>
+            <span style='font-size: 1rem; font-weight: 700; color: {TEXT_COLOR};'>
+                Prediction Interval Quality ({model_name})
+            </span>
+            <span style='font-size: 0.75rem; color: {SUBTLE_TEXT}; margin-left: auto;'>
+                Conformalized Quantile Regression (CQR)
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.plotly_chart(
+            _create_kpi_indicator("RPIW", rpiw_result.rpiw, "", "#8b5cf6"),
+            use_container_width=True
+        )
+        st.caption("Lower = Tighter intervals")
+
+    with col2:
+        st.plotly_chart(
+            _create_kpi_indicator("Coverage", rpiw_result.coverage * 100, "%", cov_color),
+            use_container_width=True
+        )
+        st.caption(f"Target: {rpiw_result.coverage_target:.0%}")
+
+    with col3:
+        st.plotly_chart(
+            _create_kpi_indicator("Mean Width", rpiw_result.mean_interval_width, "", SECONDARY_COLOR),
+            use_container_width=True
+        )
+        st.caption("Average interval size")
+
+    with col4:
+        st.plotly_chart(
+            _create_kpi_indicator("Data Range", rpiw_result.data_range, "", PRIMARY_COLOR),
+            use_container_width=True
+        )
+        st.caption("max(y) - min(y)")
+
+
+def _add_intervals_to_plot(fig: go.Figure, datetime_vals, lower: np.ndarray, upper: np.ndarray,
+                           alpha: float = 0.1, color: str = "rgba(139, 92, 246, 0.2)"):
+    """
+    Add prediction interval band to an existing Plotly figure.
+
+    Args:
+        fig: Existing Plotly figure
+        datetime_vals: X-axis values (datetime)
+        lower: Lower bound of intervals
+        upper: Upper bound of intervals
+        alpha: Significance level for legend
+        color: Fill color for the band
+    """
+    coverage_pct = int((1 - alpha) * 100)
+
+    # Add upper bound (invisible line)
+    fig.add_trace(go.Scatter(
+        x=datetime_vals,
+        y=upper,
+        mode='lines',
+        line=dict(width=0),
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+
+    # Add lower bound with fill to upper
+    fig.add_trace(go.Scatter(
+        x=datetime_vals,
+        y=lower,
+        mode='lines',
+        line=dict(width=0),
+        fill='tonexty',
+        fillcolor=color,
+        name=f'{coverage_pct}% Prediction Interval',
+        hovertemplate=f'<b>{coverage_pct}% Interval</b><br>Lower: %{{y:.2f}}<extra></extra>',
+    ))
+
+    return fig
+
+
+def compute_cqr_for_multihorizon(ml_results: dict, alpha: float = 0.1) -> dict:
+    """
+    Compute CQR prediction intervals for all horizons in multi-horizon ML results.
+
+    Args:
+        ml_results: Multi-horizon results from run_ml_multihorizon()
+        alpha: Significance level (0.1 = 90% coverage)
+
+    Returns:
+        dict with keys:
+            - success: bool
+            - intervals: Dict[horizon, PredictionInterval]
+            - rpiw_results: Dict[horizon, RPIWResult]
+            - aggregated_rpiw: float (average RPIW across horizons)
+            - aggregated_coverage: float (average coverage across horizons)
+    """
+    if not CQR_AVAILABLE:
+        return {"success": False, "error": "CQR module not available"}
+
+    per_h = ml_results.get("per_h", {})
+    successful = ml_results.get("successful", [])
+    has_cqr_data = ml_results.get("has_cqr_data", False)
+
+    if not has_cqr_data:
+        return {"success": False, "error": "No calibration data available. Run Feature Engineering first."}
+
+    intervals = {}
+    rpiw_results = {}
+    all_rpiwsv = []
+    all_coverages = []
+
+    for h in successful:
+        h_data = per_h.get(h, {})
+
+        y_cal = h_data.get("y_cal")
+        y_cal_pred = h_data.get("y_cal_pred")
+        y_test = h_data.get("y_test")
+        forecast = h_data.get("forecast")
+
+        if y_cal is None or y_cal_pred is None or y_test is None or forecast is None:
+            continue
+
+        try:
+            # Compute CQR intervals for this horizon
+            cqr_result = _compute_cqr_intervals(
+                y_cal=y_cal,
+                pred_cal=y_cal_pred,
+                pred_test=forecast,
+                y_test=y_test,
+                alpha=alpha
+            )
+
+            if cqr_result.get("success"):
+                intervals[h] = cqr_result["intervals"]
+                rpiw_results[h] = cqr_result["rpiw"]
+                all_rpiwsv.append(cqr_result["rpiw"].rpiw)
+                all_coverages.append(cqr_result["rpiw"].coverage)
+
+                # Update per_h with interval bounds
+                per_h[h]["ci_lo"] = cqr_result["intervals"].lower
+                per_h[h]["ci_hi"] = cqr_result["intervals"].upper
+
+        except Exception as e:
+            continue
+
+    if not intervals:
+        return {"success": False, "error": "Failed to compute CQR for any horizon"}
+
+    return {
+        "success": True,
+        "intervals": intervals,
+        "rpiw_results": rpiw_results,
+        "aggregated_rpiw": float(np.mean(all_rpiwsv)) if all_rpiwsv else None,
+        "aggregated_coverage": float(np.mean(all_coverages)) if all_coverages else None,
+        "n_horizons": len(intervals),
+    }
+
+
+def render_cqr_section(ml_results: dict, model_name: str, alpha: float = 0.1):
+    """
+    Render CQR prediction intervals section for multi-horizon ML results.
+
+    Args:
+        ml_results: Multi-horizon results from run_ml_multihorizon()
+        model_name: Name of the model for display
+        alpha: Significance level (0.1 = 90% coverage)
+    """
+    if not CQR_AVAILABLE:
+        return
+
+    has_cqr_data = ml_results.get("has_cqr_data", False)
+
+    if not has_cqr_data:
+        st.info("📊 **Prediction Intervals**: Run Feature Engineering with a calibration set to enable CQR prediction intervals.")
+        return
+
+    # Compute CQR intervals
+    cqr_output = compute_cqr_for_multihorizon(ml_results, alpha)
+
+    if not cqr_output.get("success"):
+        st.warning(f"⚠️ Could not compute prediction intervals: {cqr_output.get('error', 'Unknown error')}")
+        return
+
+    # Header
+    coverage_pct = int((1 - alpha) * 100)
+    st.markdown(f"""
+    <div style='background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.1));
+                border: 1px solid rgba(139, 92, 246, 0.4);
+                border-radius: 12px;
+                padding: 1.25rem;
+                margin: 2rem 0 1rem 0;'>
+        <div style='display: flex; align-items: center; gap: 0.75rem;'>
+            <span style='font-size: 1.5rem;'>📊</span>
+            <div>
+                <h3 style='color: {TEXT_COLOR}; margin: 0; font-size: 1.2rem; font-weight: 700;'>
+                    {coverage_pct}% Prediction Intervals ({model_name})
+                </h3>
+                <p style='color: {SUBTLE_TEXT}; margin: 0.25rem 0 0 0; font-size: 0.85rem;'>
+                    Conformalized Quantile Regression (CQR) - Romano et al., 2019
+                </p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Aggregated metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.plotly_chart(
+            _create_kpi_indicator("Avg RPIW", cqr_output.get("aggregated_rpiw", 0), "", "#8b5cf6"),
+            use_container_width=True
+        )
+        st.caption("Lower = Tighter intervals")
+
+    with col2:
+        coverage = cqr_output.get("aggregated_coverage", 0)
+        cov_color = SUCCESS_COLOR if coverage >= (1 - alpha - 0.02) else WARNING_COLOR
+        st.plotly_chart(
+            _create_kpi_indicator("Avg Coverage", coverage * 100 if coverage else 0, "%", cov_color),
+            use_container_width=True
+        )
+        st.caption(f"Target: {coverage_pct}%")
+
+    with col3:
+        st.plotly_chart(
+            _create_kpi_indicator("Horizons", cqr_output.get("n_horizons", 0), "", PRIMARY_COLOR),
+            use_container_width=True
+        )
+        st.caption("With valid intervals")
+
+    with col4:
+        # Validity indicator
+        is_valid = (cqr_output.get("aggregated_coverage", 0) or 0) >= (1 - alpha - 0.02)
+        validity_color = SUCCESS_COLOR if is_valid else WARNING_COLOR
+        validity_text = "Valid" if is_valid else "Under-coverage"
+        st.markdown(f"""
+        <div style='background: rgba(15, 23, 42, 0.8);
+                    border-radius: 12px;
+                    padding: 1.25rem;
+                    text-align: center;
+                    box-shadow: 0 0 25px {validity_color}40;
+                    border: 1px solid {validity_color}40;
+                    height: 120px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;'>
+            <div style='color: {TEXT_COLOR}; font-size: 12px; font-weight: 700;
+                        letter-spacing: 0.5px; margin-bottom: 0.5rem;'>
+                STATUS
+            </div>
+            <div style='color: {validity_color}; font-size: 20px; font-weight: 800;
+                        text-shadow: 0 0 15px {validity_color}80;'>
+                {validity_text}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Per-horizon details in expander
+    with st.expander("📈 Per-Horizon Interval Details", expanded=False):
+        rpiw_results = cqr_output.get("rpiw_results", {})
+        if rpiw_results:
+            rows = []
+            for h, rpiw in sorted(rpiw_results.items()):
+                rows.append({
+                    "Horizon": h,
+                    "RPIW": round(rpiw.rpiw, 4),
+                    "Coverage": f"{rpiw.coverage:.1%}",
+                    "Mean Width": round(rpiw.mean_interval_width, 2),
+                    "Data Range": round(rpiw.data_range, 2),
+                    "Valid": "Yes" if rpiw.is_valid else "No"
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
 # -----------------------------------------------------------------------------
 # BENCHMARKS (ARIMA / SARIMAX)
 # -----------------------------------------------------------------------------
@@ -1164,9 +1558,13 @@ def run_ml_multihorizon(
                 "y_test": predictions["actual"].values if predictions is not None else None,
                 "forecast": predictions["predicted"].values if predictions is not None else None,
                 "datetime": predictions["datetime"].values if predictions is not None else None,
-                "ci_lo": None,  # ML models don't have confidence intervals by default
-                "ci_hi": None,
+                "ci_lo": None,  # Will be filled by CQR if available
+                "ci_hi": None,  # Will be filled by CQR if available
                 "params": result.get("params", {}),
+                # CQR calibration data
+                "has_calibration": result.get("has_calibration", False),
+                "y_cal": result.get("y_cal"),
+                "y_cal_pred": result.get("y_cal_pred"),
             }
 
             successful.append(h)
@@ -1190,11 +1588,18 @@ def run_ml_multihorizon(
             "Test_MAE", "Test_RMSE", "Test_MAPE", "Test_Acc", "Train_N", "Test_N"
         ])
 
+    # Check if CQR calibration data is available (from first successful horizon)
+    has_cqr_data = False
+    if successful and per_h:
+        first_h = successful[0]
+        has_cqr_data = per_h[first_h].get("has_calibration", False)
+
     return {
         "results_df": results_df,
         "per_h": per_h,
         "successful": successful,
-        "errors": errors,  # Include errors in return
+        "errors": errors,
+        "has_cqr_data": has_cqr_data,  # Flag for CQR availability
     }
 
 def ml_to_multihorizon_artifacts(ml_out: dict):
@@ -1313,6 +1718,9 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
     """
     Unified ML training pipeline for all models (LSTM, ANN, XGBoost).
 
+    Supports both 2-way split (train/test) and 3-way split (train/cal/test) when
+    Feature Engineering calibration indices are available.
+
     Args:
         model_type: Model name ("LSTM", "ANN", or "XGBoost")
         config: Model configuration dictionary
@@ -1323,6 +1731,7 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
 
     Returns:
         dict: Results containing metrics, predictions, and metadata
+              Includes calibration predictions when cal_idx is available.
     """
     import time
     from datetime import datetime
@@ -1362,17 +1771,59 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
         X = df[numeric_feature_cols].values
         y = df[target_col].values
 
-        # Split train/validation (time series - no shuffle)
-        split_idx = int(len(df) * split_ratio)
-        X_train, X_val = X[:split_idx], X[split_idx:]
-        y_train, y_val = y[:split_idx], y[split_idx:]
+        # =====================================================================
+        # Check for Feature Engineering split indices (3-way split for CQR)
+        # =====================================================================
+        fe = st.session_state.get("feature_engineering", {})
+        train_idx = fe.get("train_idx")
+        cal_idx = fe.get("cal_idx")
+        test_idx = fe.get("test_idx")
 
-        # Extract datetime values for validation set
-        if datetime_col:
-            val_datetime = df[datetime_col].iloc[split_idx:].values
+        # Check if 3-way split is available and indices are valid for this dataframe
+        use_fe_split = (
+            train_idx is not None and
+            cal_idx is not None and
+            test_idx is not None and
+            isinstance(train_idx, np.ndarray) and
+            isinstance(cal_idx, np.ndarray) and
+            isinstance(test_idx, np.ndarray) and
+            len(cal_idx) > 0 and
+            max(train_idx.max() if len(train_idx) > 0 else 0,
+                cal_idx.max() if len(cal_idx) > 0 else 0,
+                test_idx.max() if len(test_idx) > 0 else 0) < len(df)
+        )
+
+        if use_fe_split:
+            # Use Feature Engineering 3-way split (train/calibration/test)
+            X_train, y_train = X[train_idx], y[train_idx]
+            X_cal, y_cal = X[cal_idx], y[cal_idx]
+            X_val, y_val = X[test_idx], y[test_idx]
+
+            # Extract datetime values
+            if datetime_col:
+                val_datetime = df[datetime_col].iloc[test_idx].values
+                cal_datetime = df[datetime_col].iloc[cal_idx].values
+            else:
+                val_datetime = test_idx.tolist()
+                cal_datetime = cal_idx.tolist()
+
+            has_calibration = True
         else:
-            # Fallback to dataframe index
-            val_datetime = df.index[split_idx:].tolist() if hasattr(df, 'index') else list(range(split_idx, len(df)))
+            # Fallback to 2-way split (train/validation)
+            split_idx = int(len(df) * split_ratio)
+            X_train, X_val = X[:split_idx], X[split_idx:]
+            y_train, y_val = y[:split_idx], y[split_idx:]
+
+            # No calibration set
+            X_cal, y_cal = None, None
+            cal_datetime = None
+            has_calibration = False
+
+            # Extract datetime values for validation set
+            if datetime_col:
+                val_datetime = df[datetime_col].iloc[split_idx:].values
+            else:
+                val_datetime = df.index[split_idx:].tolist() if hasattr(df, 'index') else list(range(split_idx, len(df)))
 
         # Initialize model based on type
         if model_type == "XGBoost":
@@ -1434,6 +1885,17 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
         y_train_pred = pipeline.predict(X_train)
         y_val_pred = pipeline.predict(X_val)
 
+        # Generate calibration predictions if calibration set is available (for CQR)
+        y_cal_pred = None
+        calibration_df = None
+        if has_calibration and X_cal is not None:
+            y_cal_pred = pipeline.predict(X_cal)
+            calibration_df = pd.DataFrame({
+                "datetime": cal_datetime,
+                "actual": y_cal,
+                "predicted": y_cal_pred
+            })
+
         # Calculate metrics
         train_metrics = pipeline.evaluate(y_train, y_train_pred)
         val_metrics = pipeline.evaluate(y_val, y_val_pred)
@@ -1445,8 +1907,8 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             "predicted": y_val_pred
         })
 
-        # Return results
-        return {
+        # Build result dictionary
+        result = {
             "success": True,
             "model_type": model_type,
             "params": model_config if model_type == "XGBoost" else {},
@@ -1459,7 +1921,18 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             "n_features": len(numeric_feature_cols),
             "n_train": len(y_train),
             "n_val": len(y_val),
+            # CQR-related data
+            "has_calibration": has_calibration,
         }
+
+        # Add calibration data if available
+        if has_calibration:
+            result["calibration"] = calibration_df
+            result["y_cal"] = y_cal
+            result["y_cal_pred"] = y_cal_pred
+            result["n_cal"] = len(y_cal)
+
+        return result
 
     except Exception as e:
         return {
@@ -2289,8 +2762,11 @@ def page_ml():
                 st.divider()
                 render_ml_multihorizon_results(st.session_state["ml_mh_results"], cfg['ml_choice'])
 
-                # Add probability-based category forecast section
+                # Add CQR prediction intervals section
                 ml_results = st.session_state["ml_mh_results"]
+                render_cqr_section(ml_results, cfg['ml_choice'])
+
+                # Add probability-based category forecast section
                 per_h = ml_results.get("per_h", {})
                 successful = ml_results.get("successful", [])
 
@@ -2402,6 +2878,11 @@ def page_ml():
                                 unsafe_allow_html=True
                             )
                             render_ml_metrics_only(results, model_name)
+
+                            # Add CQR prediction intervals section (compact for comparison)
+                            if results.get("has_cqr_data"):
+                                with st.expander(f"📊 {model_name} Prediction Intervals (CQR)", expanded=False):
+                                    render_cqr_section(results, model_name)
 
                             # Add probability-based category forecast for each model
                             per_h = results.get("per_h", {})
