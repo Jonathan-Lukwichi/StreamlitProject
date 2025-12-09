@@ -2,7 +2,11 @@
 """
 Cache Manager for persisting processed data, feature engineering results, and model outputs.
 Uses pickle for complex objects and parquet for DataFrames.
+
+NOTE: On Streamlit Cloud, file handle limits can cause "Too many open files" errors.
+This module is designed to minimize concurrent file operations.
 """
+import gc
 import hashlib
 import json
 import os
@@ -138,6 +142,9 @@ class CacheManager:
                 "data_hash": data_hash,
             }
             self._save_metadata()
+
+            # Force garbage collection to release file handles
+            gc.collect()
             return True
 
         except Exception as e:
@@ -165,10 +172,14 @@ class CacheManager:
                 return None
 
             if meta["type"] == "parquet" and HAS_PYARROW:
-                return pd.read_parquet(path)
+                result = pd.read_parquet(path)
             else:
                 with open(path, "rb") as f:
-                    return pickle.load(f)
+                    result = pickle.load(f)
+
+            # Force garbage collection to release file handles
+            gc.collect()
+            return result
 
         except Exception as e:
             print(f"Cache load error for {key}: {e}")

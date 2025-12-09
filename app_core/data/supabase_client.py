@@ -44,7 +44,7 @@ def get_supabase_client():
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
 
-        # Create and cache client
+        # Create Supabase client
         client: Client = create_client(url, key)
         return client
 
@@ -53,15 +53,40 @@ def get_supabase_client():
         return None
 
 
-@st.cache_resource
+# Global client reference for cleanup
+_supabase_client = None
+
+
+@st.cache_resource(ttl=3600)  # Cache for 1 hour, then refresh
 def get_cached_supabase_client():
     """
     Get cached Supabase client (reused across sessions).
 
+    Uses TTL to periodically refresh the connection and prevent stale connections.
+
     Returns:
         Cached Supabase client instance
     """
-    return get_supabase_client()
+    global _supabase_client
+    _supabase_client = get_supabase_client()
+    return _supabase_client
+
+
+def cleanup_supabase_connections():
+    """
+    Explicitly close Supabase client connections.
+    Call this when you're done with database operations.
+    """
+    global _supabase_client
+    try:
+        if _supabase_client is not None:
+            # The Supabase client uses httpx internally
+            # Try to close the underlying HTTP client
+            if hasattr(_supabase_client, 'postgrest'):
+                if hasattr(_supabase_client.postgrest, '_session'):
+                    _supabase_client.postgrest._session.aclose()
+    except Exception:
+        pass  # Ignore cleanup errors
 
 
 class SupabaseService:
