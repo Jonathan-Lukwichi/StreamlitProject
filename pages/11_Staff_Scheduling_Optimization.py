@@ -1103,6 +1103,7 @@ with tab_optimize:
         )
 
         planning_horizon = st.slider("Planning Horizon (days)", min_value=3, max_value=14, value=7)
+        st.session_state["planning_horizon"] = planning_horizon
 
         # Get demand based on source
         total_demand = None
@@ -1350,6 +1351,387 @@ with tab_results:
             # Comparison table
             st.markdown("### 📋 Detailed Comparison")
             st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # =================================================================
+        # FINANCIAL KPI DASHBOARD
+        # =================================================================
+        st.markdown("## 💼 Financial KPI Dashboard")
+        st.info("Comprehensive financial analysis comparing optimization results with historical hospital financial data.")
+
+        # Load financial KPIs if available
+        financial_kpis = None
+        savings_analysis = None
+
+        if FINANCIAL_SERVICE_AVAILABLE:
+            try:
+                fin_service = get_financial_service()
+                if fin_service.is_connected():
+                    # Get planning horizon from session state
+                    planning_horizon = st.session_state.get("planning_horizon", 7)
+
+                    # Get comprehensive financial KPIs
+                    financial_kpis = fin_service.get_comprehensive_financial_kpis(n_days=planning_horizon * 4)
+
+                    if financial_kpis and result is not None:
+                        # Calculate savings
+                        savings_analysis = fin_service.calculate_optimization_savings(
+                            optimized_labor_cost=result.regular_labor_cost,
+                            optimized_overtime_cost=result.overtime_cost,
+                            optimized_penalties=result.understaffing_penalty + result.overstaffing_penalty,
+                            planning_horizon=planning_horizon
+                        )
+            except Exception as e:
+                st.warning(f"Could not load financial data: {e}")
+
+        if savings_analysis:
+            # =================================================================
+            # ROW 1: TOP-LINE SAVINGS METRICS
+            # =================================================================
+            st.markdown("### 💰 Savings Summary")
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            total_savings = savings_analysis["savings"]["total_savings"]
+            total_savings_pct = savings_analysis["savings"]["total_savings_pct"]
+            hours_saved = savings_analysis["savings"]["overtime_hours_saved"]
+
+            with col1:
+                savings_color = "#22c55e" if total_savings > 0 else "#ef4444"
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">💵 Total Savings</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: {savings_color};">${total_savings:,.0f}</div>
+                        <div class="opt-metric-label">{total_savings_pct:+.1f}% reduction</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                hours_color = "#22c55e" if hours_saved > 0 else "#60a5fa"
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">⏱️ Overtime Hours Saved</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: {hours_color};">{hours_saved:,.1f}h</div>
+                        <div class="opt-metric-label">reduced workload</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                overtime_savings = savings_analysis["savings"]["overtime_savings"]
+                overtime_pct = savings_analysis["savings"]["overtime_savings_pct"]
+                ot_color = "#22c55e" if overtime_savings > 0 else "#ef4444"
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">🔄 Overtime Cost Reduction</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: {ot_color};">${overtime_savings:,.0f}</div>
+                        <div class="opt-metric-label">{overtime_pct:+.1f}% savings</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col4:
+                penalty_savings = savings_analysis["savings"]["penalty_savings"]
+                penalty_pct = savings_analysis["savings"]["penalty_savings_pct"]
+                pen_color = "#22c55e" if penalty_savings > 0 else "#ef4444"
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">⚠️ Penalty Reduction</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: {pen_color};">${penalty_savings:,.0f}</div>
+                        <div class="opt-metric-label">{penalty_pct:+.1f}% reduction</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # =================================================================
+            # ROW 2: ANNUAL PROJECTIONS & ROI
+            # =================================================================
+            st.markdown("### 📈 Annual Projections & ROI")
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            # Calculate annual projections (scale from planning horizon to 365 days)
+            horizon = savings_analysis["planning_horizon"]
+            annual_multiplier = 365 / horizon if horizon > 0 else 52
+
+            annual_savings = total_savings * annual_multiplier
+            annual_hours_saved = hours_saved * annual_multiplier
+            annual_overtime_savings = overtime_savings * annual_multiplier
+
+            with col1:
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">📅 Annual Cost Savings</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: #22c55e;">${annual_savings:,.0f}</div>
+                        <div class="opt-metric-label">projected yearly</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">⏰ Annual Hours Saved</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: #60a5fa;">{annual_hours_saved:,.0f}h</div>
+                        <div class="opt-metric-label">~{annual_hours_saved/8:,.0f} staff-days</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                # Calculate FTE (Full-Time Equivalent) saved
+                fte_saved = annual_hours_saved / 2080  # 2080 hours = 1 FTE per year
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">👤 FTE Equivalent Saved</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: #a855f7;">{fte_saved:.2f}</div>
+                        <div class="opt-metric-label">full-time equivalents</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col4:
+                # Monthly savings
+                monthly_savings = annual_savings / 12
+                st.markdown(f"""
+                <div class="opt-card">
+                    <div class="opt-card-header">📆 Monthly Savings</div>
+                    <div class="opt-metric">
+                        <div class="opt-metric-value" style="color: #22c55e;">${monthly_savings:,.0f}</div>
+                        <div class="opt-metric-label">average per month</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # =================================================================
+            # ROW 3: HOSPITAL FINANCIAL CONTEXT
+            # =================================================================
+            if financial_kpis:
+                st.markdown("### 🏥 Hospital Financial Context")
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    avg_revenue = financial_kpis["revenue"]["avg_daily_revenue"]
+                    st.markdown(f"""
+                    <div class="opt-card">
+                        <div class="opt-card-header">💰 Avg Daily Revenue</div>
+                        <div class="opt-metric">
+                            <div class="opt-metric-value neutral">${avg_revenue:,.0f}</div>
+                            <div class="opt-metric-label">hospital revenue</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col2:
+                    avg_profit = financial_kpis["profitability"]["avg_daily_profit"]
+                    profit_color = "#22c55e" if avg_profit > 0 else "#ef4444"
+                    st.markdown(f"""
+                    <div class="opt-card">
+                        <div class="opt-card-header">📊 Avg Daily Profit</div>
+                        <div class="opt-metric">
+                            <div class="opt-metric-value" style="color: {profit_color};">${avg_profit:,.0f}</div>
+                            <div class="opt-metric-label">before optimization</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col3:
+                    profit_margin = financial_kpis["profitability"]["avg_profit_margin"]
+                    margin_color = "#22c55e" if profit_margin > 0 else "#ef4444"
+                    st.markdown(f"""
+                    <div class="opt-card">
+                        <div class="opt-card-header">📈 Profit Margin</div>
+                        <div class="opt-metric">
+                            <div class="opt-metric-value" style="color: {margin_color};">{profit_margin:.1f}%</div>
+                            <div class="opt-metric-label">historical average</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col4:
+                    labor_ratio = financial_kpis["ratios"]["avg_labor_cost_ratio"]
+                    st.markdown(f"""
+                    <div class="opt-card">
+                        <div class="opt-card-header">👥 Labor Cost Ratio</div>
+                        <div class="opt-metric">
+                            <div class="opt-metric-value neutral">{labor_ratio:.1f}%</div>
+                            <div class="opt-metric-label">of total costs</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # =================================================================
+                # ROW 4: PROFIT MARGIN IMPROVEMENT
+                # =================================================================
+                st.markdown("### 📊 Profit Margin Impact")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    # Calculate improved profit margin
+                    avg_total_cost = financial_kpis["operating"]["avg_total_operating_cost"]
+                    daily_savings = total_savings / horizon if horizon > 0 else 0
+
+                    # New profit after savings
+                    new_daily_profit = avg_profit + daily_savings
+                    new_profit_margin = (new_daily_profit / avg_revenue * 100) if avg_revenue > 0 else 0
+                    margin_improvement = new_profit_margin - profit_margin
+
+                    # Create comparison chart
+                    margin_data = {
+                        "Metric": ["Before Optimization", "After Optimization"],
+                        "Profit Margin (%)": [profit_margin, new_profit_margin]
+                    }
+                    margin_df = pd.DataFrame(margin_data)
+
+                    fig_margin = go.Figure(data=[
+                        go.Bar(
+                            x=margin_df["Metric"],
+                            y=margin_df["Profit Margin (%)"],
+                            marker_color=["#ef4444", "#22c55e"],
+                            text=[f"{profit_margin:.1f}%", f"{new_profit_margin:.1f}%"],
+                            textposition='outside'
+                        )
+                    ])
+                    fig_margin.update_layout(
+                        title="Profit Margin Improvement",
+                        yaxis_title="Profit Margin (%)",
+                        template="plotly_dark",
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_margin, use_container_width=True)
+
+                with col2:
+                    # Key improvement metrics
+                    st.markdown("**Key Financial Improvements:**")
+
+                    improvement_data = {
+                        "Metric": [
+                            "Daily Profit Improvement",
+                            "Profit Margin Change",
+                            "Labor Cost Reduction",
+                            "Overtime Cost Reduction",
+                            "Penalty Cost Reduction"
+                        ],
+                        "Before": [
+                            f"${avg_profit:,.0f}",
+                            f"{profit_margin:.1f}%",
+                            f"${savings_analysis['historical']['labor_cost']:,.0f}",
+                            f"${savings_analysis['historical']['overtime_cost']:,.0f}",
+                            f"${savings_analysis['historical']['penalty_cost']:,.0f}"
+                        ],
+                        "After": [
+                            f"${new_daily_profit:,.0f}",
+                            f"{new_profit_margin:.1f}%",
+                            f"${savings_analysis['optimized']['labor_cost']:,.0f}",
+                            f"${savings_analysis['optimized']['overtime_cost']:,.0f}",
+                            f"${savings_analysis['optimized']['penalty_cost']:,.0f}"
+                        ],
+                        "Change": [
+                            f"+${daily_savings:,.0f}",
+                            f"{margin_improvement:+.1f}%",
+                            f"{savings_analysis['savings']['labor_savings_pct']:+.1f}%",
+                            f"{savings_analysis['savings']['overtime_savings_pct']:+.1f}%",
+                            f"{savings_analysis['savings']['penalty_savings_pct']:+.1f}%"
+                        ]
+                    }
+                    improvement_df = pd.DataFrame(improvement_data)
+                    st.dataframe(improvement_df, use_container_width=True, hide_index=True)
+
+                # =================================================================
+                # ROW 5: HISTORICAL BENCHMARKS
+                # =================================================================
+                st.markdown("### 📉 Historical Cost Benchmarks")
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.markdown("**Labor Cost per Patient:**")
+                    labor_per_patient = financial_kpis["labor"]["labor_cost_per_patient"]
+                    # Estimate new labor cost per patient (rough estimate)
+                    total_demand = sum(st.session_state.get("total_demand", [100] * horizon))
+                    new_labor_per_patient = result.regular_labor_cost / total_demand if total_demand > 0 else 0
+                    labor_per_patient_savings = labor_per_patient - new_labor_per_patient
+
+                    st.metric(
+                        "Historical",
+                        f"${labor_per_patient:,.2f}",
+                        delta=None
+                    )
+                    st.metric(
+                        "Optimized",
+                        f"${new_labor_per_patient:,.2f}",
+                        delta=f"-${labor_per_patient_savings:,.2f}" if labor_per_patient_savings > 0 else f"+${abs(labor_per_patient_savings):,.2f}",
+                        delta_color="normal" if labor_per_patient_savings > 0 else "inverse"
+                    )
+
+                with col2:
+                    st.markdown("**Avg Overtime Cost/Day:**")
+                    avg_ot = financial_kpis["labor"]["avg_overtime_cost"]
+                    new_ot = result.overtime_cost / horizon if horizon > 0 else 0
+
+                    st.metric(
+                        "Historical",
+                        f"${avg_ot:,.0f}",
+                        delta=None
+                    )
+                    st.metric(
+                        "Optimized",
+                        f"${new_ot:,.0f}",
+                        delta=f"-${avg_ot - new_ot:,.0f}" if (avg_ot - new_ot) > 0 else f"+${abs(avg_ot - new_ot):,.0f}",
+                        delta_color="normal" if (avg_ot - new_ot) > 0 else "inverse"
+                    )
+
+                with col3:
+                    st.markdown("**Avg Penalty Cost/Day:**")
+                    avg_penalty = financial_kpis["penalties"]["avg_total_optimization_cost"]
+                    new_penalty = (result.understaffing_penalty + result.overstaffing_penalty) / horizon if horizon > 0 else 0
+
+                    st.metric(
+                        "Historical",
+                        f"${avg_penalty:,.0f}",
+                        delta=None
+                    )
+                    st.metric(
+                        "Optimized",
+                        f"${new_penalty:,.0f}",
+                        delta=f"-${avg_penalty - new_penalty:,.0f}" if (avg_penalty - new_penalty) > 0 else f"+${abs(avg_penalty - new_penalty):,.0f}",
+                        delta_color="normal" if (avg_penalty - new_penalty) > 0 else "inverse"
+                    )
+
+        else:
+            # Fallback when financial data is not available
+            st.warning("📊 Financial data not available from Supabase. Load financial data to see comprehensive KPIs.")
+
+            if result is not None and historical is not None:
+                # Show basic comparison without full financial context
+                st.markdown("### Basic Optimization Savings (without financial context)")
+
+                col1, col2, col3 = st.columns(3)
+
+                basic_savings = historical.total_cost - result.total_cost
+                basic_pct = (basic_savings / historical.total_cost * 100) if historical.total_cost > 0 else 0
+
+                with col1:
+                    st.metric("Total Cost Savings", f"${basic_savings:,.0f}", delta=f"{basic_pct:+.1f}%")
+
+                with col2:
+                    ot_savings = historical.overtime_cost - result.overtime_cost
+                    st.metric("Overtime Savings", f"${ot_savings:,.0f}")
+
+                with col3:
+                    penalty_diff = historical.estimated_shortage_cost - (result.understaffing_penalty + result.overstaffing_penalty)
+                    st.metric("Penalty Reduction", f"${penalty_diff:,.0f}")
 
         st.divider()
 

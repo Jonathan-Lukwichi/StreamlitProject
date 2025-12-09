@@ -301,6 +301,182 @@ class FinancialService:
 
         return params
 
+    def get_comprehensive_financial_kpis(self, n_days: int = None) -> Dict[str, Any]:
+        """
+        Get comprehensive financial KPIs for optimization analysis.
+
+        Args:
+            n_days: Optional limit to recent N days (None = all data)
+
+        Returns:
+            Dict with comprehensive financial metrics
+        """
+        if n_days:
+            df = self.fetch_latest(n_days)
+        else:
+            df = self.fetch_all()
+
+        if df.empty:
+            return {}
+
+        kpis = {
+            "data_period": {
+                "start_date": df["Date"].min().strftime("%Y-%m-%d") if "Date" in df.columns else None,
+                "end_date": df["Date"].max().strftime("%Y-%m-%d") if "Date" in df.columns else None,
+                "total_days": len(df),
+            },
+            # Labor Cost Metrics
+            "labor": {
+                "avg_doctor_hourly_rate": float(df["Doctor_Hourly_Rate"].mean()) if "Doctor_Hourly_Rate" in df.columns else 0,
+                "avg_nurse_hourly_rate": float(df["Nurse_Hourly_Rate"].mean()) if "Nurse_Hourly_Rate" in df.columns else 0,
+                "avg_support_hourly_rate": float(df["Support_Staff_Hourly_Rate"].mean()) if "Support_Staff_Hourly_Rate" in df.columns else 0,
+                "avg_overtime_rate": float(df["Overtime_Premium_Rate"].mean()) if "Overtime_Premium_Rate" in df.columns else 1.5,
+                "avg_daily_doctor_cost": float(df["Doctor_Daily_Cost"].mean()) if "Doctor_Daily_Cost" in df.columns else 0,
+                "avg_daily_nurse_cost": float(df["Nurse_Daily_Cost"].mean()) if "Nurse_Daily_Cost" in df.columns else 0,
+                "avg_daily_support_cost": float(df["Support_Staff_Daily_Cost"].mean()) if "Support_Staff_Daily_Cost" in df.columns else 0,
+                "avg_overtime_cost": float(df["Overtime_Cost"].mean()) if "Overtime_Cost" in df.columns else 0,
+                "avg_agency_cost": float(df["Agency_Staff_Cost"].mean()) if "Agency_Staff_Cost" in df.columns else 0,
+                "avg_total_labor_cost": float(df["Total_Labor_Cost"].mean()) if "Total_Labor_Cost" in df.columns else 0,
+                "total_labor_cost": float(df["Total_Labor_Cost"].sum()) if "Total_Labor_Cost" in df.columns else 0,
+                "total_overtime_cost": float(df["Overtime_Cost"].sum()) if "Overtime_Cost" in df.columns else 0,
+                "labor_cost_per_patient": float(df["Labor_Cost_Per_Patient"].mean()) if "Labor_Cost_Per_Patient" in df.columns else 0,
+            },
+            # Revenue Metrics
+            "revenue": {
+                "avg_revenue_per_patient": float(df["Revenue_Per_Patient_Avg"].mean()) if "Revenue_Per_Patient_Avg" in df.columns else 0,
+                "avg_daily_revenue": float(df["Total_Daily_Revenue"].mean()) if "Total_Daily_Revenue" in df.columns else 0,
+                "avg_total_revenue": float(df["Total_Revenue"].mean()) if "Total_Revenue" in df.columns else 0,
+                "total_revenue": float(df["Total_Revenue"].sum()) if "Total_Revenue" in df.columns else 0,
+                "avg_government_subsidy": float(df["Government_Subsidy"].mean()) if "Government_Subsidy" in df.columns else 0,
+                "avg_insurance_reimbursement": float(df["Insurance_Reimbursement"].mean()) if "Insurance_Reimbursement" in df.columns else 0,
+            },
+            # Profitability Metrics
+            "profitability": {
+                "avg_daily_profit": float(df["Daily_Profit"].mean()) if "Daily_Profit" in df.columns else 0,
+                "total_profit": float(df["Daily_Profit"].sum()) if "Daily_Profit" in df.columns else 0,
+                "avg_profit_margin": float(df["Profit_Margin_Percent"].mean()) if "Profit_Margin_Percent" in df.columns else 0,
+                "min_profit_margin": float(df["Profit_Margin_Percent"].min()) if "Profit_Margin_Percent" in df.columns else 0,
+                "max_profit_margin": float(df["Profit_Margin_Percent"].max()) if "Profit_Margin_Percent" in df.columns else 0,
+                "avg_cost_per_patient": float(df["Cost_Per_Patient"].mean()) if "Cost_Per_Patient" in df.columns else 0,
+                "avg_revenue_per_patient": float(df["Revenue_Per_Patient"].mean()) if "Revenue_Per_Patient" in df.columns else 0,
+            },
+            # Operating Cost Metrics
+            "operating": {
+                "avg_utility_cost": float(df["Utility_Cost"].mean()) if "Utility_Cost" in df.columns else 0,
+                "avg_equipment_maintenance": float(df["Equipment_Maintenance_Cost"].mean()) if "Equipment_Maintenance_Cost" in df.columns else 0,
+                "avg_administrative_cost": float(df["Administrative_Cost"].mean()) if "Administrative_Cost" in df.columns else 0,
+                "avg_facility_cost": float(df["Facility_Cost"].mean()) if "Facility_Cost" in df.columns else 0,
+                "avg_total_operating_cost": float(df["Total_Operating_Cost"].mean()) if "Total_Operating_Cost" in df.columns else 0,
+            },
+            # Cost Ratios
+            "ratios": {
+                "avg_labor_cost_ratio": float(df["Labor_Cost_Ratio"].mean()) if "Labor_Cost_Ratio" in df.columns else 0,
+                "avg_inventory_cost_ratio": float(df["Inventory_Cost_Ratio"].mean()) if "Inventory_Cost_Ratio" in df.columns else 0,
+                "avg_budget_variance": float(df["Budget_Variance"].mean()) if "Budget_Variance" in df.columns else 0,
+                "avg_budget_variance_pct": float(df["Budget_Variance_Percent"].mean()) if "Budget_Variance_Percent" in df.columns else 0,
+            },
+            # Optimization Penalty Metrics (Historical Baseline)
+            "penalties": {
+                "avg_overstaffing_cost": float(df["Overstaffing_Cost"].mean()) if "Overstaffing_Cost" in df.columns else 0,
+                "avg_understaffing_penalty": float(df["Understaffing_Penalty"].mean()) if "Understaffing_Penalty" in df.columns else 0,
+                "total_overstaffing_cost": float(df["Overstaffing_Cost"].sum()) if "Overstaffing_Cost" in df.columns else 0,
+                "total_understaffing_penalty": float(df["Understaffing_Penalty"].sum()) if "Understaffing_Penalty" in df.columns else 0,
+                "avg_total_optimization_cost": float(df["Total_Optimization_Cost"].mean()) if "Total_Optimization_Cost" in df.columns else 0,
+                "total_optimization_cost": float(df["Total_Optimization_Cost"].sum()) if "Total_Optimization_Cost" in df.columns else 0,
+            },
+        }
+
+        return kpis
+
+    def calculate_optimization_savings(
+        self,
+        optimized_labor_cost: float,
+        optimized_overtime_cost: float,
+        optimized_penalties: float,
+        planning_horizon: int = 7
+    ) -> Dict[str, Any]:
+        """
+        Calculate savings from optimization compared to historical data.
+
+        Args:
+            optimized_labor_cost: Total labor cost from optimized schedule
+            optimized_overtime_cost: Total overtime cost from optimized schedule
+            optimized_penalties: Total penalty costs from optimized schedule
+            planning_horizon: Number of days in planning horizon
+
+        Returns:
+            Dict with savings calculations
+        """
+        kpis = self.get_comprehensive_financial_kpis(n_days=planning_horizon * 4)  # Get ~1 month historical
+
+        if not kpis:
+            return {}
+
+        # Historical averages scaled to planning horizon
+        hist_labor = kpis["labor"]["avg_total_labor_cost"] * planning_horizon
+        hist_overtime = kpis["labor"]["avg_overtime_cost"] * planning_horizon
+        hist_penalties = kpis["penalties"]["avg_total_optimization_cost"] * planning_horizon
+
+        # Calculate savings
+        labor_savings = hist_labor - optimized_labor_cost
+        overtime_savings = hist_overtime - optimized_overtime_cost
+        penalty_savings = hist_penalties - optimized_penalties
+        total_savings = labor_savings + overtime_savings + penalty_savings
+
+        # Calculate percentages
+        labor_savings_pct = (labor_savings / hist_labor * 100) if hist_labor > 0 else 0
+        overtime_savings_pct = (overtime_savings / hist_overtime * 100) if hist_overtime > 0 else 0
+        penalty_savings_pct = (penalty_savings / hist_penalties * 100) if hist_penalties > 0 else 0
+        total_savings_pct = (total_savings / (hist_labor + hist_overtime + hist_penalties) * 100) if (hist_labor + hist_overtime + hist_penalties) > 0 else 0
+
+        # Estimate hours saved (based on overtime cost reduction)
+        avg_hourly_rate = (
+            kpis["labor"]["avg_doctor_hourly_rate"] +
+            kpis["labor"]["avg_nurse_hourly_rate"] +
+            kpis["labor"]["avg_support_hourly_rate"]
+        ) / 3
+
+        overtime_multiplier = kpis["labor"]["avg_overtime_rate"] if kpis["labor"]["avg_overtime_rate"] > 0 else 1.5
+        overtime_hourly_rate = avg_hourly_rate * overtime_multiplier
+        overtime_hours_saved = overtime_savings / overtime_hourly_rate if overtime_hourly_rate > 0 else 0
+
+        # Revenue impact (improved patient care with proper staffing)
+        revenue_per_patient = kpis["revenue"]["avg_revenue_per_patient"]
+        profit_margin = kpis["profitability"]["avg_profit_margin"]
+
+        return {
+            "historical": {
+                "labor_cost": hist_labor,
+                "overtime_cost": hist_overtime,
+                "penalty_cost": hist_penalties,
+                "total_cost": hist_labor + hist_overtime + hist_penalties,
+            },
+            "optimized": {
+                "labor_cost": optimized_labor_cost,
+                "overtime_cost": optimized_overtime_cost,
+                "penalty_cost": optimized_penalties,
+                "total_cost": optimized_labor_cost + optimized_overtime_cost + optimized_penalties,
+            },
+            "savings": {
+                "labor_savings": labor_savings,
+                "labor_savings_pct": labor_savings_pct,
+                "overtime_savings": overtime_savings,
+                "overtime_savings_pct": overtime_savings_pct,
+                "penalty_savings": penalty_savings,
+                "penalty_savings_pct": penalty_savings_pct,
+                "total_savings": total_savings,
+                "total_savings_pct": total_savings_pct,
+                "overtime_hours_saved": overtime_hours_saved,
+            },
+            "impact": {
+                "avg_hourly_rate": avg_hourly_rate,
+                "overtime_multiplier": overtime_multiplier,
+                "revenue_per_patient": revenue_per_patient,
+                "avg_profit_margin": profit_margin,
+            },
+            "planning_horizon": planning_horizon,
+        }
+
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Clean and format the dataframe.
