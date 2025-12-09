@@ -115,6 +115,8 @@ class TemporalSplitResult:
         Proportion used for calibration
     test_ratio : float
         Proportion used for testing
+    date_col : str
+        Name of the date column used for splitting
     """
     # Indices for each split
     train_idx: np.ndarray
@@ -135,6 +137,9 @@ class TemporalSplitResult:
     cal_ratio: float
     test_ratio: float
 
+    # Date column name
+    date_col: str = ""
+
     @property
     def train_records(self) -> int:
         """Number of records in training set."""
@@ -149,6 +154,37 @@ class TemporalSplitResult:
     def test_records(self) -> int:
         """Number of records in test set."""
         return len(self.test_idx)
+
+    # Alias properties for cleaner API
+    @property
+    def train_start(self) -> datetime:
+        """Start date of training set."""
+        return self.min_date
+
+    @property
+    def train_end(self) -> datetime:
+        """End date of training set."""
+        return self.train_end_date
+
+    @property
+    def cal_start(self) -> datetime:
+        """Start date of calibration set."""
+        return self.train_end_date
+
+    @property
+    def cal_end(self) -> datetime:
+        """End date of calibration set."""
+        return self.cal_end_date
+
+    @property
+    def test_start(self) -> datetime:
+        """Start date of test set."""
+        return self.cal_end_date
+
+    @property
+    def test_end(self) -> datetime:
+        """End date of test set."""
+        return self.test_end_date
 
     @property
     def actual_train_ratio(self) -> float:
@@ -395,6 +431,7 @@ def compute_temporal_split(
         train_ratio=train_ratio,
         cal_ratio=cal_ratio,
         test_ratio=test_ratio,
+        date_col=date_col,
     )
 
     return result

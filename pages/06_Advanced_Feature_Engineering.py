@@ -460,15 +460,16 @@ def page_feature_engineering():
 
         # Validate temporal split if available
         if TEMPORAL_SPLIT_AVAILABLE and split_result is not None:
-            is_valid, issues = validate_temporal_split(
+            validation_result = validate_temporal_split(
                 df=base,
-                train_idx=train_idx,
-                cal_idx=cal_idx,
-                test_idx=test_idx,
-                date_col=date_col
+                date_col=date_col,
+                split_result=split_result
             )
-            if not is_valid:
-                st.error(f"⚠️ Temporal split validation failed: {issues}")
+            if not validation_result["valid"]:
+                st.error(f"⚠️ Temporal split validation failed: {validation_result['issues']}")
+            if validation_result.get("warnings"):
+                for warning in validation_result["warnings"]:
+                    st.warning(warning)
 
     # =========================================================================
     # STORE IN SESSION STATE (with cal_idx for Conformal Prediction)
