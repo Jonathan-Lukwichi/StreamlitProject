@@ -28,6 +28,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -987,6 +988,15 @@ def main():
     apply_css()
     inject_sidebar_style()
     render_sidebar_brand()
+
+    # Results Storage Panel (Supabase persistence)
+    render_results_storage_panel(
+        page_type="feature_selection",
+        page_title="Feature Selection",
+    )
+
+    # Auto-load saved results if available
+    auto_load_if_available("feature_selection")
 
     # Fluorescent effects
     st.markdown("""

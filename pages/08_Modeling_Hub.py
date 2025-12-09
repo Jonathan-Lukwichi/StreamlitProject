@@ -23,6 +23,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
 from app_core.cache import save_to_cache, get_cache_manager
+from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 from app_core.plots import build_multihorizon_results_dashboard
 
 # =============================================================================
@@ -59,6 +60,16 @@ inject_sidebar_style()
 render_sidebar_brand()
 add_logout_button()
 render_cache_management()
+
+# Results Storage Panel (Supabase persistence)
+render_results_storage_panel(
+    page_type="modeling_hub",
+    page_title="Modeling Hub",
+    custom_keys=["ml_model_results", "benchmark_results", "hybrid_results"],
+)
+
+# Auto-load saved results if available
+auto_load_if_available("modeling_hub")
 
 # Fluorescent effects + Custom Tab Styling
 st.markdown(f"""

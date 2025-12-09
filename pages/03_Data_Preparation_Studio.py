@@ -18,6 +18,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
 from app_core.cache import save_to_cache, get_cache_manager
+from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -608,6 +609,16 @@ def page_data_preparation_studio():
     render_sidebar_brand()
     add_logout_button()
     render_cache_management()
+
+    # Results Storage Panel (Supabase persistence)
+    render_results_storage_panel(
+        page_type="data_preparation",
+        page_title="Data Preparation",
+        custom_keys=["patient_data", "weather_data", "calendar_data", "reason_data"],
+    )
+
+    # Auto-load saved results if available
+    auto_load_if_available("data_preparation")
 
     # Apply fluorescent effects + Custom Tab Styling
     st.markdown(f"""

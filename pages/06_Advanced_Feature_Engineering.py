@@ -30,6 +30,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
 # Import temporal split module
 try:
@@ -536,6 +537,15 @@ def main():
     inject_sidebar_style()
     render_sidebar_brand()
     init_state()
+
+    # Results Storage Panel (Supabase persistence)
+    render_results_storage_panel(
+        page_type="feature_engineering",
+        page_title="Feature Engineering",
+    )
+
+    # Auto-load saved results if available
+    auto_load_if_available("feature_engineering")
 
     # Fluorescent effects
     st.markdown("""
