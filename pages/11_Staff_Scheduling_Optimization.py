@@ -25,6 +25,17 @@ from app_core.data.staff_scheduling_service import (
     check_supabase_connection
 )
 
+# Import financial service for cost parameters
+try:
+    from app_core.data.financial_service import (
+        FinancialService,
+        get_financial_service,
+        check_financial_connection
+    )
+    FINANCIAL_SERVICE_AVAILABLE = True
+except ImportError:
+    FINANCIAL_SERVICE_AVAILABLE = False
+
 # Import optimization module
 try:
     from app_core.optimization import (
@@ -866,29 +877,82 @@ with tab_data:
 with tab_config:
     st.markdown("### ⚙️ Optimization Configuration")
 
+    # Financial Data Integration
+    if FINANCIAL_SERVICE_AVAILABLE:
+        st.markdown("#### 📊 Load Cost Parameters from Financial Data")
+
+        fin_col1, fin_col2 = st.columns([3, 1])
+
+        with fin_col1:
+            use_financial_data = st.checkbox(
+                "Load real cost parameters from Supabase Financial Data",
+                value=False,
+                help="Use historical financial data to auto-populate cost parameters"
+            )
+
+        with fin_col2:
+            if use_financial_data:
+                if st.button("📥 Load Financial Data", type="secondary"):
+                    with st.spinner("Loading financial data..."):
+                        fin_service = get_financial_service()
+                        if fin_service.is_connected():
+                            labor_params = fin_service.get_labor_cost_params()
+                            if labor_params:
+                                st.session_state["financial_labor_params"] = labor_params
+                                st.success(f"✅ Loaded financial parameters!")
+                            else:
+                                st.warning("No financial data found. Using defaults.")
+                        else:
+                            st.error("Financial service not connected.")
+
+        # Show loaded financial params
+        if "financial_labor_params" in st.session_state and use_financial_data:
+            params = st.session_state["financial_labor_params"]
+            st.info(f"""
+            **Loaded from Financial Data:**
+            - Doctor Rate: ${params.get('doctor_hourly_rate', 150):.2f}/hr
+            - Nurse Rate: ${params.get('nurse_hourly_rate', 45):.2f}/hr
+            - Support Rate: ${params.get('support_hourly_rate', 25):.2f}/hr
+            - Overtime Multiplier: {params.get('overtime_multiplier', 1.5):.2f}x
+            """)
+
+        st.divider()
+
     col_cost, col_ratio = st.columns(2)
 
     with col_cost:
         st.markdown("#### 💰 Cost Parameters (USD)")
 
+        # Use financial data if available and enabled
+        fin_params = st.session_state.get("financial_labor_params", {})
+        use_fin = FINANCIAL_SERVICE_AVAILABLE and st.session_state.get("use_financial_data", False) and fin_params
+
         with st.expander("Hourly Rates", expanded=True):
             doctor_rate = st.number_input(
                 "Doctor Hourly Rate ($)",
-                min_value=50.0, max_value=500.0, value=150.0, step=10.0
+                min_value=50.0, max_value=1000.0,
+                value=float(fin_params.get("doctor_hourly_rate", 150.0)) if fin_params else 150.0,
+                step=10.0
             )
             nurse_rate = st.number_input(
                 "Nurse Hourly Rate ($)",
-                min_value=20.0, max_value=200.0, value=45.0, step=5.0
+                min_value=20.0, max_value=500.0,
+                value=float(fin_params.get("nurse_hourly_rate", 45.0)) if fin_params else 45.0,
+                step=5.0
             )
             support_rate = st.number_input(
                 "Support Staff Hourly Rate ($)",
-                min_value=10.0, max_value=100.0, value=25.0, step=5.0
+                min_value=10.0, max_value=300.0,
+                value=float(fin_params.get("support_hourly_rate", 25.0)) if fin_params else 25.0,
+                step=5.0
             )
 
         with st.expander("Multipliers & Penalties", expanded=True):
             overtime_mult = st.number_input(
                 "Overtime Multiplier",
-                min_value=1.0, max_value=3.0, value=1.5, step=0.1
+                min_value=1.0, max_value=3.0,
+                value=float(fin_params.get("overtime_multiplier", 1.5)) if fin_params else 1.5,
+                step=0.1
             )
             agency_mult = st.number_input(
                 "Agency Staff Multiplier",
@@ -896,11 +960,15 @@ with tab_config:
             )
             understaffing_penalty = st.number_input(
                 "Understaffing Penalty ($/patient-hr)",
-                min_value=50.0, max_value=1000.0, value=200.0, step=25.0
+                min_value=50.0, max_value=100000.0,
+                value=float(fin_params.get("understaffing_penalty", 200.0)) if fin_params else 200.0,
+                step=25.0
             )
             overstaffing_penalty = st.number_input(
                 "Overstaffing Penalty ($/staff-hr)",
-                min_value=1.0, max_value=100.0, value=15.0, step=1.0
+                min_value=1.0, max_value=10000.0,
+                value=float(fin_params.get("overstaffing_penalty", 15.0)) if fin_params else 15.0,
+                step=1.0
             )
 
         with st.expander("Shift Configuration", expanded=False):

@@ -88,6 +88,19 @@ except ImportError:
     SUPABASE_AVAILABLE = False
 
 # =============================================================================
+# SUPABASE FINANCIAL SERVICE (for cost parameters)
+# =============================================================================
+try:
+    from app_core.data.financial_service import (
+        FinancialService,
+        get_financial_service,
+        check_financial_connection
+    )
+    FINANCIAL_SERVICE_AVAILABLE = True
+except ImportError:
+    FINANCIAL_SERVICE_AVAILABLE = False
+
+# =============================================================================
 # CUSTOM CSS
 # =============================================================================
 st.markdown("""
@@ -765,6 +778,59 @@ with tab_forecast:
 with tab_items:
     st.markdown("### 📋 Healthcare Inventory Items")
     st.info("Configure inventory items with usage rates, costs, and criticality levels.")
+
+    # Financial Data Integration for Item Costs
+    if FINANCIAL_SERVICE_AVAILABLE:
+        with st.expander("📊 Load Costs from Financial Data (Supabase)", expanded=False):
+            st.markdown("Load real unit costs from hospital financial data.")
+
+            if st.button("📥 Load Financial Cost Parameters", type="secondary", key="load_fin_inv"):
+                with st.spinner("Loading financial data..."):
+                    fin_service = get_financial_service()
+                    if fin_service.is_connected():
+                        inv_params = fin_service.get_inventory_cost_params()
+                        if inv_params:
+                            st.session_state["financial_inv_params"] = inv_params
+                            st.success("✅ Loaded inventory cost parameters from financial data!")
+                        else:
+                            st.warning("No financial data found in Supabase.")
+                    else:
+                        st.error("Financial service not connected.")
+
+            if "financial_inv_params" in st.session_state:
+                params = st.session_state["financial_inv_params"]
+                st.info(f"""
+                **Loaded Unit Costs:**
+                - Gloves: ${params.get('gloves_unit_cost', 0):.2f}/pair
+                - PPE Set: ${params.get('ppe_unit_cost', 0):.2f}/set
+                - Medication: ${params.get('medication_unit_cost', 0):.2f}/unit
+
+                **Other Parameters:**
+                - Holding Cost: ${params.get('holding_cost', 0):.2f}/day
+                - Ordering Cost: ${params.get('ordering_cost', 0):.2f}/order
+                - Stockout Penalty: ${params.get('stockout_penalty', 0):.2f}
+                """)
+
+                if st.button("Apply to Items", type="primary", key="apply_fin_costs"):
+                    items = st.session_state["inventory_items"]
+                    for item in items:
+                        if "Gloves" in item.name or "GLV" in item.item_id:
+                            item.unit_cost = params.get('gloves_unit_cost', item.unit_cost)
+                        elif "PPE" in item.name or item.item_id.startswith("PPE"):
+                            item.unit_cost = params.get('ppe_unit_cost', item.unit_cost)
+                        elif "Medication" in item.name or "MED" in item.item_id:
+                            item.unit_cost = params.get('medication_unit_cost', item.unit_cost)
+
+                        if 'ordering_cost' in params:
+                            item.ordering_cost = params['ordering_cost']
+                        if 'stockout_penalty' in params:
+                            item.stockout_penalty = params['stockout_penalty']
+
+                    st.session_state["inventory_items"] = items
+                    st.success("✅ Applied financial costs to inventory items!")
+                    st.rerun()
+
+        st.divider()
 
     items = st.session_state["inventory_items"]
 
