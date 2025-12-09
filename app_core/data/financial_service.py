@@ -578,7 +578,13 @@ class FinancialService:
 
 def get_financial_service() -> FinancialService:
     """Get or create FinancialService instance."""
-    if "financial_service" not in st.session_state:
+    # Check if cached service has the required methods (handles class updates)
+    if "financial_service" in st.session_state:
+        service = st.session_state["financial_service"]
+        if not hasattr(service, "get_comprehensive_financial_kpis"):
+            # Class was updated, create new instance
+            st.session_state["financial_service"] = FinancialService()
+    else:
         st.session_state["financial_service"] = FinancialService()
     return st.session_state["financial_service"]
 
