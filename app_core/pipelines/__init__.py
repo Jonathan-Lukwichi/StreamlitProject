@@ -7,10 +7,9 @@ This module provides an automated, academically-rigorous ML forecasting pipeline
 
 Components:
 -----------
-1. temporal_split    - Date-based train/calibration/test splitting
-2. transform_pipeline - Feature scaling with persistence (coming next)
-3. uncertainty       - Prediction intervals with coverage guarantees (coming next)
-4. optimization      - RPIW-based optimization method selection (coming next)
+1. temporal_split        - Date-based train/calibration/test splitting
+2. conformal_prediction  - CQR prediction intervals with coverage guarantees
+3. transform_pipeline    - Feature scaling with persistence (in Feature Engineering)
 
 Academic References:
 -------------------
@@ -28,8 +27,43 @@ from .temporal_split import (
     validate_temporal_split,
 )
 
+from .conformal_prediction import (
+    # Data structures
+    ConformalResult,
+    PredictionInterval,
+    RPIWResult,
+    ModelRanking,
+    # Core CQR functions
+    calibrate_conformal,
+    apply_conformal_correction,
+    compute_conformity_scores,
+    simple_conformal_intervals,
+    # RPIW functions
+    calculate_rpiw,
+    calculate_rpiw_from_arrays,
+    rank_models_by_rpiw,
+    select_best_model,
+    # Pipeline class
+    CQRPipeline,
+)
+
 __all__ = [
+    # Temporal split
     "compute_temporal_split",
     "TemporalSplitResult",
     "validate_temporal_split",
+    # Conformal prediction
+    "ConformalResult",
+    "PredictionInterval",
+    "RPIWResult",
+    "ModelRanking",
+    "calibrate_conformal",
+    "apply_conformal_correction",
+    "compute_conformity_scores",
+    "simple_conformal_intervals",
+    "calculate_rpiw",
+    "calculate_rpiw_from_arrays",
+    "rank_models_by_rpiw",
+    "select_best_model",
+    "CQRPipeline",
 ]
