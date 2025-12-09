@@ -347,199 +347,188 @@ def page_feature_engineering():
     base = _ensure_dt_sorted(base, date_col)
 
     # =========================================================================
-    # STEP 1: TEMPORAL SPLIT CONFIGURATION
+    # FEATURE ENGINEERING TABS
     # Academic Reference: Bergmeir & Benítez (2012), Tashman (2000)
     # =========================================================================
-    st.markdown("### 📊 Step 1: Temporal Data Split")
+    tab_split, tab_options, tab_generate = st.tabs([
+        "📊 Data Split",
+        "🧪 Options",
+        "🚀 Generate"
+    ])
 
-    if TEMPORAL_SPLIT_AVAILABLE:
-        st.info("""
-        **Academic Temporal Split** (Date-based, not random)
+    with tab_split:
+        st.markdown("#### Configure Temporal Data Split")
 
-        - **Train Set (70%)**: Model learns patterns from this data
-        - **Calibration Set (15%)**: Used for Conformal Prediction intervals (coverage guarantee)
-        - **Test Set (15%)**: Final holdout for unbiased evaluation
+        if TEMPORAL_SPLIT_AVAILABLE:
+            col_split1, col_split2 = st.columns(2)
+            with col_split1:
+                train_ratio = st.slider(
+                    "Training Set Ratio",
+                    min_value=0.50,
+                    max_value=0.80,
+                    value=0.70,
+                    step=0.05,
+                    help="Proportion of data for training (recommended: 70%)"
+                )
+            with col_split2:
+                cal_ratio = st.slider(
+                    "Calibration Set Ratio",
+                    min_value=0.05,
+                    max_value=0.25,
+                    value=0.15,
+                    step=0.05,
+                    help="Proportion for calibration (needed for Conformal Prediction)"
+                )
 
-        *References: Bergmeir & Benítez (2012), Romano et al. (2019)*
-        """)
+            # Compute test ratio
+            test_ratio = 1.0 - train_ratio - cal_ratio
+            if test_ratio < 0.05:
+                st.warning(f"⚠️ Test set too small ({test_ratio:.0%}). Reduce train or calibration ratio.")
+                test_ratio = 0.05
 
-        col_split1, col_split2 = st.columns(2)
-        with col_split1:
-            train_ratio = st.slider(
-                "Training Set Ratio",
-                min_value=0.50,
-                max_value=0.80,
-                value=0.70,
-                step=0.05,
-                help="Proportion of data for training (recommended: 70%)"
+            # Show split preview
+            min_date = base[date_col].min()
+            max_date = base[date_col].max()
+            total_days = (max_date - min_date).days
+
+            from datetime import timedelta
+            train_end = min_date + timedelta(days=int(total_days * train_ratio))
+            cal_end = min_date + timedelta(days=int(total_days * (train_ratio + cal_ratio)))
+
+            col_prev1, col_prev2, col_prev3 = st.columns(3)
+            with col_prev1:
+                st.metric("Train", f"{train_ratio:.0%}", f"{min_date.strftime('%Y-%m-%d')} → {train_end.strftime('%Y-%m-%d')}")
+            with col_prev2:
+                st.metric("Calibration", f"{cal_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {cal_end.strftime('%Y-%m-%d')}")
+            with col_prev3:
+                st.metric("Test", f"{test_ratio:.0%}", f"{cal_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
+
+            # Compute temporal split
+            train_idx, cal_idx, test_idx, split_result = _get_temporal_split(
+                base, date_col, train_ratio, cal_ratio
             )
-        with col_split2:
-            cal_ratio = st.slider(
-                "Calibration Set Ratio",
-                min_value=0.05,
-                max_value=0.25,
-                value=0.15,
-                step=0.05,
-                help="Proportion for calibration (needed for Conformal Prediction)"
-            )
 
-        # Compute test ratio
-        test_ratio = 1.0 - train_ratio - cal_ratio
-        if test_ratio < 0.05:
-            st.warning(f"⚠️ Test set too small ({test_ratio:.0%}). Reduce train or calibration ratio.")
-            test_ratio = 0.05
-
-        # Show split preview
-        min_date = base[date_col].min()
-        max_date = base[date_col].max()
-        total_days = (max_date - min_date).days
-
-        from datetime import timedelta
-        train_end = min_date + timedelta(days=int(total_days * train_ratio))
-        cal_end = min_date + timedelta(days=int(total_days * (train_ratio + cal_ratio)))
-
-        col_prev1, col_prev2, col_prev3 = st.columns(3)
-        with col_prev1:
-            st.metric("Train", f"{train_ratio:.0%}", f"{min_date.strftime('%Y-%m-%d')} → {train_end.strftime('%Y-%m-%d')}")
-        with col_prev2:
-            st.metric("Calibration", f"{cal_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {cal_end.strftime('%Y-%m-%d')}")
-        with col_prev3:
-            st.metric("Test", f"{test_ratio:.0%}", f"{cal_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
-
-        # Compute temporal split
-        train_idx, cal_idx, test_idx, split_result = _get_temporal_split(
-            base, date_col, train_ratio, cal_ratio
-        )
-
-    else:
-        st.warning("⚠️ Temporal split module not available. Using legacy ratio-based split.")
-        train_ratio = st.slider("Train ratio", 0.5, 0.95, 0.8, 0.05)
-        train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
-        cal_idx = np.array([], dtype=int)
-        split_result = None
-
-    st.markdown("---")
-
-    # =========================================================================
-    # STEP 2: FEATURE ENGINEERING OPTIONS
-    # =========================================================================
-    st.markdown("### 🧪 Step 2: Feature Engineering Options")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        skip_engineering = st.checkbox("Skip Feature Engineering", value=False)
-    with c2:
-        apply_scaling = st.checkbox("Apply Min–Max Scaling", value=True)
-    with c3:
-        save_transformers = st.checkbox("Save Transformers", value=True,
-                                        help="Save scalers/encoders for production inference")
-
-    st.markdown("---")
-
-    # =========================================================================
-    # STEP 3: GENERATE DATASET
-    # =========================================================================
-    st.markdown("### 🚀 Step 3: Generate Dataset")
-
-    run = st.button("🚀 Generate Dataset", type="primary")
-    if not run:
-        st.dataframe(base.head(10), use_container_width=True)
-        return
-
-    with st.spinner("Processing features..."):
-        if skip_engineering:
-            A_full = base.copy()
-            B_full = base.copy()
-            variant_used = "Original dataset (no feature engineering)"
         else:
-            A_full = _build_variant_A(base, date_col, targets, train_idx, cal_idx, test_idx,
-                                      apply_scaling, save_transformers)
-            B_full = _build_variant_B(base, date_col, targets, train_idx, cal_idx, test_idx,
-                                      apply_scaling, save_transformers)
-            variant_used = "Feature engineered (deduplicated)"
+            st.warning("⚠️ Temporal split module not available. Using legacy ratio-based split.")
+            train_ratio = st.slider("Train ratio", 0.5, 0.95, 0.8, 0.05)
+            train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
+            cal_idx = np.array([], dtype=int)
+            split_result = None
 
-        # Validate temporal split if available
-        if TEMPORAL_SPLIT_AVAILABLE and split_result is not None:
-            validation_result = validate_temporal_split(
-                df=base,
-                date_col=date_col,
-                split_result=split_result
-            )
-            if not validation_result["valid"]:
-                st.error(f"⚠️ Temporal split validation failed: {validation_result['issues']}")
-            if validation_result.get("warnings"):
-                for warning in validation_result["warnings"]:
-                    st.warning(warning)
+    with tab_options:
+        st.markdown("#### Feature Engineering Options")
 
-    # =========================================================================
-    # STORE IN SESSION STATE (with cal_idx for Conformal Prediction)
-    # =========================================================================
-    st.session_state["feature_engineering"] = {
-        "summary": {
-            "variant_used": variant_used,
-            "apply_scaling": apply_scaling,
-            "skip_engineering": skip_engineering,
-            "train_size": len(train_idx),
-            "cal_size": len(cal_idx),
-            "test_size": len(test_idx),
-            "train_ratio": train_ratio if TEMPORAL_SPLIT_AVAILABLE else train_ratio,
-            "cal_ratio": cal_ratio if TEMPORAL_SPLIT_AVAILABLE else 0.0,
-            "transformers_saved": save_transformers and not skip_engineering,
-        },
-        "A": A_full,
-        "B": B_full,
-        "train_idx": train_idx,
-        "cal_idx": cal_idx,    # NEW: Calibration indices for Conformal Prediction
-        "test_idx": test_idx,
-        "split_result": split_result,  # Full TemporalSplitResult object
-    }
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            skip_engineering = st.checkbox("Skip Feature Engineering", value=False)
+        with c2:
+            apply_scaling = st.checkbox("Apply Min–Max Scaling", value=True)
+        with c3:
+            save_transformers = st.checkbox("Save Transformers", value=True,
+                                            help="Save scalers/encoders for production inference")
 
-    # Also store split result at top level for easy access by other pages
-    if split_result is not None:
-        st.session_state["temporal_split"] = split_result
+    with tab_generate:
+        st.markdown("#### Generate Dataset")
 
-    # =========================================================================
-    # DISPLAY RESULTS
-    # =========================================================================
-    st.success(f"✅ Dataset ready: {variant_used}")
+        run = st.button("🚀 Generate Dataset", type="primary")
+        if not run:
+            st.dataframe(base.head(10), use_container_width=True)
+            return
 
-    # Show split summary
-    if TEMPORAL_SPLIT_AVAILABLE:
-        col_sum1, col_sum2, col_sum3 = st.columns(3)
-        with col_sum1:
-            st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
-        with col_sum2:
-            st.metric("Calibration Records", f"{len(cal_idx):,}", f"{len(cal_idx)/len(base)*100:.1f}%")
-        with col_sum3:
-            st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
+        with st.spinner("Processing features..."):
+            if skip_engineering:
+                A_full = base.copy()
+                B_full = base.copy()
+                variant_used = "Original dataset (no feature engineering)"
+            else:
+                A_full = _build_variant_A(base, date_col, targets, train_idx, cal_idx, test_idx,
+                                          apply_scaling, save_transformers)
+                B_full = _build_variant_B(base, date_col, targets, train_idx, cal_idx, test_idx,
+                                          apply_scaling, save_transformers)
+                variant_used = "Feature engineered (deduplicated)"
 
-        if save_transformers and not skip_engineering:
-            st.info(f"💾 Transformers saved to: `{TRANSFORMERS_DIR}/`")
+            # Validate temporal split if available
+            if TEMPORAL_SPLIT_AVAILABLE and split_result is not None:
+                validation_result = validate_temporal_split(
+                    df=base,
+                    date_col=date_col,
+                    split_result=split_result
+                )
+                if not validation_result["valid"]:
+                    st.error(f"⚠️ Temporal split validation failed: {validation_result['issues']}")
+                if validation_result.get("warnings"):
+                    for warning in validation_result["warnings"]:
+                        st.warning(warning)
 
-    tab1, tab2, tab3 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)", "Split Details"])
-    with tab1:
-        st.dataframe(A_full.head(20), use_container_width=True)
-        st.download_button("⬇️ Download Variant A", A_full.to_csv(index=False).encode(), "variant_A.csv", "text/csv")
-    with tab2:
-        st.dataframe(B_full.head(20), use_container_width=True)
-        st.download_button("⬇️ Download Variant B", B_full.to_csv(index=False).encode(), "variant_B.csv", "text/csv")
-    with tab3:
+        # =========================================================================
+        # STORE IN SESSION STATE (with cal_idx for Conformal Prediction)
+        # =========================================================================
+        st.session_state["feature_engineering"] = {
+            "summary": {
+                "variant_used": variant_used,
+                "apply_scaling": apply_scaling,
+                "skip_engineering": skip_engineering,
+                "train_size": len(train_idx),
+                "cal_size": len(cal_idx),
+                "test_size": len(test_idx),
+                "train_ratio": train_ratio if TEMPORAL_SPLIT_AVAILABLE else train_ratio,
+                "cal_ratio": cal_ratio if TEMPORAL_SPLIT_AVAILABLE else 0.0,
+                "transformers_saved": save_transformers and not skip_engineering,
+            },
+            "A": A_full,
+            "B": B_full,
+            "train_idx": train_idx,
+            "cal_idx": cal_idx,    # NEW: Calibration indices for Conformal Prediction
+            "test_idx": test_idx,
+            "split_result": split_result,  # Full TemporalSplitResult object
+        }
+
+        # Also store split result at top level for easy access by other pages
         if split_result is not None:
-            st.markdown("#### Temporal Split Summary")
-            st.json({
-                "date_column": split_result.date_col,
-                "train_start": str(split_result.train_start),
-                "train_end": str(split_result.train_end),
-                "cal_start": str(split_result.cal_start),
-                "cal_end": str(split_result.cal_end),
-                "test_start": str(split_result.test_start),
-                "test_end": str(split_result.test_end),
-                "train_records": len(split_result.train_idx),
-                "cal_records": len(split_result.cal_idx),
-                "test_records": len(split_result.test_idx),
-            })
-        else:
-            st.info("Temporal split details not available (using legacy split).")
+            st.session_state["temporal_split"] = split_result
+
+        # =========================================================================
+        # DISPLAY RESULTS
+        # =========================================================================
+        st.success(f"✅ Dataset ready: {variant_used}")
+
+        # Show split summary
+        if TEMPORAL_SPLIT_AVAILABLE:
+            col_sum1, col_sum2, col_sum3 = st.columns(3)
+            with col_sum1:
+                st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
+            with col_sum2:
+                st.metric("Calibration Records", f"{len(cal_idx):,}", f"{len(cal_idx)/len(base)*100:.1f}%")
+            with col_sum3:
+                st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
+
+            if save_transformers and not skip_engineering:
+                st.info(f"💾 Transformers saved to: `{TRANSFORMERS_DIR}/`")
+
+        result_tab1, result_tab2, result_tab3 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)", "Split Details"])
+        with result_tab1:
+            st.dataframe(A_full.head(20), use_container_width=True)
+            st.download_button("⬇️ Download Variant A", A_full.to_csv(index=False).encode(), "variant_A.csv", "text/csv")
+        with result_tab2:
+            st.dataframe(B_full.head(20), use_container_width=True)
+            st.download_button("⬇️ Download Variant B", B_full.to_csv(index=False).encode(), "variant_B.csv", "text/csv")
+        with result_tab3:
+            if split_result is not None:
+                st.markdown("#### Temporal Split Summary")
+                st.json({
+                    "date_column": split_result.date_col,
+                    "train_start": str(split_result.train_start),
+                    "train_end": str(split_result.train_end),
+                    "cal_start": str(split_result.cal_start),
+                    "cal_end": str(split_result.cal_end),
+                    "test_start": str(split_result.test_start),
+                    "test_end": str(split_result.test_end),
+                    "train_records": len(split_result.train_idx),
+                    "cal_records": len(split_result.cal_idx),
+                    "test_records": len(split_result.test_idx),
+                })
+            else:
+                st.info("Temporal split details not available (using legacy split).")
 
 # === ENTRYPOINT ===============================================================
 def main():
