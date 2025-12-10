@@ -68,8 +68,6 @@ from app_core.optimization.inventory_optimizer import (
     calculate_eoq,
     solve_milp_inventory,
     convert_patient_forecast_to_inventory_demand,
-    calculate_rpiw,
-    get_optimization_recommendation,
     generate_reorder_alerts,
 )
 
@@ -159,30 +157,6 @@ st.markdown("""
     border-left: 4px solid #facc15;
 }
 
-/* RPIW indicator */
-.rpiw-low {
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-.rpiw-medium {
-    background: rgba(250, 204, 21, 0.2);
-    color: #facc15;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-.rpiw-high {
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-weight: 600;
-}
 
 /* Item criticality badges */
 .crit-low { background: #22c55e20; color: #22c55e; }
@@ -667,31 +641,10 @@ with tab_forecast:
             if patient_forecast:
                 st.session_state["patient_forecast"] = patient_forecast
 
-                # Calculate RPIW
-                rpiw = calculate_rpiw(patient_forecast)
-                recommendation = get_optimization_recommendation(rpiw)
-
-                # Display RPIW
-                st.markdown("---")
-                st.markdown("#### Forecast Quality Assessment (RPIW)")
-
-                rpiw_class = "rpiw-low" if rpiw < 15 else ("rpiw-medium" if rpiw <= 40 else "rpiw-high")
-
-                st.markdown(f"""
-                <div class="{rpiw_class}" style="margin-bottom: 1rem;">
-                    <strong>RPIW: {rpiw:.1f}%</strong> — {recommendation['uncertainty_level']} Uncertainty
-                </div>
-                """, unsafe_allow_html=True)
-
-                if rpiw < 15:
-                    st.success(f"✅ **{recommendation['method']}** is appropriate. {recommendation['description']}")
-                elif rpiw <= 40:
-                    st.warning(f"⚠️ **{recommendation['method']}** recommended. {recommendation['description']}")
-                else:
-                    st.error(f"❌ **{recommendation['method']}** recommended. Current deterministic approach may be insufficient.")
-
                 # Forecast preview
+                st.markdown("---")
                 st.markdown("#### Forecast Preview")
+                st.info("💡 **Tip:** View detailed forecast quality metrics (RPIW, uncertainty levels) in the **Forecast Hub** page.")
                 forecast_df = pd.DataFrame({
                     "Day": list(range(1, len(patient_forecast) + 1)),
                     "Patient Arrivals": [round(p, 1) for p in patient_forecast]

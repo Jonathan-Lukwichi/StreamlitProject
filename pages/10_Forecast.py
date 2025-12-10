@@ -101,8 +101,579 @@ st.markdown("""
 .model-ml { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 .model-stat { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
 .model-hybrid { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+
+/* ========================================
+   FORECAST QUALITY KPI CARDS
+   ======================================== */
+
+/* Main KPI Card */
+.fq-kpi-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.fq-kpi-card:hover {
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+    transform: translateY(-2px);
+}
+
+.fq-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent-color, #3b82f6), var(--accent-color-end, #22d3ee));
+}
+
+.fq-kpi-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
+}
+
+.fq-kpi-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0.5rem 0;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.fq-kpi-label {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+}
+
+.fq-kpi-sublabel {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+/* RPIW Indicator Styles */
+.rpiw-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.rpiw-low {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.15));
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+.rpiw-medium {
+    background: linear-gradient(135deg, rgba(250, 204, 21, 0.25), rgba(250, 204, 21, 0.15));
+    color: #facc15;
+    border: 1px solid rgba(250, 204, 21, 0.4);
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+}
+
+.rpiw-high {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.15));
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* Optimization Recommendation Card */
+.opt-rec-card {
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(31, 41, 55, 0.9));
+    border-radius: 16px;
+    padding: 1.5rem;
+    border-left: 4px solid var(--accent-color, #3b82f6);
+    margin: 1rem 0;
+}
+
+.opt-rec-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 0.75rem;
+}
+
+.opt-rec-method {
+    font-size: 1.25rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent-color, #3b82f6), #22d3ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.opt-rec-desc {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin-top: 0.5rem;
+    line-height: 1.5;
+}
+
+/* Model Metrics Grid */
+.model-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+/* Decision Framework Table */
+.decision-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+}
+
+.decision-table th {
+    background: rgba(59, 130, 246, 0.2);
+    color: #f8fafc;
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid rgba(59, 130, 246, 0.4);
+}
+
+.decision-table td {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+}
+
+.decision-table tr:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.decision-table .highlight-row {
+    background: rgba(59, 130, 246, 0.15);
+    border-left: 3px solid #3b82f6;
+}
 </style>
 """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# FORECAST QUALITY ASSESSMENT - RPIW & MODEL METRICS
+# =============================================================================
+
+def calculate_rpiw(
+    forecast_values: List[float],
+    lower_bounds: List[float] = None,
+    upper_bounds: List[float] = None,
+) -> float:
+    """
+    Calculate Relative Prediction Interval Width (RPIW).
+
+    RPIW = (U - L) / D_hat * 100%
+
+    Args:
+        forecast_values: Point forecasts
+        lower_bounds: Lower prediction interval bounds (optional)
+        upper_bounds: Upper prediction interval bounds (optional)
+
+    Returns:
+        RPIW as percentage
+    """
+    if not forecast_values:
+        return 0.0
+
+    if lower_bounds is None or upper_bounds is None:
+        # Estimate bounds from forecast variance (90% PI)
+        mean_forecast = np.mean(forecast_values)
+        std_forecast = np.std(forecast_values) if len(forecast_values) > 1 else mean_forecast * 0.1
+        lower_bounds = [max(0, f - 1.645 * std_forecast) for f in forecast_values]
+        upper_bounds = [f + 1.645 * std_forecast for f in forecast_values]
+
+    rpiw_values = []
+    for d_hat, l, u in zip(forecast_values, lower_bounds, upper_bounds):
+        if d_hat > 0:
+            rpiw = ((u - l) / d_hat) * 100
+            rpiw_values.append(rpiw)
+
+    return np.mean(rpiw_values) if rpiw_values else 0.0
+
+
+def get_optimization_recommendation(rpiw: float) -> Dict[str, Any]:
+    """
+    Get optimization method recommendation based on RPIW.
+
+    Decision Framework:
+    - RPIW < 15%: Deterministic MILP (Low uncertainty)
+    - 15% <= RPIW <= 40%: Robust Optimization (Medium uncertainty)
+    - RPIW > 40%: Two-Stage Stochastic (High uncertainty)
+
+    Args:
+        rpiw: Relative Prediction Interval Width (%)
+
+    Returns:
+        Dict with recommendation details
+    """
+    if rpiw < 15:
+        return {
+            "method": "Deterministic MILP",
+            "rpiw": rpiw,
+            "uncertainty_level": "LOW",
+            "color": "#22c55e",
+            "css_class": "rpiw-low",
+            "icon": "🟢",
+            "safety_stock": "Minimal (~1 day)",
+            "computation": "Fast",
+            "description": "Point forecast is reliable. Extra complexity not justified. Safe to use EOQ/MILP directly.",
+            "interval_width": "±5 patients",
+        }
+    elif rpiw <= 40:
+        return {
+            "method": "Robust Optimization",
+            "rpiw": rpiw,
+            "uncertainty_level": "MEDIUM",
+            "color": "#facc15",
+            "css_class": "rpiw-medium",
+            "icon": "🟡",
+            "safety_stock": "Based on interval width",
+            "computation": "Fast",
+            "description": "Need protection but scenarios overkill. Budget Γ adjustable for robust formulation.",
+            "interval_width": "±10-20 patients",
+        }
+    else:
+        return {
+            "method": "Two-Stage Stochastic",
+            "rpiw": rpiw,
+            "uncertainty_level": "HIGH",
+            "color": "#ef4444",
+            "css_class": "rpiw-high",
+            "icon": "🔴",
+            "safety_stock": "From distribution",
+            "computation": "Slow",
+            "description": "Need explicit recourse actions. Scenarios capture distribution tails.",
+            "interval_width": "±30+ patients",
+        }
+
+
+def extract_model_metrics_from_session() -> Dict[str, Any]:
+    """
+    Extract model metrics from session state (Modeling Hub + Benchmarks).
+
+    Returns:
+        Dict with ML and statistical model metrics
+    """
+    metrics = {
+        "ml_models": [],
+        "stat_models": [],
+        "best_model": None,
+        "best_accuracy": 0,
+    }
+
+    # Helper to safely extract float
+    def safe_float(x, default=np.nan):
+        try:
+            f = float(x)
+            return f if np.isfinite(f) else default
+        except:
+            return default
+
+    # -------------------------------------------------------------------------
+    # ML Models from Modeling Hub (08_Modeling_Hub.py)
+    # -------------------------------------------------------------------------
+    for key in st.session_state.keys():
+        if key.startswith("ml_mh_results_"):
+            model_name = key.replace("ml_mh_results_", "")
+            data = st.session_state.get(key)
+            if data and isinstance(data, dict):
+                # Try to extract metrics
+                test_metrics = data.get("test_metrics", {})
+                if not test_metrics and "Target_1" in data:
+                    test_metrics = data.get("Target_1", {}).get("test_metrics", {})
+
+                model_metrics = {
+                    "name": model_name,
+                    "type": "ML",
+                    "mae": safe_float(test_metrics.get("MAE")),
+                    "rmse": safe_float(test_metrics.get("RMSE")),
+                    "mape": safe_float(test_metrics.get("MAPE")),
+                    "accuracy": safe_float(test_metrics.get("Accuracy")),
+                }
+
+                # Calculate accuracy from MAPE if not available
+                if np.isnan(model_metrics["accuracy"]) and not np.isnan(model_metrics["mape"]):
+                    model_metrics["accuracy"] = 100 - model_metrics["mape"]
+
+                metrics["ml_models"].append(model_metrics)
+
+                # Track best model
+                if not np.isnan(model_metrics["accuracy"]) and model_metrics["accuracy"] > metrics["best_accuracy"]:
+                    metrics["best_accuracy"] = model_metrics["accuracy"]
+                    metrics["best_model"] = model_metrics
+
+    # -------------------------------------------------------------------------
+    # Statistical Models from Benchmarks (05_Benchmarks.py)
+    # -------------------------------------------------------------------------
+
+    # ARIMA results
+    arima_results = st.session_state.get("arima_mh_results")
+    if arima_results and isinstance(arima_results, dict):
+        metrics_df = arima_results.get("metrics_df") or arima_results.get("results_df")
+        if metrics_df is not None and isinstance(metrics_df, pd.DataFrame) and not metrics_df.empty:
+            # Get average metrics across horizons
+            avg_mae = safe_float(metrics_df.get("Test_MAE", metrics_df.get("MAE", pd.Series([np.nan]))).mean())
+            avg_rmse = safe_float(metrics_df.get("Test_RMSE", metrics_df.get("RMSE", pd.Series([np.nan]))).mean())
+            avg_mape = safe_float(metrics_df.get("Test_MAPE", metrics_df.get("MAPE_%", pd.Series([np.nan]))).mean())
+            avg_acc = safe_float(metrics_df.get("Test_Acc", metrics_df.get("Accuracy_%", pd.Series([np.nan]))).mean())
+
+            if np.isnan(avg_acc) and not np.isnan(avg_mape):
+                avg_acc = 100 - avg_mape
+
+            model_metrics = {
+                "name": "ARIMA",
+                "type": "Statistical",
+                "mae": avg_mae,
+                "rmse": avg_rmse,
+                "mape": avg_mape,
+                "accuracy": avg_acc,
+            }
+            metrics["stat_models"].append(model_metrics)
+
+            if not np.isnan(avg_acc) and avg_acc > metrics["best_accuracy"]:
+                metrics["best_accuracy"] = avg_acc
+                metrics["best_model"] = model_metrics
+
+    # SARIMAX results
+    sarimax_results = st.session_state.get("sarimax_results")
+    if sarimax_results and isinstance(sarimax_results, dict):
+        metrics_df = sarimax_results.get("metrics_df") or sarimax_results.get("results_df")
+        if metrics_df is not None and isinstance(metrics_df, pd.DataFrame) and not metrics_df.empty:
+            avg_mae = safe_float(metrics_df.get("Test_MAE", metrics_df.get("MAE", pd.Series([np.nan]))).mean())
+            avg_rmse = safe_float(metrics_df.get("Test_RMSE", metrics_df.get("RMSE", pd.Series([np.nan]))).mean())
+            avg_mape = safe_float(metrics_df.get("Test_MAPE", metrics_df.get("MAPE_%", pd.Series([np.nan]))).mean())
+            avg_acc = safe_float(metrics_df.get("Test_Acc", metrics_df.get("Accuracy_%", pd.Series([np.nan]))).mean())
+
+            if np.isnan(avg_acc) and not np.isnan(avg_mape):
+                avg_acc = 100 - avg_mape
+
+            model_metrics = {
+                "name": "SARIMAX",
+                "type": "Statistical",
+                "mae": avg_mae,
+                "rmse": avg_rmse,
+                "mape": avg_mape,
+                "accuracy": avg_acc,
+            }
+            metrics["stat_models"].append(model_metrics)
+
+            if not np.isnan(avg_acc) and avg_acc > metrics["best_accuracy"]:
+                metrics["best_accuracy"] = avg_acc
+                metrics["best_model"] = model_metrics
+
+    # Model comparison table from Benchmarks
+    model_comparison = st.session_state.get("model_comparison")
+    if model_comparison is not None and isinstance(model_comparison, pd.DataFrame) and not model_comparison.empty:
+        metrics["comparison_df"] = model_comparison
+
+    return metrics
+
+
+def render_forecast_quality_kpis(forecast_values: List[float], model_name: str = ""):
+    """
+    Render the Forecast Quality Assessment KPI cards.
+
+    Args:
+        forecast_values: The forecast values
+        model_name: Name of the model used
+    """
+    if not forecast_values:
+        st.warning("No forecast values available for quality assessment.")
+        return
+
+    # Calculate RPIW
+    rpiw = calculate_rpiw(forecast_values)
+    recommendation = get_optimization_recommendation(rpiw)
+
+    # Get model metrics from session
+    model_metrics = extract_model_metrics_from_session()
+
+    # -------------------------------------------------------------------------
+    # SECTION 1: RPIW Overview KPIs
+    # -------------------------------------------------------------------------
+    st.markdown("### 🎯 Forecast Uncertainty Assessment")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: {recommendation['color']}; --accent-color-end: {recommendation['color']};">
+            <div class="fq-kpi-icon">📊</div>
+            <div class="fq-kpi-label">RPIW Score</div>
+            <div class="fq-kpi-value" style="color: {recommendation['color']};">{rpiw:.1f}%</div>
+            <div class="fq-kpi-sublabel">Relative Prediction Interval Width</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        uncertainty_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}[recommendation["uncertainty_level"]]
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: {recommendation['color']}; --accent-color-end: {recommendation['color']};">
+            <div class="fq-kpi-icon">{uncertainty_icon}</div>
+            <div class="fq-kpi-label">Uncertainty Level</div>
+            <div class="fq-kpi-value" style="color: {recommendation['color']}; font-size: 1.75rem;">{recommendation['uncertainty_level']}</div>
+            <div class="fq-kpi-sublabel">{recommendation['interval_width']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: #3b82f6; --accent-color-end: #22d3ee;">
+            <div class="fq-kpi-icon">⚡</div>
+            <div class="fq-kpi-label">Computation</div>
+            <div class="fq-kpi-value" style="font-size: 1.75rem;">{recommendation['computation']}</div>
+            <div class="fq-kpi-sublabel">{recommendation['safety_stock']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        best_acc = model_metrics.get("best_accuracy", 0)
+        best_name = model_metrics.get("best_model", {}).get("name", "N/A") if model_metrics.get("best_model") else "N/A"
+        acc_color = "#22c55e" if best_acc >= 90 else ("#facc15" if best_acc >= 80 else "#ef4444")
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: {acc_color}; --accent-color-end: {acc_color};">
+            <div class="fq-kpi-icon">🏆</div>
+            <div class="fq-kpi-label">Best Model Accuracy</div>
+            <div class="fq-kpi-value" style="color: {acc_color};">{best_acc:.1f}%</div>
+            <div class="fq-kpi-sublabel">{best_name}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SECTION 2: Optimization Recommendation
+    # -------------------------------------------------------------------------
+    st.markdown("### 🎛️ Recommended Optimization Approach")
+
+    st.markdown(f"""
+    <div class="opt-rec-card" style="--accent-color: {recommendation['color']};">
+        <div class="opt-rec-title">{recommendation['icon']} Based on your RPIW of {rpiw:.1f}%:</div>
+        <div class="opt-rec-method">{recommendation['method']}</div>
+        <div class="opt-rec-desc">{recommendation['description']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SECTION 3: Decision Framework Table
+    # -------------------------------------------------------------------------
+    with st.expander("📋 View Decision Framework", expanded=False):
+        st.markdown("""
+        **Key Insight:** The width of your prediction interval determines which optimization approach to use.
+
+        **Prediction Interval Width (PIW):** `PIW_t = U_t - L_t`
+
+        **Relative PIW:** `RPIW_t = (U_t - L_t) / D̂_t × 100%`
+        """)
+
+        # Determine which row to highlight
+        highlight_low = "highlight-row" if rpiw < 15 else ""
+        highlight_med = "highlight-row" if 15 <= rpiw <= 40 else ""
+        highlight_high = "highlight-row" if rpiw > 40 else ""
+
+        st.markdown(f"""
+        <table class="decision-table">
+            <thead>
+                <tr>
+                    <th>Interval Width</th>
+                    <th>Uncertainty Level</th>
+                    <th>Recommended Method</th>
+                    <th>Rationale</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="{highlight_low}">
+                    <td>±5 patients (RPIW &lt; 15%)</td>
+                    <td><span style="color: #22c55e;">🟢 LOW</span></td>
+                    <td><strong>Deterministic MILP</strong></td>
+                    <td>Point forecast is reliable; extra complexity not justified</td>
+                </tr>
+                <tr class="{highlight_med}">
+                    <td>±10-20 patients (RPIW 15-40%)</td>
+                    <td><span style="color: #facc15;">🟡 MEDIUM</span></td>
+                    <td><strong>Robust Optimization</strong></td>
+                    <td>Need protection but scenarios overkill; budget Γ adjustable</td>
+                </tr>
+                <tr class="{highlight_high}">
+                    <td>±30+ patients (RPIW &gt; 40%)</td>
+                    <td><span style="color: #ef4444;">🔴 HIGH</span></td>
+                    <td><strong>Two-Stage Stochastic</strong></td>
+                    <td>Need explicit recourse actions; scenarios capture distribution</td>
+                </tr>
+            </tbody>
+        </table>
+        """, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SECTION 4: Model Performance Comparison
+    # -------------------------------------------------------------------------
+    all_models = model_metrics["ml_models"] + model_metrics["stat_models"]
+
+    if all_models:
+        st.markdown("### 📈 Model Performance Comparison")
+
+        # ML Models
+        if model_metrics["ml_models"]:
+            st.markdown("#### 🤖 Machine Learning Models")
+            ml_cols = st.columns(len(model_metrics["ml_models"]))
+            for idx, model in enumerate(model_metrics["ml_models"]):
+                with ml_cols[idx]:
+                    acc = model["accuracy"] if not np.isnan(model["accuracy"]) else 0
+                    acc_color = "#22c55e" if acc >= 90 else ("#facc15" if acc >= 80 else "#3b82f6")
+                    mae_display = f"{model['mae']:.2f}" if not np.isnan(model["mae"]) else "—"
+                    rmse_display = f"{model['rmse']:.2f}" if not np.isnan(model["rmse"]) else "—"
+
+                    st.markdown(f"""
+                    <div class="fq-kpi-card" style="--accent-color: #3b82f6; --accent-color-end: #60a5fa;">
+                        <div class="fq-kpi-icon">🤖</div>
+                        <div class="fq-kpi-label">{model['name']}</div>
+                        <div class="fq-kpi-value" style="color: {acc_color};">{acc:.1f}%</div>
+                        <div class="fq-kpi-sublabel">MAE: {mae_display} | RMSE: {rmse_display}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # Statistical Models
+        if model_metrics["stat_models"]:
+            st.markdown("#### 📊 Statistical Benchmark Models")
+            stat_cols = st.columns(len(model_metrics["stat_models"]))
+            for idx, model in enumerate(model_metrics["stat_models"]):
+                with stat_cols[idx]:
+                    acc = model["accuracy"] if not np.isnan(model["accuracy"]) else 0
+                    acc_color = "#22c55e" if acc >= 90 else ("#facc15" if acc >= 80 else "#a855f7")
+                    mae_display = f"{model['mae']:.2f}" if not np.isnan(model["mae"]) else "—"
+                    rmse_display = f"{model['rmse']:.2f}" if not np.isnan(model["rmse"]) else "—"
+
+                    st.markdown(f"""
+                    <div class="fq-kpi-card" style="--accent-color: #a855f7; --accent-color-end: #c084fc;">
+                        <div class="fq-kpi-icon">📊</div>
+                        <div class="fq-kpi-label">{model['name']}</div>
+                        <div class="fq-kpi-value" style="color: {acc_color};">{acc:.1f}%</div>
+                        <div class="fq-kpi-sublabel">MAE: {mae_display} | RMSE: {rmse_display}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    else:
+        st.info("""
+        📊 **No trained models detected.** Train models in:
+        - **Benchmarks** (05_Benchmarks.py) — ARIMA/SARIMAX
+        - **Modeling Hub** (08_Modeling_Hub.py) — XGBoost, LSTM, ANN
+        """)
+
 
 # =============================================================================
 # HEADER
@@ -708,10 +1279,11 @@ if "forecast_generated" not in st.session_state:
     st.session_state["forecast_generated"] = False
 
 # Create tabs
-tab_data, tab_config, tab_generate, tab_results = st.tabs([
+tab_data, tab_config, tab_generate, tab_quality, tab_results = st.tabs([
     "📊 Data Check",
     "⚙️ Configuration",
     "🚀 Generate Forecast",
+    "🎯 Forecast Quality",
     "📈 Results & Export"
 ])
 
@@ -993,7 +1565,136 @@ with tab_generate:
                 st.dataframe(preview_df, use_container_width=True, hide_index=True)
 
 # =============================================================================
-# TAB 4: RESULTS & EXPORT
+# TAB 4: FORECAST QUALITY ASSESSMENT
+# =============================================================================
+with tab_quality:
+    st.markdown(
+        f"""
+        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1.5rem; padding: 1.5rem;'>
+          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2rem;'>🎯</div>
+          <h2 class='hf-feature-title' style='font-size: 1.5rem; margin-bottom: 0.5rem;'>Forecast Quality Assessment</h2>
+          <p class='hf-feature-description' style='font-size: 0.95rem; max-width: 700px; margin: 0 auto;'>
+            Analyze uncertainty levels and get optimization recommendations based on RPIW
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    forecast_result = st.session_state.get("current_forecast")
+
+    if forecast_result and forecast_result.get("forecast_values"):
+        # Render the comprehensive forecast quality KPIs
+        render_forecast_quality_kpis(
+            forecast_values=forecast_result["forecast_values"],
+            model_name=forecast_result.get("model_name", "")
+        )
+
+        st.divider()
+
+        # Additional forecast statistics
+        st.markdown("### 📊 Forecast Statistics")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        forecast_vals = forecast_result["forecast_values"]
+
+        with col1:
+            st.markdown(f"""
+            <div class="fq-kpi-card" style="--accent-color: #3b82f6; --accent-color-end: #60a5fa;">
+                <div class="fq-kpi-icon">📈</div>
+                <div class="fq-kpi-label">Mean Forecast</div>
+                <div class="fq-kpi-value">{np.mean(forecast_vals):.1f}</div>
+                <div class="fq-kpi-sublabel">patients/day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"""
+            <div class="fq-kpi-card" style="--accent-color: #22d3ee; --accent-color-end: #67e8f9;">
+                <div class="fq-kpi-icon">📊</div>
+                <div class="fq-kpi-label">Std Deviation</div>
+                <div class="fq-kpi-value">{np.std(forecast_vals):.1f}</div>
+                <div class="fq-kpi-sublabel">variability</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col3:
+            st.markdown(f"""
+            <div class="fq-kpi-card" style="--accent-color: #22c55e; --accent-color-end: #4ade80;">
+                <div class="fq-kpi-icon">⬇️</div>
+                <div class="fq-kpi-label">Min Forecast</div>
+                <div class="fq-kpi-value">{min(forecast_vals):.1f}</div>
+                <div class="fq-kpi-sublabel">lowest day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col4:
+            st.markdown(f"""
+            <div class="fq-kpi-card" style="--accent-color: #f97316; --accent-color-end: #fb923c;">
+                <div class="fq-kpi-icon">⬆️</div>
+                <div class="fq-kpi-label">Max Forecast</div>
+                <div class="fq-kpi-value">{max(forecast_vals):.1f}</div>
+                <div class="fq-kpi-sublabel">peak day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Coefficient of Variation
+        cv = (np.std(forecast_vals) / np.mean(forecast_vals)) * 100 if np.mean(forecast_vals) > 0 else 0
+        cv_color = "#22c55e" if cv < 10 else ("#facc15" if cv < 25 else "#ef4444")
+
+        st.markdown(f"""
+        <div style="text-align: center; margin: 1.5rem 0;">
+            <span class="rpiw-indicator" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(59, 130, 246, 0.15)); color: {cv_color}; border: 1px solid {cv_color}40;">
+                📉 Coefficient of Variation: <strong>{cv:.1f}%</strong>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    else:
+        st.info("""
+        📊 **Generate a forecast first** to see quality assessment metrics.
+
+        Go to **🚀 Generate Forecast** tab to create a forecast, then return here for:
+        - **RPIW Score** — Relative Prediction Interval Width
+        - **Uncertainty Level** — LOW / MEDIUM / HIGH classification
+        - **Optimization Recommendation** — Which method to use for planning
+        - **Model Performance Comparison** — ML vs Statistical models
+        """)
+
+        # Show available model metrics even without forecast
+        model_metrics = extract_model_metrics_from_session()
+        all_models = model_metrics["ml_models"] + model_metrics["stat_models"]
+
+        if all_models:
+            st.markdown("### 📈 Available Model Metrics")
+            st.markdown("*Models trained in Benchmarks and Modeling Hub*")
+
+            for model in all_models:
+                acc = model["accuracy"] if not np.isnan(model["accuracy"]) else 0
+                acc_color = "#22c55e" if acc >= 90 else ("#facc15" if acc >= 80 else "#3b82f6")
+                model_icon = "🤖" if model["type"] == "ML" else "📊"
+                mae_display = f"{model['mae']:.2f}" if not np.isnan(model["mae"]) else "—"
+                rmse_display = f"{model['rmse']:.2f}" if not np.isnan(model["rmse"]) else "—"
+
+                st.markdown(f"""
+                <div class="fq-kpi-card" style="--accent-color: {acc_color}; --accent-color-end: {acc_color}; margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-size: 1.5rem;">{model_icon}</span>
+                            <strong style="margin-left: 0.5rem; color: #f8fafc;">{model['name']}</strong>
+                            <span style="color: #94a3b8; margin-left: 0.5rem;">({model['type']})</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 1.5rem; font-weight: 800; color: {acc_color};">{acc:.1f}%</span>
+                            <div style="font-size: 0.75rem; color: #94a3b8;">MAE: {mae_display} | RMSE: {rmse_display}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+# =============================================================================
+# TAB 5: RESULTS & EXPORT
 # =============================================================================
 with tab_results:
     st.markdown("### 📈 Forecast Results")
