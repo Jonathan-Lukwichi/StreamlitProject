@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass
 import plotly.graph_objects as go
 import plotly.express as px
 
@@ -272,11 +273,164 @@ st.markdown("""
 # FORECAST QUALITY ASSESSMENT - RPIW & MODEL METRICS
 # =============================================================================
 
+@dataclass
+class PredictionIntervalSource:
+    """Information about where prediction intervals came from."""
+    source_name: str  # e.g., "ARIMA", "SARIMAX", "CQR", "Estimated"
+    source_type: str  # "model_intervals", "conformal", "variance_estimate"
+    confidence_level: float  # e.g., 0.90 for 90% CI
+    lower_bounds: List[float]
+    upper_bounds: List[float]
+    is_actual: bool  # True if from actual model, False if estimated
+
+
+def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSource]:
+    """
+    Extract actual prediction intervals from trained models in session state.
+
+    Checks (in priority order):
+    1. CQR/Conformal Prediction results (most rigorous)
+    2. SARIMAX confidence intervals
+    3. ARIMA confidence intervals
+    4. ML model prediction intervals (if available)
+
+    Returns:
+        PredictionIntervalSource or None if no intervals found
+    """
+
+    # -------------------------------------------------------------------------
+    # 1. Check for CQR/Conformal Prediction results (highest priority)
+    # -------------------------------------------------------------------------
+    cqr_results = st.session_state.get("cqr_results") or st.session_state.get("conformal_results")
+    if cqr_results and isinstance(cqr_results, dict):
+        lower = cqr_results.get("lower") or cqr_results.get("pred_lower")
+        upper = cqr_results.get("upper") or cqr_results.get("pred_upper")
+        if lower is not None and upper is not None:
+            lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
+            upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
+            if lower_list and upper_list:
+                return PredictionIntervalSource(
+                    source_name="Conformal Prediction (CQR)",
+                    source_type="conformal",
+                    confidence_level=cqr_results.get("coverage_target", 0.90),
+                    lower_bounds=lower_list,
+                    upper_bounds=upper_list,
+                    is_actual=True
+                )
+
+    # -------------------------------------------------------------------------
+    # 2. Check SARIMAX results
+    # -------------------------------------------------------------------------
+    sarimax_results = st.session_state.get("sarimax_results")
+    if sarimax_results and isinstance(sarimax_results, dict):
+        # Single-horizon SARIMAX
+        lower = sarimax_results.get("forecast_lower")
+        upper = sarimax_results.get("forecast_upper")
+        if lower is not None and upper is not None:
+            lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
+            upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
+            if lower_list and upper_list:
+                return PredictionIntervalSource(
+                    source_name="SARIMAX (95% CI)",
+                    source_type="model_intervals",
+                    confidence_level=0.95,
+                    lower_bounds=lower_list,
+                    upper_bounds=upper_list,
+                    is_actual=True
+                )
+
+        # Multi-horizon SARIMAX (check per_h structure)
+        per_h = sarimax_results.get("per_h", {})
+        if per_h:
+            for h, h_data in sorted(per_h.items()):
+                lower = h_data.get("ci_lo") or h_data.get("forecast_lower")
+                upper = h_data.get("ci_hi") or h_data.get("forecast_upper")
+                if lower is not None and upper is not None:
+                    lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
+                    upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
+                    if lower_list and upper_list:
+                        return PredictionIntervalSource(
+                            source_name=f"SARIMAX h={h} (95% CI)",
+                            source_type="model_intervals",
+                            confidence_level=0.95,
+                            lower_bounds=lower_list,
+                            upper_bounds=upper_list,
+                            is_actual=True
+                        )
+                break
+
+    # -------------------------------------------------------------------------
+    # 3. Check ARIMA results
+    # -------------------------------------------------------------------------
+    arima_results = st.session_state.get("arima_mh_results")
+    if arima_results and isinstance(arima_results, dict):
+        # Check per_h structure (multi-horizon)
+        per_h = arima_results.get("per_h", {})
+        if per_h:
+            for h, h_data in sorted(per_h.items()):
+                lower = h_data.get("ci_lo") or h_data.get("forecast_lower")
+                upper = h_data.get("ci_hi") or h_data.get("forecast_upper")
+                if lower is not None and upper is not None:
+                    lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
+                    upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
+                    if lower_list and upper_list:
+                        return PredictionIntervalSource(
+                            source_name=f"ARIMA h={h} (95% CI)",
+                            source_type="model_intervals",
+                            confidence_level=0.95,
+                            lower_bounds=lower_list,
+                            upper_bounds=upper_list,
+                            is_actual=True
+                        )
+                break
+
+        # Single-target ARIMA (legacy format)
+        lower = arima_results.get("ci_lower") or arima_results.get("forecast_lower")
+        upper = arima_results.get("ci_upper") or arima_results.get("forecast_upper")
+        if lower is not None and upper is not None:
+            lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
+            upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
+            if lower_list and upper_list:
+                return PredictionIntervalSource(
+                    source_name="ARIMA (95% CI)",
+                    source_type="model_intervals",
+                    confidence_level=0.95,
+                    lower_bounds=lower_list,
+                    upper_bounds=upper_list,
+                    is_actual=True
+                )
+
+    # -------------------------------------------------------------------------
+    # 4. Check ML model results for intervals
+    # -------------------------------------------------------------------------
+    for key in st.session_state.keys():
+        if key.startswith("ml_mh_results_"):
+            data = st.session_state.get(key)
+            if data and isinstance(data, dict):
+                lower = data.get("pred_lower") or data.get("lower_bound")
+                upper = data.get("pred_upper") or data.get("upper_bound")
+                if lower is not None and upper is not None:
+                    lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
+                    upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
+                    if lower_list and upper_list:
+                        model_name = key.replace("ml_mh_results_", "")
+                        return PredictionIntervalSource(
+                            source_name=f"{model_name} (90% PI)",
+                            source_type="model_intervals",
+                            confidence_level=0.90,
+                            lower_bounds=lower_list,
+                            upper_bounds=upper_list,
+                            is_actual=True
+                        )
+
+    return None
+
+
 def calculate_rpiw(
     forecast_values: List[float],
     lower_bounds: List[float] = None,
     upper_bounds: List[float] = None,
-) -> float:
+) -> Tuple[float, str]:
     """
     Calculate Relative Prediction Interval Width (RPIW).
 
@@ -288,17 +442,37 @@ def calculate_rpiw(
         upper_bounds: Upper prediction interval bounds (optional)
 
     Returns:
-        RPIW as percentage
+        Tuple of (RPIW percentage, interval source description)
     """
     if not forecast_values:
-        return 0.0
+        return 0.0, "No data"
+
+    interval_source = "Variance-based estimate (90% CI)"
 
     if lower_bounds is None or upper_bounds is None:
-        # Estimate bounds from forecast variance (90% PI)
-        mean_forecast = np.mean(forecast_values)
-        std_forecast = np.std(forecast_values) if len(forecast_values) > 1 else mean_forecast * 0.1
-        lower_bounds = [max(0, f - 1.645 * std_forecast) for f in forecast_values]
-        upper_bounds = [f + 1.645 * std_forecast for f in forecast_values]
+        # Try to extract actual intervals from session state
+        actual_intervals = extract_prediction_intervals_from_session()
+
+        if actual_intervals and actual_intervals.is_actual:
+            # Use actual model intervals
+            lower_bounds = actual_intervals.lower_bounds
+            upper_bounds = actual_intervals.upper_bounds
+            interval_source = f"{actual_intervals.source_name}"
+
+            # Ensure lengths match forecast (trim or extend)
+            n = len(forecast_values)
+            if len(lower_bounds) > n:
+                lower_bounds = lower_bounds[:n]
+                upper_bounds = upper_bounds[:n]
+            elif len(lower_bounds) < n:
+                lower_bounds = list(lower_bounds) + [lower_bounds[-1]] * (n - len(lower_bounds))
+                upper_bounds = list(upper_bounds) + [upper_bounds[-1]] * (n - len(upper_bounds))
+        else:
+            # Fall back to variance-based estimation (90% PI)
+            mean_forecast = np.mean(forecast_values)
+            std_forecast = np.std(forecast_values) if len(forecast_values) > 1 else mean_forecast * 0.1
+            lower_bounds = [max(0, f - 1.645 * std_forecast) for f in forecast_values]
+            upper_bounds = [f + 1.645 * std_forecast for f in forecast_values]
 
     rpiw_values = []
     for d_hat, l, u in zip(forecast_values, lower_bounds, upper_bounds):
@@ -306,7 +480,7 @@ def calculate_rpiw(
             rpiw = ((u - l) / d_hat) * 100
             rpiw_values.append(rpiw)
 
-    return np.mean(rpiw_values) if rpiw_values else 0.0
+    return np.mean(rpiw_values) if rpiw_values else 0.0, interval_source
 
 
 def get_optimization_recommendation(rpiw: float) -> Dict[str, Any]:
@@ -499,15 +673,35 @@ def render_forecast_quality_kpis(forecast_values: List[float], model_name: str =
         st.warning("No forecast values available for quality assessment.")
         return
 
-    # Calculate RPIW
-    rpiw = calculate_rpiw(forecast_values)
+    # Calculate RPIW (returns tuple: value, source)
+    rpiw, interval_source = calculate_rpiw(forecast_values)
     recommendation = get_optimization_recommendation(rpiw)
 
     # Get model metrics from session
     model_metrics = extract_model_metrics_from_session()
 
+    # Determine if using actual model intervals
+    is_actual_intervals = "Variance-based" not in interval_source
+    source_color = "#22c55e" if is_actual_intervals else "#94a3b8"
+    source_icon = "✅" if is_actual_intervals else "📐"
+
     # -------------------------------------------------------------------------
-    # SECTION 1: RPIW Overview KPIs
+    # SECTION 1: Interval Source Banner
+    # -------------------------------------------------------------------------
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px;
+                padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem;">
+        <span style="font-size: 1.25rem;">{source_icon}</span>
+        <div>
+            <span style="color: #94a3b8; font-size: 0.8rem;">Prediction Intervals from:</span>
+            <strong style="color: {source_color}; margin-left: 0.5rem;">{interval_source}</strong>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SECTION 2: RPIW Overview KPIs
     # -------------------------------------------------------------------------
     st.markdown("### 🎯 Forecast Uncertainty Assessment")
 
@@ -558,7 +752,7 @@ def render_forecast_quality_kpis(forecast_values: List[float], model_name: str =
         """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # SECTION 2: Optimization Recommendation
+    # SECTION 3: Optimization Recommendation
     # -------------------------------------------------------------------------
     st.markdown("### 🎛️ Recommended Optimization Approach")
 
