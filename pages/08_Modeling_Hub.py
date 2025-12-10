@@ -1184,7 +1184,8 @@ def render_cqr_section(ml_results: dict, model_name: str, alpha: float = 0.1):
     with col1:
         st.plotly_chart(
             _create_kpi_indicator("Avg RPIW", cqr_output.get("aggregated_rpiw", 0), "", "#8b5cf6"),
-            use_container_width=True
+            use_container_width=True,
+            key=f"cqr_rpiw_{model_name}"
         )
         st.caption("Lower = Tighter intervals")
 
@@ -1193,14 +1194,16 @@ def render_cqr_section(ml_results: dict, model_name: str, alpha: float = 0.1):
         cov_color = SUCCESS_COLOR if coverage >= (1 - alpha - 0.02) else WARNING_COLOR
         st.plotly_chart(
             _create_kpi_indicator("Avg Coverage", coverage * 100 if coverage else 0, "%", cov_color),
-            use_container_width=True
+            use_container_width=True,
+            key=f"cqr_coverage_{model_name}"
         )
         st.caption(f"Target: {coverage_pct}%")
 
     with col3:
         st.plotly_chart(
             _create_kpi_indicator("Horizons", cqr_output.get("n_horizons", 0), "", PRIMARY_COLOR),
-            use_container_width=True
+            use_container_width=True,
+            key=f"cqr_horizons_{model_name}"
         )
         st.caption("With valid intervals")
 
