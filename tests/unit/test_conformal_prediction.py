@@ -40,15 +40,18 @@ class TestConformalPredictionImports:
         try:
             from app_core.pipelines import PredictionInterval
 
+            # PredictionInterval uses point_forecast (not point) and coverage_target
             interval = PredictionInterval(
+                point_forecast=np.array([1.5, 2.5, 3.5]),
                 lower=np.array([1.0, 2.0, 3.0]),
                 upper=np.array([2.0, 3.0, 4.0]),
-                point=np.array([1.5, 2.5, 3.5]),
                 alpha=0.1,
+                coverage_target=0.9,
             )
 
             assert len(interval.lower) == 3
             assert interval.alpha == 0.1
+            assert interval.coverage_target == 0.9
         except ImportError:
             pytest.skip("PredictionInterval not available")
 
@@ -136,12 +139,13 @@ class TestRPIWCalculation:
         try:
             from app_core.pipelines import calculate_rpiw, PredictionInterval
 
-            # Create intervals
+            # Create intervals with correct field names
             intervals = PredictionInterval(
+                point_forecast=np.array([100, 105, 110]),
                 lower=np.array([90, 95, 100]),
                 upper=np.array([110, 115, 120]),
-                point=np.array([100, 105, 110]),
                 alpha=0.1,
+                coverage_target=0.9,
             )
 
             y_test = np.array([100, 105, 110])
@@ -168,10 +172,11 @@ class TestRPIWCalculation:
 
             # Create wide intervals that definitely cover all points
             intervals = PredictionInterval(
+                point_forecast=np.array([100, 100, 100]),
                 lower=np.array([0, 0, 0]),
                 upper=np.array([200, 200, 200]),
-                point=np.array([100, 100, 100]),
                 alpha=0.1,
+                coverage_target=0.9,
             )
 
             y_test = np.array([100, 105, 95])
@@ -191,10 +196,11 @@ class TestRPIWCalculation:
 
             # Create narrow intervals that miss all points
             intervals = PredictionInterval(
+                point_forecast=np.array([5, 5, 5]),
                 lower=np.array([0, 0, 0]),
                 upper=np.array([10, 10, 10]),
-                point=np.array([5, 5, 5]),
                 alpha=0.1,
+                coverage_target=0.9,
             )
 
             y_test = np.array([100, 200, 300])  # All outside intervals
