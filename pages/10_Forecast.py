@@ -832,6 +832,32 @@ with tab_overview:
         </div>
         """, unsafe_allow_html=True)
 
+    # Check for optimized models
+    optimized_models = []
+    for model_type in ["XGBoost", "LSTM", "ANN"]:
+        opt_key = f"opt_results_{model_type}"
+        if opt_key in st.session_state and st.session_state[opt_key] is not None:
+            optimized_models.append(model_type)
+
+    if optimized_models:
+        st.markdown("### 🔬 Hyperparameter Optimization Status")
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.1));
+                    border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <span style="font-size: 1.25rem;">⚡</span>
+                <span style="font-weight: 600; color: #e2e8f0;">Optimized Models Available</span>
+            </div>
+            <div style="color: #94a3b8; font-size: 0.875rem;">
+                The following models have hyperparameter optimization results:
+                <span style="color: #a78bfa; font-weight: 600;">{', '.join(optimized_models)}</span>
+            </div>
+            <div style="margin-top: 0.75rem; font-size: 0.8rem; color: #64748b;">
+                💡 View detailed optimization results in <strong>09_Results.py → 🔬 Hyperparameter Tuning</strong> tab
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.divider()
 
     # Model details
@@ -855,7 +881,11 @@ with tab_overview:
 
         badge_class = "model-ml" if model_info["type"] == "ML" else "model-stat"
 
-        with st.expander(f"**{model_info['name']}** ({model_info['type']})", expanded=False):
+        # Check if this model has optimization results
+        is_optimized = model_info["name"] in optimized_models
+        opt_badge = " ⚡ Optimized" if is_optimized else ""
+
+        with st.expander(f"**{model_info['name']}** ({model_info['type']}){opt_badge}", expanded=False):
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
@@ -866,6 +896,31 @@ with tab_overview:
                 st.metric("Max Horizon", max(horizons) if horizons else 0)
             with col4:
                 st.metric("Date Range", date_range)
+
+            # Show optimization info if available
+            if is_optimized:
+                opt_results = st.session_state.get(f"opt_results_{model_info['name']}")
+                if opt_results:
+                    st.markdown("**🔬 Hyperparameter Optimization Results:**")
+                    opt_col1, opt_col2 = st.columns(2)
+
+                    with opt_col1:
+                        best_params = opt_results.get("best_params", {})
+                        if best_params:
+                            params_df = pd.DataFrame(
+                                list(best_params.items())[:5],  # Show first 5 params
+                                columns=["Parameter", "Value"]
+                            )
+                            st.dataframe(params_df, use_container_width=True, hide_index=True, height=150)
+
+                    with opt_col2:
+                        all_scores = opt_results.get("all_scores", {})
+                        if all_scores:
+                            st.metric("Optimized Accuracy", f"{all_scores.get('Accuracy', 0):.2f}%")
+                            st.metric("Optimized RMSE", f"{all_scores.get('RMSE', 0):.4f}")
+
+                    st.caption("💡 Full details in **09_Results.py → 🔬 Hyperparameter Tuning** tab")
+                    st.divider()
 
             # Show metrics if available
             metrics_df = data.get("metrics_df")

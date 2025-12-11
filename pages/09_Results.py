@@ -1220,8 +1220,8 @@ st.markdown(
 )
 
 # Main tabs
-tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_thesis = st.tabs([
-    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "📝 Thesis Export"
+tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_hyperparams, tab_thesis = st.tabs([
+    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "🔬 Hyperparameter Tuning", "📝 Thesis Export"
 ])
 
 # -----------------------------------------------------------------------------
@@ -1485,7 +1485,266 @@ with tab_rankings:
         """)
 
 # -----------------------------------------------------------------------------
-# TAB 5: THESIS EXPORT
+# TAB 5: HYPERPARAMETER TUNING RESULTS
+# -----------------------------------------------------------------------------
+with tab_hyperparams:
+    st.markdown("### 🔬 Hyperparameter Optimization Results")
+    st.caption("Results from Grid Search, Random Search, and Bayesian Optimization")
+
+    # Collect all hyperparameter optimization results
+    opt_models = []
+    for model_type in ["XGBoost", "LSTM", "ANN"]:
+        opt_key = f"opt_results_{model_type}"
+        if opt_key in st.session_state and st.session_state[opt_key] is not None:
+            opt_models.append(model_type)
+
+    if not opt_models:
+        st.warning(
+            "⚠️ **No hyperparameter optimization results found**\n\n"
+            "Please run hyperparameter tuning from:\n"
+            "- **08_Modeling_Hub.py** → 🔬 Hyperparameter Tuning tab\n\n"
+            "After optimization, return here to view and compare results."
+        )
+
+        # Show available session keys for debugging
+        with st.expander("📂 Debug: Available Session Keys", expanded=False):
+            opt_keys = [k for k in st.session_state.keys() if 'opt' in k.lower()]
+            st.write("Optimization-related keys:", opt_keys)
+    else:
+        # Summary metrics
+        st.markdown("#### 📊 Optimization Summary")
+
+        summary_data = []
+        for model_type in opt_models:
+            opt_results = st.session_state.get(f"opt_results_{model_type}")
+            if opt_results:
+                all_scores = opt_results.get("all_scores", {})
+                summary_data.append({
+                    "Model": model_type,
+                    "Method": st.session_state.get("opt_last_method", "Unknown"),
+                    "RMSE": _safe_float(all_scores.get("RMSE")),
+                    "MAE": _safe_float(all_scores.get("MAE")),
+                    "MAPE_%": _safe_float(all_scores.get("MAPE")),
+                    "Accuracy_%": _safe_float(all_scores.get("Accuracy")),
+                    "Refit Metric": opt_results.get("refit_metric", "N/A"),
+                })
+
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+
+            # Display summary table with color coding
+            st.dataframe(
+                summary_df.style.format({
+                    "RMSE": "{:.4f}",
+                    "MAE": "{:.4f}",
+                    "MAPE_%": "{:.2f}",
+                    "Accuracy_%": "{:.2f}",
+                }, na_rep="—").background_gradient(
+                    subset=["RMSE", "MAE", "MAPE_%"],
+                    cmap="RdYlGn_r"
+                ).background_gradient(
+                    subset=["Accuracy_%"],
+                    cmap="RdYlGn"
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # Find best optimized model
+            if "Accuracy_%" in summary_df.columns:
+                best_idx = summary_df["Accuracy_%"].idxmax()
+                best_opt_model = summary_df.loc[best_idx, "Model"]
+                best_acc = summary_df.loc[best_idx, "Accuracy_%"]
+                st.success(f"🏆 **Best Optimized Model: {best_opt_model}** with {best_acc:.2f}% accuracy")
+
+        st.divider()
+
+        # Detailed results per model
+        st.markdown("#### 🔍 Detailed Results by Model")
+
+        selected_opt_model = st.selectbox(
+            "Select Model:",
+            options=opt_models,
+            key="results_opt_model_select"
+        )
+
+        if selected_opt_model:
+            opt_results = st.session_state.get(f"opt_results_{selected_opt_model}")
+
+            if opt_results:
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown("##### 🏆 Best Parameters")
+                    best_params = opt_results.get("best_params", {})
+                    if best_params:
+                        params_df = pd.DataFrame(
+                            list(best_params.items()),
+                            columns=["Parameter", "Value"]
+                        )
+                        st.dataframe(params_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No parameters available")
+
+                with col2:
+                    st.markdown("##### 📈 Best Scores")
+                    all_scores = opt_results.get("all_scores", {})
+                    if all_scores:
+                        scores_df = pd.DataFrame([
+                            {"Metric": "RMSE", "Value": f"{all_scores.get('RMSE', 'N/A'):.4f}" if isinstance(all_scores.get('RMSE'), (int, float)) else "N/A"},
+                            {"Metric": "MAE", "Value": f"{all_scores.get('MAE', 'N/A'):.4f}" if isinstance(all_scores.get('MAE'), (int, float)) else "N/A"},
+                            {"Metric": "MAPE (%)", "Value": f"{all_scores.get('MAPE', 'N/A'):.2f}" if isinstance(all_scores.get('MAPE'), (int, float)) else "N/A"},
+                            {"Metric": "Accuracy (%)", "Value": f"{all_scores.get('Accuracy', 'N/A'):.2f}" if isinstance(all_scores.get('Accuracy'), (int, float)) else "N/A"},
+                        ])
+                        st.dataframe(scores_df, use_container_width=True, hide_index=True)
+
+                # CV Results
+                cv_results = opt_results.get("cv_results")
+                if cv_results is not None and isinstance(cv_results, pd.DataFrame) and not cv_results.empty:
+                    with st.expander("📋 Cross-Validation Results (All Parameter Combinations)", expanded=False):
+                        # Select relevant columns
+                        display_cols = ['params', 'mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE', 'mean_test_Accuracy']
+                        available_cols = [col for col in display_cols if col in cv_results.columns]
+
+                        if available_cols:
+                            display_cv = cv_results[available_cols].copy()
+
+                            # Invert negative scores for display
+                            for col in ['mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE']:
+                                if col in display_cv.columns:
+                                    display_cv[col] = -display_cv[col]
+
+                            st.dataframe(display_cv, use_container_width=True, height=300)
+
+                # Backtesting results
+                backtest_key = f"backtest_results_{selected_opt_model}"
+                backtest_results = st.session_state.get(backtest_key)
+
+                if backtest_results:
+                    st.markdown("##### 📅 7-Day Rolling-Origin Backtesting")
+
+                    aggregate_metrics = backtest_results.get("aggregate_metrics", {})
+                    n_windows = backtest_results.get("n_successful_windows", 0)
+
+                    if aggregate_metrics.get("RMSE") is not None:
+                        metric_cols = st.columns(4)
+                        with metric_cols[0]:
+                            st.metric("RMSE", f"{aggregate_metrics['RMSE']:.4f}")
+                        with metric_cols[1]:
+                            st.metric("MAE", f"{aggregate_metrics['MAE']:.4f}")
+                        with metric_cols[2]:
+                            st.metric("MAPE", f"{aggregate_metrics['MAPE']:.2f}%")
+                        with metric_cols[3]:
+                            st.metric("Accuracy", f"{aggregate_metrics['Accuracy']:.2f}%")
+
+                        st.caption(f"Aggregated across {n_windows} rolling windows")
+
+                        # Window-by-window results
+                        window_results = backtest_results.get("window_results", [])
+                        if window_results:
+                            with st.expander(f"📋 Individual Window Results ({len(window_results)} windows)", expanded=False):
+                                window_df = pd.DataFrame(window_results)
+                                st.dataframe(window_df, use_container_width=True, hide_index=True)
+
+        # Comparison chart if multiple models optimized
+        if len(opt_models) > 1:
+            st.divider()
+            st.markdown("#### 📊 Optimized Models Comparison")
+
+            # Create comparison bar chart
+            comp_data = []
+            for model_type in opt_models:
+                opt_results = st.session_state.get(f"opt_results_{model_type}")
+                if opt_results:
+                    all_scores = opt_results.get("all_scores", {})
+                    comp_data.append({
+                        "Model": model_type,
+                        "Accuracy": _safe_float(all_scores.get("Accuracy")),
+                        "RMSE": _safe_float(all_scores.get("RMSE")),
+                    })
+
+            if comp_data:
+                comp_df = pd.DataFrame(comp_data)
+
+                fig_comp = make_subplots(rows=1, cols=2, subplot_titles=("Accuracy (%)", "RMSE"))
+
+                # Accuracy bars
+                fig_comp.add_trace(
+                    go.Bar(
+                        x=comp_df["Model"],
+                        y=comp_df["Accuracy"],
+                        marker_color=[MODEL_COLORS.get(m, "#6B7280") for m in comp_df["Model"]],
+                        text=[f"{v:.1f}%" for v in comp_df["Accuracy"]],
+                        textposition="auto",
+                        showlegend=False,
+                    ),
+                    row=1, col=1
+                )
+
+                # RMSE bars
+                fig_comp.add_trace(
+                    go.Bar(
+                        x=comp_df["Model"],
+                        y=comp_df["RMSE"],
+                        marker_color=[MODEL_COLORS.get(m, "#6B7280") for m in comp_df["Model"]],
+                        text=[f"{v:.4f}" for v in comp_df["RMSE"]],
+                        textposition="auto",
+                        showlegend=False,
+                    ),
+                    row=1, col=2
+                )
+
+                fig_comp.update_layout(
+                    title="Hyperparameter-Optimized Model Comparison",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=400,
+                )
+
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+        # Export optimized parameters
+        st.divider()
+        st.markdown("#### 📥 Export Best Parameters")
+
+        export_model = st.selectbox(
+            "Select Model to Export Parameters:",
+            options=opt_models,
+            key="export_opt_params_select"
+        )
+
+        if export_model:
+            opt_results = st.session_state.get(f"opt_results_{export_model}")
+            if opt_results:
+                best_params = opt_results.get("best_params", {})
+                all_scores = opt_results.get("all_scores", {})
+
+                export_data = {
+                    "model": export_model,
+                    "method": st.session_state.get("opt_last_method", "Unknown"),
+                    "best_params": best_params,
+                    "best_scores": all_scores,
+                }
+
+                import json
+                json_str = json.dumps(export_data, indent=2, default=str)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        "📥 Download Parameters (JSON)",
+                        json_str,
+                        f"best_params_{export_model}.json",
+                        "application/json",
+                        use_container_width=True,
+                    )
+
+                with col2:
+                    with st.expander("👁️ Preview JSON"):
+                        st.json(export_data)
+
+# -----------------------------------------------------------------------------
+# TAB 6: THESIS EXPORT
 # -----------------------------------------------------------------------------
 with tab_thesis:
     st.markdown("### Thesis-Quality Summary")
