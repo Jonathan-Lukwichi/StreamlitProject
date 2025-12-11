@@ -388,16 +388,26 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
         for idx, h in enumerate(horizons):
             h_data = per_h[h]
 
-            # Forecast values
-            fc = h_data.get("forecast") or h_data.get("predictions") or h_data.get("y_pred")
+            # Forecast values - use explicit None checks to avoid array truth value error
+            fc = h_data.get("forecast")
+            if fc is None:
+                fc = h_data.get("predictions")
+            if fc is None:
+                fc = h_data.get("y_pred")
+
             if fc is not None:
                 fc_vals = fc.values if hasattr(fc, 'values') else np.array(fc)
                 if len(fc_vals) == T:
                     F[:, idx] = fc_vals
 
-            # Confidence intervals (if available)
-            lo = h_data.get("ci_lo") or h_data.get("lower")
-            hi = h_data.get("ci_hi") or h_data.get("upper")
+            # Confidence intervals (if available) - explicit None checks
+            lo = h_data.get("ci_lo")
+            if lo is None:
+                lo = h_data.get("lower")
+
+            hi = h_data.get("ci_hi")
+            if hi is None:
+                hi = h_data.get("upper")
 
             if lo is not None:
                 lo_vals = lo.values if hasattr(lo, 'values') else np.array(lo)
@@ -409,8 +419,10 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
                 if len(hi_vals) == T:
                     U[:, idx] = hi_vals
 
-            # Actual values
-            yt = h_data.get("y_test") or h_data.get("actual")
+            # Actual values - explicit None check
+            yt = h_data.get("y_test")
+            if yt is None:
+                yt = h_data.get("actual")
             if yt is not None:
                 test_eval_dict[f"Target_{h}"] = yt.values if hasattr(yt, 'values') else yt
 
@@ -478,6 +490,149 @@ def get_available_forecast_models() -> List[Dict[str, Any]]:
                 })
 
     return models
+
+
+# =============================================================================
+# UNCERTAINTY WIDTH PIPELINE
+# =============================================================================
+
+@dataclass
+class UncertaintyMetrics:
+    """Container for uncertainty width metrics."""
+    piw: np.ndarray          # Prediction Interval Width (T x H)
+    rpiw: np.ndarray         # Relative PIW as percentage (T x H)
+    piw_avg: np.ndarray      # Average PIW per horizon (H,)
+    rpiw_avg: np.ndarray     # Average RPIW per horizon (H,)
+    overall_rpiw: float      # Overall average RPIW
+    uncertainty_level: str   # LOW, MEDIUM, HIGH
+    recommended_method: str  # Deterministic MILP, Robust Optimization, Two-Stage Stochastic
+    rationale: str           # Explanation for recommendation
+
+
+def calculate_uncertainty_width(F: np.ndarray, L: np.ndarray, U: np.ndarray) -> Optional[UncertaintyMetrics]:
+    """
+    Calculate Prediction Interval Width (PIW) and Relative PIW (RPIW) metrics.
+
+    Formulas:
+        PIW_t = U_t - L_t                           (PIW-1)
+        RPIW_t = (U_t - L_t) / D̂_t × 100%          (PIW-2)
+        RPIW_avg = (1/T) × Σ_t RPIW_t              (PIW-3)
+
+    Args:
+        F: Forecast matrix (T x H) - point forecasts
+        L: Lower bound matrix (T x H) - lower confidence interval
+        U: Upper bound matrix (T x H) - upper confidence interval
+
+    Returns:
+        UncertaintyMetrics object or None if calculation fails
+    """
+    if F is None or L is None or U is None:
+        return None
+
+    # Check if we have valid CI data
+    if np.all(np.isnan(L)) or np.all(np.isnan(U)):
+        return None
+
+    try:
+        T, H = F.shape
+
+        # PIW: Prediction Interval Width = Upper - Lower (PIW-1)
+        piw = U - L  # Shape: (T, H)
+
+        # Handle cases where forecast is zero or very small
+        F_safe = np.where(np.abs(F) < 1e-6, np.nan, F)
+
+        # RPIW: Relative Prediction Interval Width (PIW-2)
+        rpiw = (piw / np.abs(F_safe)) * 100  # As percentage
+
+        # Average PIW per horizon
+        piw_avg = np.nanmean(piw, axis=0)  # Shape: (H,)
+
+        # Average RPIW per horizon (PIW-3)
+        rpiw_avg = np.nanmean(rpiw, axis=0)  # Shape: (H,)
+
+        # Overall average RPIW across all horizons
+        overall_rpiw = np.nanmean(rpiw)
+
+        # Determine uncertainty level and recommendation
+        if np.isnan(overall_rpiw):
+            uncertainty_level = "UNKNOWN"
+            recommended_method = "Manual Assessment Required"
+            rationale = "Unable to calculate RPIW - check confidence interval data"
+        elif overall_rpiw < 15:
+            uncertainty_level = "LOW"
+            recommended_method = "Deterministic MILP"
+            rationale = "Point forecast is reliable; extra complexity not justified"
+        elif overall_rpiw <= 40:
+            uncertainty_level = "MEDIUM"
+            recommended_method = "Robust Optimization"
+            rationale = "Need protection but scenarios overkill; budget Γ adjustable"
+        else:
+            uncertainty_level = "HIGH"
+            recommended_method = "Two-Stage Stochastic"
+            rationale = "Need explicit recourse actions; scenarios capture distribution"
+
+        return UncertaintyMetrics(
+            piw=piw,
+            rpiw=rpiw,
+            piw_avg=piw_avg,
+            rpiw_avg=rpiw_avg,
+            overall_rpiw=overall_rpiw,
+            uncertainty_level=uncertainty_level,
+            recommended_method=recommended_method,
+            rationale=rationale,
+        )
+    except Exception as e:
+        st.warning(f"Error calculating uncertainty width: {e}")
+        return None
+
+
+def get_uncertainty_for_all_models(models: List[Dict[str, Any]]) -> Dict[str, UncertaintyMetrics]:
+    """
+    Calculate uncertainty metrics for all available models.
+
+    Args:
+        models: List of model info dicts from get_available_forecast_models()
+
+    Returns:
+        Dict mapping model name to UncertaintyMetrics
+    """
+    results = {}
+
+    for model_info in models:
+        model_name = model_info["name"]
+        data = model_info.get("data", {})
+
+        F = data.get("F")
+        L = data.get("L")
+        U = data.get("U")
+
+        metrics = calculate_uncertainty_width(F, L, U)
+        if metrics:
+            results[model_name] = metrics
+
+    return results
+
+
+def create_uncertainty_summary_df(uncertainty_results: Dict[str, UncertaintyMetrics]) -> pd.DataFrame:
+    """
+    Create a summary DataFrame of uncertainty metrics for all models.
+    """
+    rows = []
+    for model_name, metrics in uncertainty_results.items():
+        rows.append({
+            "Model": model_name,
+            "Avg RPIW (%)": round(metrics.overall_rpiw, 2) if not np.isnan(metrics.overall_rpiw) else "N/A",
+            "Uncertainty Level": metrics.uncertainty_level,
+            "Recommended Method": metrics.recommended_method,
+            "Rationale": metrics.rationale,
+        })
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    return df.sort_values("Avg RPIW (%)", ascending=True)
 
 
 def get_metrics_from_df(metrics_df: pd.DataFrame, horizon: int) -> Dict[str, float]:
@@ -583,10 +738,11 @@ if not available_models:
     st.stop()
 
 # Create tabs
-tab_overview, tab_forecast, tab_comparison, tab_export = st.tabs([
+tab_overview, tab_forecast, tab_comparison, tab_uncertainty, tab_export = st.tabs([
     "📊 Overview",
     "🔮 Forecast View",
     "📈 Model Comparison",
+    "📏 Uncertainty Analysis",
     "📥 Export"
 ])
 
@@ -1016,7 +1172,229 @@ with tab_comparison:
             """)
 
 # =============================================================================
-# TAB 4: EXPORT
+# TAB 4: UNCERTAINTY ANALYSIS
+# =============================================================================
+with tab_uncertainty:
+    st.markdown("### 📏 Uncertainty Width Analysis")
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+                padding: 1rem; border-radius: 10px; border-left: 4px solid #3b82f6; margin-bottom: 1.5rem;">
+        <p style="margin: 0; color: #94a3b8;">
+            <strong>Key Insight:</strong> The width of your prediction interval determines which optimization approach to use for staff scheduling.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Calculate uncertainty for all models
+    uncertainty_results = get_uncertainty_for_all_models(available_models)
+
+    if not uncertainty_results:
+        st.warning("No models with valid confidence intervals found. Uncertainty analysis requires Upper (U) and Lower (L) bounds.")
+        st.info("Train models with confidence intervals enabled (ARIMA/SARIMAX) to see uncertainty analysis.")
+    else:
+        # Summary table
+        st.markdown("#### Model Uncertainty Summary")
+        summary_df = create_uncertainty_summary_df(uncertainty_results)
+
+        # Color code the uncertainty levels
+        def style_uncertainty(val):
+            if val == "LOW":
+                return "background-color: rgba(34, 197, 94, 0.2); color: #22c55e;"
+            elif val == "MEDIUM":
+                return "background-color: rgba(251, 191, 36, 0.2); color: #fbbf24;"
+            elif val == "HIGH":
+                return "background-color: rgba(239, 68, 68, 0.2); color: #ef4444;"
+            return ""
+
+        st.dataframe(
+            summary_df.style.applymap(style_uncertainty, subset=["Uncertainty Level"]),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Decision Framework Reference
+        st.markdown("#### Decision Framework: Uncertainty Width → Optimization Method")
+
+        decision_cols = st.columns(3)
+
+        with decision_cols[0]:
+            st.markdown("""
+            <div class="fq-kpi-card" style="--accent-color: #22c55e; --accent-color-end: #10b981;">
+                <div class="fq-kpi-icon">🟢</div>
+                <div class="fq-kpi-label">LOW UNCERTAINTY</div>
+                <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW &lt; 15%</div>
+                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px;">
+                    <div style="font-weight: 600; color: #22c55e;">Deterministic MILP</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        ±5 patients<br>Point forecast is reliable
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with decision_cols[1]:
+            st.markdown("""
+            <div class="fq-kpi-card" style="--accent-color: #fbbf24; --accent-color-end: #f59e0b;">
+                <div class="fq-kpi-icon">🟡</div>
+                <div class="fq-kpi-label">MEDIUM UNCERTAINTY</div>
+                <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW 15-40%</div>
+                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(251, 191, 36, 0.1); border-radius: 8px;">
+                    <div style="font-weight: 600; color: #fbbf24;">Robust Optimization</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        ±10-20 patients<br>Budget Γ adjustable
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with decision_cols[2]:
+            st.markdown("""
+            <div class="fq-kpi-card" style="--accent-color: #ef4444; --accent-color-end: #dc2626;">
+                <div class="fq-kpi-icon">🔴</div>
+                <div class="fq-kpi-label">HIGH UNCERTAINTY</div>
+                <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW &gt; 40%</div>
+                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">
+                    <div style="font-weight: 600; color: #ef4444;">Two-Stage Stochastic</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        ±30+ patients<br>Explicit recourse actions
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # Detailed per-model analysis
+        st.markdown("#### Detailed Model Analysis")
+
+        model_select = st.selectbox(
+            "Select Model for Detailed Analysis:",
+            options=list(uncertainty_results.keys()),
+            key="uncertainty_model_select"
+        )
+
+        if model_select:
+            metrics = uncertainty_results[model_select]
+            model_data = next((m["data"] for m in available_models if m["name"] == model_select), None)
+
+            if model_data:
+                horizons = model_data.get("horizons", [])
+
+                # Display overall metrics
+                metric_cols = st.columns(4)
+
+                with metric_cols[0]:
+                    level_color = {"LOW": "#22c55e", "MEDIUM": "#fbbf24", "HIGH": "#ef4444"}.get(metrics.uncertainty_level, "#94a3b8")
+                    st.markdown(f"""
+                    <div class="fq-kpi-card" style="--accent-color: {level_color}; --accent-color-end: {level_color};">
+                        <div class="fq-kpi-label">OVERALL RPIW</div>
+                        <div class="fq-kpi-value">{metrics.overall_rpiw:.1f}%</div>
+                        <div class="fq-kpi-sublabel">Relative Prediction Interval Width</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with metric_cols[1]:
+                    st.markdown(f"""
+                    <div class="fq-kpi-card" style="--accent-color: {level_color}; --accent-color-end: {level_color};">
+                        <div class="fq-kpi-label">UNCERTAINTY LEVEL</div>
+                        <div class="fq-kpi-value" style="color: {level_color};">{metrics.uncertainty_level}</div>
+                        <div class="fq-kpi-sublabel">{metrics.rationale[:40]}...</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with metric_cols[2]:
+                    avg_piw = np.nanmean(metrics.piw_avg)
+                    st.markdown(f"""
+                    <div class="fq-kpi-card">
+                        <div class="fq-kpi-label">AVG INTERVAL WIDTH</div>
+                        <div class="fq-kpi-value">{avg_piw:.1f}</div>
+                        <div class="fq-kpi-sublabel">Patients (absolute)</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with metric_cols[3]:
+                    st.markdown(f"""
+                    <div class="fq-kpi-card" style="--accent-color: #8b5cf6; --accent-color-end: #a855f7;">
+                        <div class="fq-kpi-label">RECOMMENDED</div>
+                        <div class="fq-kpi-value" style="font-size: 1rem;">{metrics.recommended_method}</div>
+                        <div class="fq-kpi-sublabel">Optimization Method</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # RPIW per horizon chart
+                st.markdown("##### RPIW by Forecast Horizon")
+
+                if len(horizons) > 0 and len(metrics.rpiw_avg) > 0:
+                    rpiw_df = pd.DataFrame({
+                        "Horizon": [f"h={h}" for h in horizons[:len(metrics.rpiw_avg)]],
+                        "RPIW (%)": metrics.rpiw_avg[:len(horizons)],
+                        "PIW (abs)": metrics.piw_avg[:len(horizons)]
+                    })
+
+                    fig_rpiw = go.Figure()
+
+                    # Add bar for RPIW
+                    colors = []
+                    for rpiw in rpiw_df["RPIW (%)"]:
+                        if rpiw < 15:
+                            colors.append("#22c55e")
+                        elif rpiw <= 40:
+                            colors.append("#fbbf24")
+                        else:
+                            colors.append("#ef4444")
+
+                    fig_rpiw.add_trace(go.Bar(
+                        x=rpiw_df["Horizon"],
+                        y=rpiw_df["RPIW (%)"],
+                        marker_color=colors,
+                        text=[f"{v:.1f}%" for v in rpiw_df["RPIW (%)"]],
+                        textposition="auto",
+                        name="RPIW (%)"
+                    ))
+
+                    # Add threshold lines
+                    fig_rpiw.add_hline(y=15, line_dash="dash", line_color="#22c55e",
+                                       annotation_text="Low threshold (15%)", annotation_position="right")
+                    fig_rpiw.add_hline(y=40, line_dash="dash", line_color="#fbbf24",
+                                       annotation_text="Medium threshold (40%)", annotation_position="right")
+
+                    fig_rpiw.update_layout(
+                        title=f"Relative Prediction Interval Width - {model_select}",
+                        xaxis_title="Forecast Horizon",
+                        yaxis_title="RPIW (%)",
+                        template="plotly_dark",
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        height=400,
+                    )
+
+                    st.plotly_chart(fig_rpiw, use_container_width=True)
+
+                    # PIW per horizon table
+                    st.markdown("##### Metrics per Horizon")
+                    st.dataframe(rpiw_df.round(2), use_container_width=True, hide_index=True)
+
+        # Save recommendation to session state
+        if uncertainty_results:
+            # Find best model (lowest RPIW with valid data)
+            best_model = min(uncertainty_results.items(), key=lambda x: x[1].overall_rpiw if not np.isnan(x[1].overall_rpiw) else float('inf'))
+            st.session_state["recommended_optimization_method"] = best_model[1].recommended_method
+            st.session_state["forecast_uncertainty_level"] = best_model[1].uncertainty_level
+            st.session_state["forecast_rpiw"] = best_model[1].overall_rpiw
+
+            st.markdown("---")
+            st.info(f"""
+            **Recommendation saved to session:**
+            - Best Model: {best_model[0]}
+            - Uncertainty Level: {best_model[1].uncertainty_level}
+            - RPIW: {best_model[1].overall_rpiw:.1f}%
+            - Recommended Method: {best_model[1].recommended_method}
+
+            This will be used by the Staff Scheduling module to select the appropriate optimization approach.
+            """)
+
+# =============================================================================
+# TAB 5: EXPORT
 # =============================================================================
 with tab_export:
     st.markdown("### 📥 Export Forecasts")
