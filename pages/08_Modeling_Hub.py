@@ -4132,65 +4132,65 @@ def page_hyperparameter_tuning():
                         f"- Features: {len(numeric_feature_cols)}"
                     )
 
-                # Run optimization with progress
-                with st.spinner(f"⏳ Running Random Search... This may take several minutes."):
-                    try:
-                        results = run_random_search_optimization(
-                            model_type=selected_model_opt,
-                            X_train=X_train,
-                            y_train=y_train,
-                            n_splits=n_splits,
-                            primary_metric=optimization_metric,
-                            param_distributions=param_distributions,
-                            n_iter=n_iter
-                        )
+                    # Run optimization with progress
+                    with st.spinner(f"⏳ Running Random Search... This may take several minutes."):
+                        try:
+                            results = run_random_search_optimization(
+                                model_type=selected_model_opt,
+                                X_train=X_train,
+                                y_train=y_train,
+                                n_splits=n_splits,
+                                primary_metric=optimization_metric,
+                                param_distributions=param_distributions,
+                                n_iter=n_iter
+                            )
 
-                        # Store results in session state
-                        st.session_state[f"opt_results_{selected_model_opt}"] = results
-                        st.session_state["opt_last_model"] = selected_model_opt
-                        st.session_state["opt_last_method"] = search_method
+                            # Store results in session state
+                            st.session_state[f"opt_results_{selected_model_opt}"] = results
+                            st.session_state["opt_last_model"] = selected_model_opt
+                            st.session_state["opt_last_method"] = search_method
 
-                        st.success(f"✅ Optimization completed successfully!")
+                            st.success(f"✅ Optimization completed successfully!")
 
-                        # Run 7-day backtesting if enabled
-                        if cfg.get("enable_backtesting", False):
-                            n_backtest_windows = cfg.get("backtest_n_windows", 5)
+                            # Run 7-day backtesting if enabled
+                            if cfg.get("enable_backtesting", False):
+                                n_backtest_windows = cfg.get("backtest_n_windows", 5)
 
-                            with st.spinner(f"⏳ Running 7-day backtesting ({n_backtest_windows} windows)..."):
-                                try:
-                                    # Get dates if available
-                                    date_col = None
-                                    for col in df.columns:
-                                        if pd.api.types.is_datetime64_any_dtype(df[col]):
-                                            date_col = df[col].values
-                                            break
+                                with st.spinner(f"⏳ Running 7-day backtesting ({n_backtest_windows} windows)..."):
+                                    try:
+                                        # Get dates if available
+                                        date_col = None
+                                        for col in df.columns:
+                                            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                                                date_col = df[col].values
+                                                break
 
-                                    backtest_results = run_7day_backtesting(
-                                        model_type=selected_model_opt,
-                                        best_params=results['best_params'],
-                                        X=X,
-                                        y=y,
-                                        dates=date_col,
-                                        n_windows=n_backtest_windows,
-                                        horizon=7
-                                    )
+                                        backtest_results = run_7day_backtesting(
+                                            model_type=selected_model_opt,
+                                            best_params=results['best_params'],
+                                            X=X,
+                                            y=y,
+                                            dates=date_col,
+                                            n_windows=n_backtest_windows,
+                                            horizon=7
+                                        )
 
-                                    # Store backtesting results
-                                    st.session_state[f"backtest_results_{selected_model_opt}"] = backtest_results
+                                        # Store backtesting results
+                                        st.session_state[f"backtest_results_{selected_model_opt}"] = backtest_results
 
-                                    st.success(f"✅ Backtesting completed! {backtest_results['n_successful_windows']}/{n_backtest_windows} windows successful.")
+                                        st.success(f"✅ Backtesting completed! {backtest_results['n_successful_windows']}/{n_backtest_windows} windows successful.")
 
-                                except Exception as e:
-                                    st.warning(f"⚠️ Backtesting failed: {str(e)}")
-                                    import traceback
-                                    with st.expander("🔍 Backtesting Error Details"):
-                                        st.code(traceback.format_exc())
+                                    except Exception as e:
+                                        st.warning(f"⚠️ Backtesting failed: {str(e)}")
+                                        import traceback
+                                        with st.expander("🔍 Backtesting Error Details"):
+                                            st.code(traceback.format_exc())
 
-                    except Exception as e:
-                        st.error(f"❌ **Optimization failed:**\n\n```\n{str(e)}\n```")
-                        import traceback
-                        with st.expander("🔍 Error Details"):
-                            st.code(traceback.format_exc())
+                        except Exception as e:
+                            st.error(f"❌ **Optimization failed:**\n\n```\n{str(e)}\n```")
+                            import traceback
+                            with st.expander("🔍 Error Details"):
+                                st.code(traceback.format_exc())
 
         elif opt_mode == "Single Model" and search_method == "Bayesian Optimization":
             # PHASE 2: Bayesian Optimization for Single Model
@@ -4852,6 +4852,14 @@ def page_hyperparameter_tuning():
                 import traceback
                 with st.expander("🔍 Error Details"):
                     st.code(traceback.format_exc())
+        else:
+            # No results yet - provide guidance
+            st.info(
+                "📋 **No optimization results yet**\n\n"
+                "Click the **Run** button above to optimize all three models (XGBoost, LSTM, ANN) sequentially.\n\n"
+                "Each model will be optimized using the selected search method and the best hyperparameters "
+                "will be displayed in a comparison dashboard."
+            )
 
     # Debug panel
     debug_panel()
