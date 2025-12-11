@@ -426,24 +426,34 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
             if yt is not None:
                 test_eval_dict[f"Target_{h}"] = yt.values if hasattr(yt, 'values') else yt
 
-        # Create test_eval DataFrame - try to get datetime index
+        # Create test_eval DataFrame - get datetime index
+        # PRIORITY: Use 'datetime' field from per_h (same approach as Dashboard & Modeling Hub)
         test_index = None
 
-        # First, check if y_test_first already has a datetime index
-        if hasattr(y_test_first, 'index'):
+        # 1. First try: Get datetime directly from per_h (Modeling Hub stores it here)
+        first_h_data = per_h[first_h]
+        dt_field = first_h_data.get("datetime")
+        if dt_field is not None:
+            try:
+                dt_array = dt_field.values if hasattr(dt_field, 'values') else np.array(dt_field)
+                if len(dt_array) == T:
+                    test_index = pd.to_datetime(dt_array)
+            except Exception:
+                pass
+
+        # 2. Second try: Check if y_test_first already has a datetime index
+        if test_index is None and hasattr(y_test_first, 'index'):
             idx = y_test_first.index
             if isinstance(idx, pd.DatetimeIndex):
                 test_index = idx
             elif hasattr(idx, 'dtype') and pd.api.types.is_datetime64_any_dtype(idx):
                 test_index = idx
 
-        # If no datetime index, try to get dates from original data in session state
+        # 3. Third try: Get dates from fusion_df or processed_df in session state
         if test_index is None:
-            # Try to get dates from fusion_df or processed data
             fusion_df = st.session_state.get("fusion_df")
             if fusion_df is not None and hasattr(fusion_df, 'index'):
                 if isinstance(fusion_df.index, pd.DatetimeIndex):
-                    # Get the last T dates from fusion_df (test set)
                     if len(fusion_df) >= T:
                         test_index = fusion_df.index[-T:]
                 elif 'Date' in fusion_df.columns or 'date' in fusion_df.columns:
@@ -455,7 +465,6 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
                     except:
                         pass
 
-            # Also try processed_df
             if test_index is None:
                 processed_df = st.session_state.get("processed_df")
                 if processed_df is not None:
