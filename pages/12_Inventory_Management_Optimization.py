@@ -790,12 +790,29 @@ with tab_items:
     # Item overview table
     item_data = []
     for item in items:
-        crit_class = {
+        # Handle criticality safely (may be enum or string after session state)
+        crit_mapping = {
             ItemCriticality.LOW: "crit-low",
             ItemCriticality.MEDIUM: "crit-medium",
             ItemCriticality.HIGH: "crit-high",
             ItemCriticality.CRITICAL: "crit-critical",
-        }[item.criticality]
+        }
+        # Also support string-based lookup
+        crit_str_mapping = {
+            "LOW": "crit-low",
+            "MEDIUM": "crit-medium",
+            "HIGH": "crit-high",
+            "CRITICAL": "crit-critical",
+        }
+
+        if isinstance(item.criticality, ItemCriticality):
+            crit_class = crit_mapping.get(item.criticality, "crit-medium")
+            crit_name = item.criticality.name
+        else:
+            # Handle string or other types
+            crit_val = str(item.criticality).upper() if item.criticality else "MEDIUM"
+            crit_class = crit_str_mapping.get(crit_val, "crit-medium")
+            crit_name = crit_val
 
         item_data.append({
             "ID": item.item_id,
@@ -804,7 +821,7 @@ with tab_items:
             "Unit Cost": f"${item.unit_cost:.2f}",
             "Usage/Patient": item.usage_rate,
             "Lead Time": f"{item.lead_time} days",
-            "Criticality": item.criticality.name,
+            "Criticality": crit_name,
             "Stockout Penalty": f"${item.effective_stockout_penalty:.2f}",
         })
 
@@ -863,10 +880,16 @@ with tab_items:
             key="edit_stockout_penalty"
         )
         criticality_options = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        # Safely get criticality name (may be enum or string)
+        if isinstance(selected_item.criticality, ItemCriticality):
+            current_crit = selected_item.criticality.name
+        else:
+            current_crit = str(selected_item.criticality).upper() if selected_item.criticality else "MEDIUM"
+        crit_index = criticality_options.index(current_crit) if current_crit in criticality_options else 1
         new_criticality = st.selectbox(
             "Criticality",
             options=criticality_options,
-            index=criticality_options.index(selected_item.criticality.name),
+            index=crit_index,
             key="edit_criticality"
         )
 
