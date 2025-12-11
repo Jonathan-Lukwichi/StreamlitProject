@@ -31,17 +31,40 @@ Usage Example:
     if result.success:
         print(f"RMSE: {result.data.metrics['rmse']}")
 
+Offline-First Data Access:
+-------------------------
+    from app_core.services import get_unified_data_service
+
+    # Get the unified service (handles online/offline automatically)
+    service = get_unified_data_service()
+
+    # Fetch data (auto-selects source based on connectivity)
+    df = service.fetch_patient_data()
+
+    # Save data (queues for sync if offline)
+    service.save_patient_data(df)
+
+    # Check status
+    print(f"Online: {service.is_online}")
+
 Migration Guide:
 ---------------
 1. Import services at the top of your page
 2. Create service instances (once per page)
 3. Replace inline validation with service calls
 4. Replace model training with service calls
+5. Use UnifiedDataService for all data fetch/save operations
 """
 
 from .base_service import BaseService, ServiceResult
 from .data_service import DataService
 from .modeling_service import ModelingService, ModelConfig, ModelResult
+
+# Import unified data service for offline-first architecture
+from app_core.offline import (
+    UnifiedDataService,
+    get_data_service as get_unified_data_service,
+)
 
 __all__ = [
     # Base classes
@@ -53,6 +76,17 @@ __all__ = [
     "ModelingService",
     "ModelConfig",
     "ModelResult",
+    # Unified Data Service (offline-first)
+    "UnifiedDataService",
+    "get_unified_data_service",
+    # Convenience functions
+    "quick_validate",
+    "quick_train_xgboost",
+    "fetch_patient_data",
+    "fetch_inventory_data",
+    "fetch_financial_data",
+    "is_online",
+    "get_connection_status",
 ]
 
 
@@ -108,3 +142,73 @@ def quick_train_xgboost(X_train, y_train, X_test, y_test, **hyperparameters):
     if result.success:
         return True, result.data
     return False, result.error
+
+
+# =============================================================================
+# OFFLINE-FIRST DATA ACCESS CONVENIENCE FUNCTIONS
+# =============================================================================
+
+def fetch_patient_data(start_date=None, end_date=None):
+    """
+    Fetch patient arrivals data (offline-first).
+
+    Automatically uses local database when offline, syncs when online.
+
+    Args:
+        start_date: Optional start date filter (YYYY-MM-DD)
+        end_date: Optional end date filter (YYYY-MM-DD)
+
+    Returns:
+        DataFrame with patient arrivals data
+
+    Example:
+        df = fetch_patient_data()
+        df_2024 = fetch_patient_data(start_date='2024-01-01', end_date='2024-12-31')
+    """
+    return get_unified_data_service().fetch_patient_data(start_date, end_date)
+
+
+def fetch_inventory_data(category=None):
+    """
+    Fetch inventory data (offline-first).
+
+    Args:
+        category: Optional category filter
+
+    Returns:
+        DataFrame with inventory data
+    """
+    return get_unified_data_service().fetch_inventory_data(category)
+
+
+def fetch_financial_data(department=None):
+    """
+    Fetch financial data (offline-first).
+
+    Args:
+        department: Optional department filter
+
+    Returns:
+        DataFrame with financial data
+    """
+    return get_unified_data_service().fetch_financial_data(department)
+
+
+def is_online():
+    """
+    Check if the app is online.
+
+    Returns:
+        True if connected to cloud services
+    """
+    return get_unified_data_service().is_online
+
+
+def get_connection_status():
+    """
+    Get detailed connection status.
+
+    Returns:
+        Dict with connection details
+    """
+    return get_unified_data_service().get_status()
