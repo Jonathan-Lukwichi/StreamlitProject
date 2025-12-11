@@ -993,7 +993,80 @@ with tab_forecast:
             else:
                 base_date_str = str(base_date)
 
+            # --- CATEGORY CONFIGURATION AND PROPORTIONS ---
+            category_config = {
+                "RESPIRATORY": {"icon": "🫁", "color": "#3b82f6"},
+                "CARDIAC": {"icon": "❤️", "color": "#ef4444"},
+                "TRAUMA": {"icon": "🩹", "color": "#f59e0b"},
+                "GASTROINTESTINAL": {"icon": "🤢", "color": "#10b981"},
+                "INFECTIOUS": {"icon": "🦠", "color": "#8b5cf6"},
+                "NEUROLOGICAL": {"icon": "🧠", "color": "#ec4899"},
+                "OTHER": {"icon": "📋", "color": "#6b7280"},
+            }
+
+            # Calculate historical proportions from processed_df
+            category_proportions = {}
+            merged_df = st.session_state.get("processed_df")
+            if merged_df is None or merged_df.empty:
+                merged_df = st.session_state.get("merged_data")
+
+            if merged_df is not None and not merged_df.empty:
+                col_map = {col.upper(): col for col in merged_df.columns}
+                cat_totals = {}
+                for cat in category_config.keys():
+                    cat_upper = cat.upper()
+                    matching_cols = []
+                    for col_upper, original_col in col_map.items():
+                        if col_upper == cat_upper or col_upper.startswith(cat_upper + "_"):
+                            matching_cols.append(original_col)
+                    if matching_cols:
+                        total_for_cat = 0
+                        for col in matching_cols:
+                            col_sum = merged_df[col].sum()
+                            if pd.notna(col_sum):
+                                total_for_cat += col_sum
+                        if total_for_cat > 0:
+                            cat_totals[cat] = total_for_cat
+
+                total_cat_sum = sum(cat_totals.values()) if cat_totals else 0
+                if total_cat_sum > 0:
+                    for cat, cat_sum in cat_totals.items():
+                        category_proportions[cat] = cat_sum / total_cat_sum
+
+            # Helper function for smart rounding
+            def distribute_with_smart_rounding(total: int, proportions: dict) -> dict:
+                """Distribute total into categories using proportions with smart rounding."""
+                if not proportions:
+                    return {}
+                result = {}
+                remainders = {}
+                allocated = 0
+                for cat, prop in proportions.items():
+                    exact_val = total * prop
+                    floored_val = int(exact_val)
+                    result[cat] = floored_val
+                    remainders[cat] = exact_val - floored_val
+                    allocated += floored_val
+                remaining = total - allocated
+                sorted_cats = sorted(remainders.keys(), key=lambda x: remainders[x], reverse=True)
+                for i in range(min(remaining, len(sorted_cats))):
+                    result[sorted_cats[i]] += 1
+                return result
+
+            # Pre-calculate category breakdown for each horizon
+            category_forecasts_by_horizon = {}
+            has_categories = bool(category_proportions)
+
+            if has_categories:
+                for h_idx in range(min(forecast_days, len(horizons))):
+                    horizon_num = horizons[h_idx]
+                    total_forecast = int(round(float(F[forecast_idx, h_idx])))
+                    category_forecasts_by_horizon[horizon_num] = distribute_with_smart_rounding(
+                        total_forecast, category_proportions
+                    )
+
             # --- FORECAST HEADER ---
+            categories_text = " • <span style='color: #10b981;'>Categories Available</span>" if has_categories else ""
             st.markdown(f"""
             <div class='forecast-card' style='padding: 1.5rem;'>
                 <div style='display: flex; justify-content: space-between; align-items: center;'>
@@ -1003,7 +1076,7 @@ with tab_forecast:
                         </div>
                         <div style='font-size: 0.875rem; color: #94a3b8; margin-top: 0.25rem;'>
                             Model: <span style='color: #22d3ee;'>{selected_model_name}</span> •
-                            From: <span style='color: #a78bfa;'>{base_date_str}</span>
+                            From: <span style='color: #a78bfa;'>{base_date_str}</span>{categories_text}
                         </div>
                     </div>
                     <div style='padding: 0.5rem 1rem; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px;'>
@@ -1088,6 +1161,23 @@ with tab_forecast:
 
                     st.markdown(card_html, unsafe_allow_html=True)
 
+                    # Category breakdown expander
+                    horizon_categories = category_forecasts_by_horizon.get(horizon_num, {})
+                    if horizon_categories:
+                        with st.expander("📊 Categories", expanded=False):
+                            for cat, cfg in category_config.items():
+                                cat_val = horizon_categories.get(cat, 0)
+                                if pd.notna(cat_val) and cat_val > 0:
+                                    st.markdown(f"""
+                                    <div style='display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(100, 116, 139, 0.1);'>
+                                        <span style='display: flex; align-items: center; gap: 6px;'>
+                                            <span style='font-size: 0.875rem;'>{cfg['icon']}</span>
+                                            <span style='color: #94a3b8; font-size: 0.75rem; font-weight: 600;'>{cat[:4]}</span>
+                                        </span>
+                                        <span style='color: {cfg["color"]}; font-weight: 700; font-size: 0.875rem;'>{int(round(cat_val))}</span>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+
                     # Show actual vs predicted comparison separately (not as nested HTML)
                     if actual_val is not None:
                         error = abs(forecast_val - actual_val)
@@ -1098,6 +1188,89 @@ with tab_forecast:
                             <div style="font-size: 0.6rem; color: {error_color};">Error: ±{error:.1f}</div>
                         </div>"""
                         st.markdown(actual_html, unsafe_allow_html=True)
+
+            # --- CATEGORY STATISTICS SECTION ---
+            if has_categories:
+                st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown("""
+                <div class='forecast-card' style='padding: 1.25rem;'>
+                    <div style='margin-bottom: 1rem;'>
+                        <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0;'>📊 Category Statistics</div>
+                        <div style='font-size: 0.75rem; color: #64748b;'>Average daily arrivals and historical proportion per category</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                # Create summary cards for each category
+                num_cats = len(category_config)
+                cat_cols = st.columns(num_cats, gap="small")
+
+                for idx, (cat, config) in enumerate(category_config.items()):
+                    # Calculate average for category from forecasts
+                    total_for_cat = 0
+                    count = 0
+                    for h_cats in category_forecasts_by_horizon.values():
+                        if cat in h_cats and pd.notna(h_cats[cat]):
+                            total_for_cat += h_cats[cat]
+                            count += 1
+                    avg_for_cat = total_for_cat / count if count > 0 else 0
+
+                    # Get proportion for this category
+                    proportion = category_proportions.get(cat, 0) * 100
+
+                    # Color based on proportion
+                    if proportion >= 15:
+                        prop_color = "#10b981"
+                        prop_bg = "rgba(16, 185, 129, 0.15)"
+                    elif proportion >= 10:
+                        prop_color = "#22d3ee"
+                        prop_bg = "rgba(34, 211, 238, 0.15)"
+                    else:
+                        prop_color = "#a78bfa"
+                        prop_bg = "rgba(167, 139, 250, 0.15)"
+
+                    with cat_cols[idx]:
+                        if avg_for_cat > 0 or proportion > 0:
+                            st.markdown(f"""
+                            <div style='
+                                background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
+                                border-radius: 12px;
+                                padding: 0.875rem 0.5rem;
+                                text-align: center;
+                                border: 1px solid {config['color']}40;
+                            '>
+                                <div style='font-size: 1.25rem; margin-bottom: 0.125rem;'>{config['icon']}</div>
+                                <div style='font-size: 0.5625rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.375rem;'>{cat[:4]}</div>
+                                <div style='font-size: 1.25rem; font-weight: 800; color: {config['color']}; margin-bottom: 0.125rem;'>~{int(round(avg_for_cat))}</div>
+                                <div style='font-size: 0.5rem; color: #64748b; margin-bottom: 0.375rem;'>avg/day</div>
+                                <div style='
+                                    display: inline-block;
+                                    padding: 0.1875rem 0.375rem;
+                                    background: {prop_bg};
+                                    border: 1px solid {prop_color}40;
+                                    border-radius: 4px;
+                                    font-size: 0.5625rem;
+                                    font-weight: 700;
+                                    color: {prop_color};
+                                '>{proportion:.1f}%</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style='
+                                background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.6));
+                                border-radius: 12px;
+                                padding: 0.875rem 0.5rem;
+                                text-align: center;
+                                border: 1px solid rgba(100, 116, 139, 0.2);
+                                opacity: 0.5;
+                            '>
+                                <div style='font-size: 1.25rem; margin-bottom: 0.125rem;'>{config['icon']}</div>
+                                <div style='font-size: 0.5625rem; color: #64748b; text-transform: uppercase;'>{cat[:4]}</div>
+                                <div style='font-size: 0.875rem; color: #64748b; margin: 0.375rem 0;'>—</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
         # --- TIME SERIES CHART ---
         st.markdown("### 📊 Forecast vs Actual")
