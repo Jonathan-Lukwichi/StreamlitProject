@@ -976,8 +976,7 @@ with tab_forecast:
                 horizon_num = horizons[h_idx]
 
                 # Safe date calculation
-                forecast_dt = None
-                forecast_dt_day = f"Day {horizon_num}"
+                forecast_dt_day = f"DAY {horizon_num}"
                 forecast_dt_date = f"h={horizon_num}"
                 if hasattr(base_date, '__add__'):
                     try:
@@ -1027,30 +1026,31 @@ with tab_forecast:
                 col_idx = h_idx % num_cols
                 with forecast_cols[col_idx]:
                     is_primary = (h_idx == 0)
-                    primary_class = " forecast-mini-card-primary" if is_primary else ""
+                    border_style = "border: 2px solid rgba(59, 130, 246, 0.4);" if is_primary else "border: 1px solid rgba(59, 130, 246, 0.2);"
+                    bg_style = "background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.15));" if is_primary else "background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));"
 
-                    actual_display = ""
+                    # Build card HTML - no nested f-strings to avoid rendering issues
+                    card_html = f"""<div style="{bg_style} {border_style} border-radius: 12px; padding: 1rem; text-align: center; margin-bottom: 0.5rem;">
+                        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">{forecast_dt_day}</div>
+                        <div style="font-size: 0.7rem; color: #64748b; background: rgba(100, 116, 139, 0.15); padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; margin: 0.25rem 0;">{forecast_dt_date}</div>
+                        <div style="font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, #60a5fa, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0.5rem 0;">{int(forecast_val)}</div>
+                        <div style="font-size: 0.6rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;">Total Patients</div>
+                        <div style="display: inline-block; padding: 0.25rem 0.5rem; background: {acc_bg}; border: 1px solid {acc_color}40; border-radius: 6px; font-size: 0.7rem; font-weight: 600; color: {acc_color}; margin: 0.5rem 0;">✓ {accuracy_text}</div>
+                        <div style="font-size: 0.65rem; color: #64748b; background: rgba(30, 41, 59, 0.5); padding: 0.25rem 0.5rem; border-radius: 4px;">{int(lower_val)} - {int(upper_val)}</div>
+                    </div>"""
+
+                    st.markdown(card_html, unsafe_allow_html=True)
+
+                    # Show actual vs predicted comparison separately (not as nested HTML)
                     if actual_val is not None:
                         error = abs(forecast_val - actual_val)
-                        actual_display = f"""
-                        <div style='margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(100, 116, 139, 0.2);'>
-                            <div style='font-size: 0.7rem; color: #64748b;'>Actual</div>
-                            <div style='font-size: 1rem; font-weight: 700; color: #22d3ee;'>{int(actual_val)}</div>
-                            <div style='font-size: 0.65rem; color: {"#10b981" if error < 5 else "#f59e0b"};'>Error: ±{error:.1f}</div>
-                        </div>
-                        """
-
-                    st.markdown(f"""
-                    <div class='forecast-mini-card{primary_class}' style='margin-bottom: 0.5rem;'>
-                        <div style='font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;'>{forecast_dt_day}</div>
-                        <div style='font-size: 0.7rem; color: #64748b; background: rgba(100, 116, 139, 0.15); padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; margin: 0.25rem 0;'>{forecast_dt_date}</div>
-                        <div class='forecast-number' style='margin: 0.5rem 0;'>{int(forecast_val)}</div>
-                        <div style='font-size: 0.6rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;'>Predicted</div>
-                        <div style='display: inline-block; padding: 0.25rem 0.5rem; background: {acc_bg}; border: 1px solid {acc_color}40; border-radius: 6px; font-size: 0.7rem; font-weight: 600; color: {acc_color}; margin: 0.5rem 0;'>✓ {accuracy_text}</div>
-                        <div style='font-size: 0.65rem; color: #64748b; background: rgba(30, 41, 59, 0.5); padding: 0.25rem 0.5rem; border-radius: 4px;'>{int(lower_val)} - {int(upper_val)}</div>
-                        {actual_display}
-                    </div>
-                    """, unsafe_allow_html=True)
+                        error_color = "#10b981" if error < 5 else "#f59e0b"
+                        actual_html = f"""<div style="background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 8px; padding: 0.5rem; text-align: center; margin-top: -0.25rem;">
+                            <div style="font-size: 0.65rem; color: #64748b;">Actual</div>
+                            <div style="font-size: 1.25rem; font-weight: 700; color: #22d3ee;">{int(actual_val)}</div>
+                            <div style="font-size: 0.6rem; color: {error_color};">Error: ±{error:.1f}</div>
+                        </div>"""
+                        st.markdown(actual_html, unsafe_allow_html=True)
 
         # --- TIME SERIES CHART ---
         st.markdown("### 📊 Forecast vs Actual")
