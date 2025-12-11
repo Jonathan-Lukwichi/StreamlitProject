@@ -901,6 +901,163 @@ def create_uncertainty_summary_df(uncertainty_results: Dict[str, UncertaintyMetr
     return df.sort_values("Avg RPIW (%)", ascending=True)
 
 
+def extract_model_evaluation_metrics(model_key: str, model_info: Dict) -> Dict[str, Any]:
+    """
+    Extract evaluation metrics (MAE, RMSE, MAPE, Accuracy) for a given model.
+
+    Args:
+        model_key: Session state key for the model
+        model_info: Model info dict from get_all_trained_models_from_session()
+
+    Returns:
+        Dict with MAE, RMSE, MAPE, Accuracy values or None if not available
+    """
+    metrics = {"MAE": None, "RMSE": None, "MAPE": None, "Accuracy": None}
+
+    model_data = st.session_state.get(model_key)
+    if not model_data or not isinstance(model_data, dict):
+        return metrics
+
+    # Try to get metrics from results_df
+    results_df = model_data.get("results_df")
+    if results_df is not None and not results_df.empty:
+        # Calculate average metrics across all horizons
+        mae_cols = [c for c in results_df.columns if "MAE" in c.upper() and "TEST" in c.upper()]
+        rmse_cols = [c for c in results_df.columns if "RMSE" in c.upper() and "TEST" in c.upper()]
+        mape_cols = [c for c in results_df.columns if "MAPE" in c.upper() and "TEST" in c.upper()]
+        acc_cols = [c for c in results_df.columns if "ACC" in c.upper() and "TEST" in c.upper()]
+
+        # Fallback to non-test columns
+        if not mae_cols:
+            mae_cols = [c for c in results_df.columns if "MAE" in c.upper()]
+        if not rmse_cols:
+            rmse_cols = [c for c in results_df.columns if "RMSE" in c.upper()]
+        if not mape_cols:
+            mape_cols = [c for c in results_df.columns if "MAPE" in c.upper()]
+        if not acc_cols:
+            acc_cols = [c for c in results_df.columns if "ACC" in c.upper() or "ACCURACY" in c.upper()]
+
+        try:
+            if mae_cols:
+                metrics["MAE"] = results_df[mae_cols[0]].mean()
+            if rmse_cols:
+                metrics["RMSE"] = results_df[rmse_cols[0]].mean()
+            if mape_cols:
+                metrics["MAPE"] = results_df[mape_cols[0]].mean()
+            if acc_cols:
+                metrics["Accuracy"] = results_df[acc_cols[0]].mean()
+        except Exception:
+            pass
+
+    # Try per_h data if results_df didn't have the metrics
+    per_h = model_data.get("per_h", {})
+    if per_h and metrics["MAE"] is None:
+        mae_list, rmse_list, mape_list, acc_list = [], [], [], []
+        for h, h_data in per_h.items():
+            if isinstance(h_data, dict):
+                # Check for metrics in h_data
+                if "mae" in h_data:
+                    mae_list.append(h_data["mae"])
+                if "rmse" in h_data:
+                    rmse_list.append(h_data["rmse"])
+                if "mape" in h_data:
+                    mape_list.append(h_data["mape"])
+                if "accuracy" in h_data:
+                    acc_list.append(h_data["accuracy"])
+
+        if mae_list:
+            metrics["MAE"] = np.mean(mae_list)
+        if rmse_list:
+            metrics["RMSE"] = np.mean(rmse_list)
+        if mape_list:
+            metrics["MAPE"] = np.mean(mape_list)
+        if acc_list:
+            metrics["Accuracy"] = np.mean(acc_list)
+
+    # For optimized models, try to get metrics from best_score
+    if model_info.get("type") == "Optimized":
+        best_score = model_info.get("best_score")
+        if best_score is not None:
+            # Usually best_score is negative MSE or similar
+            if best_score < 0:
+                metrics["RMSE"] = np.sqrt(-best_score) if metrics["RMSE"] is None else metrics["RMSE"]
+
+    return metrics
+
+
+def create_comprehensive_model_summary_df(
+    all_models: Dict[str, Dict],
+    uncertainty_results: Dict[str, UncertaintyMetrics]
+) -> pd.DataFrame:
+    """
+    Create a comprehensive summary DataFrame including ALL trained models
+    with both evaluation metrics and uncertainty analysis.
+
+    Args:
+        all_models: Dict from get_all_trained_models_from_session()
+        uncertainty_results: Dict from get_uncertainty_for_all_models()
+
+    Returns:
+        DataFrame with all models and their metrics
+    """
+    rows = []
+
+    for model_key, model_info in all_models.items():
+        model_name = model_info["name"]
+        model_type = model_info["type"]
+        status = model_info["status"]
+        has_ci = model_info.get("has_ci", False)
+
+        # Get evaluation metrics
+        eval_metrics = extract_model_evaluation_metrics(model_key, model_info)
+
+        # Get uncertainty metrics if available
+        # Match by name (handle optimized models)
+        base_name = model_name.replace(" (Optimized)", "")
+        uncertainty = uncertainty_results.get(model_name) or uncertainty_results.get(base_name)
+
+        if uncertainty:
+            rpiw = round(uncertainty.overall_rpiw, 2) if not np.isnan(uncertainty.overall_rpiw) else None
+            level = uncertainty.uncertainty_level
+            method = uncertainty.recommended_method
+        else:
+            rpiw = None
+            level = "N/A (No CI)"
+            method = "N/A"
+
+        row = {
+            "Model": model_name,
+            "Type": model_type,
+            "Status": status,
+            "MAE": round(eval_metrics["MAE"], 2) if eval_metrics["MAE"] is not None else "—",
+            "RMSE": round(eval_metrics["RMSE"], 2) if eval_metrics["RMSE"] is not None else "—",
+            "MAPE (%)": round(eval_metrics["MAPE"], 2) if eval_metrics["MAPE"] is not None else "—",
+            "Accuracy (%)": round(eval_metrics["Accuracy"], 2) if eval_metrics["Accuracy"] is not None else "—",
+            "Has CI": "✅" if has_ci else "❌",
+            "RPIW (%)": rpiw if rpiw is not None else "—",
+            "Uncertainty": level,
+            "Optimization Method": method,
+        }
+        rows.append(row)
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+
+    # Sort: models with CI first (by RPIW), then models without CI
+    def sort_key(row):
+        rpiw = row["RPIW (%)"]
+        if rpiw == "—" or rpiw is None:
+            return (1, 0)  # No CI goes last
+        return (0, float(rpiw))
+
+    df["_sort"] = df.apply(sort_key, axis=1)
+    df = df.sort_values("_sort").drop(columns=["_sort"])
+
+    return df
+
+
 def get_metrics_from_df(metrics_df: pd.DataFrame, horizon: int) -> Dict[str, float]:
     """Extract metrics for a specific horizon from metrics DataFrame."""
     if metrics_df is None or metrics_df.empty:
@@ -1865,104 +2022,141 @@ with tab_uncertainty:
     # Calculate uncertainty for all models with CI
     uncertainty_results = get_uncertainty_for_all_models(available_models)
 
-    # Also get models without CI for display
-    models_with_capability = get_models_with_uncertainty_capability()
-    models_without_ci = [m for m in models_with_capability if not m.get("has_valid_ci", False)]
+    # ==========================================================================
+    # COMPREHENSIVE MODEL SUMMARY TABLE (ALL MODELS)
+    # ==========================================================================
+    st.markdown("#### 📋 Comprehensive Model Summary")
+    st.caption("Showing ALL trained models with evaluation metrics and uncertainty analysis")
 
-    if not uncertainty_results:
-        st.warning("No models with valid confidence intervals found. Uncertainty analysis requires Upper (U) and Lower (L) bounds.")
+    # Create comprehensive summary including ALL models
+    comprehensive_df = create_comprehensive_model_summary_df(all_trained_models, uncertainty_results)
 
-        # Show which models are missing CI
-        if models_without_ci:
-            st.markdown("##### Models Detected (Without Confidence Intervals)")
-            no_ci_df = pd.DataFrame([{
-                "Model": m["name"],
-                "Type": m["type"],
-                "Status": m.get("status", "Trained"),
-                "CI Status": "❌ No CI Data"
-            } for m in models_without_ci])
-            st.dataframe(no_ci_df, use_container_width=True, hide_index=True)
-
-        st.info("""
-        **How to get uncertainty analysis:**
-        1. **Statistical Models:** Train ARIMA or SARIMAX - they automatically include 95% confidence intervals
-        2. **ML Models:** Enable CQR (Conformalized Quantile Regression) prediction intervals in the Modeling Hub
-        3. **Return here** after training to see uncertainty analysis
-        """)
-    else:
-        # Summary table
-        st.markdown("#### Model Uncertainty Summary")
-        summary_df = create_uncertainty_summary_df(uncertainty_results)
-
-        # Color code the uncertainty levels
-        def style_uncertainty(val):
+    if not comprehensive_df.empty:
+        # Style function for uncertainty levels
+        def style_uncertainty_level(val):
             if val == "LOW":
                 return "background-color: rgba(34, 197, 94, 0.2); color: #22c55e;"
             elif val == "MEDIUM":
                 return "background-color: rgba(251, 191, 36, 0.2); color: #fbbf24;"
             elif val == "HIGH":
                 return "background-color: rgba(239, 68, 68, 0.2); color: #ef4444;"
+            elif "N/A" in str(val):
+                return "background-color: rgba(148, 163, 184, 0.1); color: #94a3b8;"
             return ""
 
-        st.dataframe(
-            summary_df.style.applymap(style_uncertainty, subset=["Uncertainty Level"]),
-            use_container_width=True,
-            hide_index=True
+        # Style function for model types
+        def style_model_type(val):
+            type_colors = {
+                "Statistical": "background-color: rgba(168, 85, 247, 0.2); color: #a855f7;",
+                "ML": "background-color: rgba(59, 130, 246, 0.2); color: #60a5fa;",
+                "Optimized": "background-color: rgba(251, 191, 36, 0.2); color: #fbbf24;",
+                "Hybrid": "background-color: rgba(236, 72, 153, 0.2); color: #ec4899;",
+            }
+            return type_colors.get(val, "")
+
+        # Style for CI status
+        def style_ci_status(val):
+            if val == "✅":
+                return "color: #22c55e;"
+            elif val == "❌":
+                return "color: #ef4444;"
+            return ""
+
+        # Apply styles
+        styled_df = comprehensive_df.style.applymap(
+            style_uncertainty_level, subset=["Uncertainty"]
+        ).applymap(
+            style_model_type, subset=["Type"]
+        ).applymap(
+            style_ci_status, subset=["Has CI"]
         )
 
-        # Decision Framework Reference
-        st.markdown("#### Decision Framework: Uncertainty Width → Optimization Method")
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-        decision_cols = st.columns(3)
+        # Summary stats
+        models_with_ci = sum(1 for _, row in comprehensive_df.iterrows() if row["Has CI"] == "✅")
+        models_without_ci = len(comprehensive_df) - models_with_ci
 
-        with decision_cols[0]:
-            st.markdown("""
-            <div class="fq-kpi-card" style="--accent-color: #22c55e; --accent-color-end: #10b981;">
-                <div class="fq-kpi-icon">🟢</div>
-                <div class="fq-kpi-label">LOW UNCERTAINTY</div>
-                <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW &lt; 15%</div>
-                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px;">
-                    <div style="font-weight: 600; color: #22c55e;">Deterministic MILP</div>
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
-                        ±5 patients<br>Point forecast is reliable
-                    </div>
+        st.markdown(f"""
+        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+            <div style="background: rgba(34, 197, 94, 0.1); padding: 0.5rem 1rem; border-radius: 8px; flex: 1; text-align: center;">
+                <span style="color: #22c55e; font-weight: 600;">{models_with_ci}</span>
+                <span style="color: #94a3b8; font-size: 0.85rem;"> models with CI</span>
+            </div>
+            <div style="background: rgba(239, 68, 68, 0.1); padding: 0.5rem 1rem; border-radius: 8px; flex: 1; text-align: center;">
+                <span style="color: #ef4444; font-weight: 600;">{models_without_ci}</span>
+                <span style="color: #94a3b8; font-size: 0.85rem;"> models without CI</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.warning("No models detected. Train models in the Modeling Hub first.")
+
+    st.markdown("---")
+
+    # Show guidance if no uncertainty results
+    if not uncertainty_results:
+        st.info("""
+        **How to enable uncertainty analysis:**
+        1. **Statistical Models:** Train ARIMA or SARIMAX - they automatically include 95% confidence intervals
+        2. **ML Models:** Enable CQR (Conformalized Quantile Regression) prediction intervals in the Modeling Hub
+        3. **Return here** after training to see full uncertainty analysis
+        """)
+
+    # Decision Framework Reference (always show)
+    st.markdown("#### Decision Framework: Uncertainty Width → Optimization Method")
+
+    decision_cols = st.columns(3)
+
+    with decision_cols[0]:
+        st.markdown("""
+        <div class="fq-kpi-card" style="--accent-color: #22c55e; --accent-color-end: #10b981;">
+            <div class="fq-kpi-icon">🟢</div>
+            <div class="fq-kpi-label">LOW UNCERTAINTY</div>
+            <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW &lt; 15%</div>
+            <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px;">
+                <div style="font-weight: 600; color: #22c55e;">Deterministic MILP</div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    ±5 patients<br>Point forecast is reliable
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
 
-        with decision_cols[1]:
-            st.markdown("""
-            <div class="fq-kpi-card" style="--accent-color: #fbbf24; --accent-color-end: #f59e0b;">
-                <div class="fq-kpi-icon">🟡</div>
-                <div class="fq-kpi-label">MEDIUM UNCERTAINTY</div>
-                <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW 15-40%</div>
-                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(251, 191, 36, 0.1); border-radius: 8px;">
-                    <div style="font-weight: 600; color: #fbbf24;">Robust Optimization</div>
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
-                        ±10-20 patients<br>Budget Γ adjustable
-                    </div>
+    with decision_cols[1]:
+        st.markdown("""
+        <div class="fq-kpi-card" style="--accent-color: #fbbf24; --accent-color-end: #f59e0b;">
+            <div class="fq-kpi-icon">🟡</div>
+            <div class="fq-kpi-label">MEDIUM UNCERTAINTY</div>
+            <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW 15-40%</div>
+            <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(251, 191, 36, 0.1); border-radius: 8px;">
+                <div style="font-weight: 600; color: #fbbf24;">Robust Optimization</div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    ±10-20 patients<br>Budget Γ adjustable
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
 
-        with decision_cols[2]:
-            st.markdown("""
-            <div class="fq-kpi-card" style="--accent-color: #ef4444; --accent-color-end: #dc2626;">
-                <div class="fq-kpi-icon">🔴</div>
-                <div class="fq-kpi-label">HIGH UNCERTAINTY</div>
-                <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW &gt; 40%</div>
-                <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">
-                    <div style="font-weight: 600; color: #ef4444;">Two-Stage Stochastic</div>
-                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
-                        ±30+ patients<br>Explicit recourse actions
-                    </div>
+    with decision_cols[2]:
+        st.markdown("""
+        <div class="fq-kpi-card" style="--accent-color: #ef4444; --accent-color-end: #dc2626;">
+            <div class="fq-kpi-icon">🔴</div>
+            <div class="fq-kpi-label">HIGH UNCERTAINTY</div>
+            <div class="fq-kpi-value" style="font-size: 1.2rem;">RPIW &gt; 40%</div>
+            <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">
+                <div style="font-weight: 600; color: #ef4444;">Two-Stage Stochastic</div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                    ±30+ patients<br>Explicit recourse actions
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("---")
+    st.markdown("---")
 
-        # Detailed per-model analysis
+    # Detailed per-model analysis (only when uncertainty results exist)
+    if uncertainty_results:
         st.markdown("#### Detailed Model Analysis")
 
         model_select = st.selectbox(
@@ -2138,23 +2332,22 @@ with tab_uncertainty:
                 st.dataframe(comp_display, use_container_width=True, hide_index=True)
 
         # Save recommendation to session state
-        if uncertainty_results:
-            # Find best model (lowest RPIW with valid data)
-            best_model = min(uncertainty_results.items(), key=lambda x: x[1].overall_rpiw if not np.isnan(x[1].overall_rpiw) else float('inf'))
-            st.session_state["recommended_optimization_method"] = best_model[1].recommended_method
-            st.session_state["forecast_uncertainty_level"] = best_model[1].uncertainty_level
-            st.session_state["forecast_rpiw"] = best_model[1].overall_rpiw
+        # Find best model (lowest RPIW with valid data)
+        best_model = min(uncertainty_results.items(), key=lambda x: x[1].overall_rpiw if not np.isnan(x[1].overall_rpiw) else float('inf'))
+        st.session_state["recommended_optimization_method"] = best_model[1].recommended_method
+        st.session_state["forecast_uncertainty_level"] = best_model[1].uncertainty_level
+        st.session_state["forecast_rpiw"] = best_model[1].overall_rpiw
 
-            st.markdown("---")
-            st.info(f"""
-            **Recommendation saved to session:**
-            - Best Model: {best_model[0]}
-            - Uncertainty Level: {best_model[1].uncertainty_level}
-            - RPIW: {best_model[1].overall_rpiw:.1f}%
-            - Recommended Method: {best_model[1].recommended_method}
+        st.markdown("---")
+        st.info(f"""
+        **Recommendation saved to session:**
+        - Best Model: {best_model[0]}
+        - Uncertainty Level: {best_model[1].uncertainty_level}
+        - RPIW: {best_model[1].overall_rpiw:.1f}%
+        - Recommended Method: {best_model[1].recommended_method}
 
-            This will be used by the Staff Scheduling module to select the appropriate optimization approach.
-            """)
+        This will be used by the Staff Scheduling module to select the appropriate optimization approach.
+        """)
 
 # =============================================================================
 # TAB 5: EXPORT
