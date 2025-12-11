@@ -426,8 +426,46 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
             if yt is not None:
                 test_eval_dict[f"Target_{h}"] = yt.values if hasattr(yt, 'values') else yt
 
-        # Create test_eval DataFrame
+        # Create test_eval DataFrame - try to get datetime index
+        test_index = None
+
+        # First, check if y_test_first already has a datetime index
         if hasattr(y_test_first, 'index'):
+            idx = y_test_first.index
+            if isinstance(idx, pd.DatetimeIndex):
+                test_index = idx
+            elif hasattr(idx, 'dtype') and pd.api.types.is_datetime64_any_dtype(idx):
+                test_index = idx
+
+        # If no datetime index, try to get dates from original data in session state
+        if test_index is None:
+            # Try to get dates from fusion_df or processed data
+            fusion_df = st.session_state.get("fusion_df")
+            if fusion_df is not None and hasattr(fusion_df, 'index'):
+                if isinstance(fusion_df.index, pd.DatetimeIndex):
+                    # Get the last T dates from fusion_df (test set)
+                    if len(fusion_df) >= T:
+                        test_index = fusion_df.index[-T:]
+                elif 'Date' in fusion_df.columns or 'date' in fusion_df.columns:
+                    date_col = 'Date' if 'Date' in fusion_df.columns else 'date'
+                    try:
+                        dates = pd.to_datetime(fusion_df[date_col])
+                        if len(dates) >= T:
+                            test_index = pd.DatetimeIndex(dates[-T:])
+                    except:
+                        pass
+
+            # Also try processed_df
+            if test_index is None:
+                processed_df = st.session_state.get("processed_df")
+                if processed_df is not None:
+                    if isinstance(processed_df.index, pd.DatetimeIndex) and len(processed_df) >= T:
+                        test_index = processed_df.index[-T:]
+
+        # Create test_eval DataFrame with appropriate index
+        if test_index is not None and len(test_index) == T:
+            test_eval = pd.DataFrame(test_eval_dict, index=test_index)
+        elif hasattr(y_test_first, 'index'):
             test_eval = pd.DataFrame(test_eval_dict, index=y_test_first.index)
         else:
             test_eval = pd.DataFrame(test_eval_dict)
