@@ -539,6 +539,225 @@ def get_available_forecast_models() -> List[Dict[str, Any]]:
     return models
 
 
+def get_all_trained_models_from_session() -> Dict[str, Dict[str, Any]]:
+    """
+    Dynamically detect ALL models that have been trained in the Modeling Hub.
+
+    This function scans session state for all model-related keys and returns
+    a comprehensive dictionary of all trained models with their metadata.
+
+    Returns:
+        Dict mapping model_key to model info dict containing:
+            - name: Display name
+            - type: Model category (Statistical, ML, Optimized, Hybrid)
+            - source: Session state key
+            - has_ci: Whether confidence intervals are available
+            - status: Training status
+    """
+    trained_models = {}
+
+    # Statistical Models
+    if "arima_mh_results" in st.session_state and st.session_state["arima_mh_results"]:
+        arima_data = st.session_state["arima_mh_results"]
+        has_ci = False
+        if "per_h" in arima_data:
+            first_h = list(arima_data["per_h"].keys())[0] if arima_data["per_h"] else None
+            if first_h and arima_data["per_h"][first_h].get("ci_lo") is not None:
+                has_ci = True
+        trained_models["arima_mh_results"] = {
+            "name": "ARIMA",
+            "type": "Statistical",
+            "source": "arima_mh_results",
+            "has_ci": has_ci,
+            "status": "✅ Trained",
+            "horizons": arima_data.get("successful", [])
+        }
+
+    if "sarimax_results" in st.session_state and st.session_state["sarimax_results"]:
+        sarimax_data = st.session_state["sarimax_results"]
+        has_ci = False
+        if "per_h" in sarimax_data:
+            first_h = list(sarimax_data["per_h"].keys())[0] if sarimax_data["per_h"] else None
+            if first_h and sarimax_data["per_h"][first_h].get("ci_lo") is not None:
+                has_ci = True
+        trained_models["sarimax_results"] = {
+            "name": "SARIMAX",
+            "type": "Statistical",
+            "source": "sarimax_results",
+            "has_ci": has_ci,
+            "status": "✅ Trained",
+            "horizons": sarimax_data.get("successful", [])
+        }
+
+    # ML Models - scan for all ml_mh_results_* keys
+    ml_model_types = ["XGBoost", "LSTM", "ANN", "RandomForest", "GradientBoosting", "LightGBM"]
+    for model_type in ml_model_types:
+        key = f"ml_mh_results_{model_type}"
+        if key in st.session_state and st.session_state[key]:
+            ml_data = st.session_state[key]
+            has_ci = False
+            if "per_h" in ml_data:
+                first_h = list(ml_data["per_h"].keys())[0] if ml_data["per_h"] else None
+                if first_h:
+                    h_data = ml_data["per_h"][first_h]
+                    if h_data.get("ci_lo") is not None or h_data.get("lower") is not None:
+                        has_ci = True
+            trained_models[key] = {
+                "name": model_type,
+                "type": "ML",
+                "source": key,
+                "has_ci": has_ci,
+                "status": "✅ Trained",
+                "horizons": ml_data.get("successful", list(ml_data.get("per_h", {}).keys()))
+            }
+
+    # Also check for any other ml_mh_results_* keys dynamically
+    for key in st.session_state.keys():
+        if key.startswith("ml_mh_results_") and key not in trained_models:
+            ml_data = st.session_state[key]
+            if ml_data and isinstance(ml_data, dict):
+                model_name = key.replace("ml_mh_results_", "")
+                has_ci = False
+                if "per_h" in ml_data:
+                    first_h = list(ml_data["per_h"].keys())[0] if ml_data["per_h"] else None
+                    if first_h:
+                        h_data = ml_data["per_h"][first_h]
+                        if h_data.get("ci_lo") is not None or h_data.get("lower") is not None:
+                            has_ci = True
+                trained_models[key] = {
+                    "name": model_name,
+                    "type": "ML",
+                    "source": key,
+                    "has_ci": has_ci,
+                    "status": "✅ Trained",
+                    "horizons": ml_data.get("successful", list(ml_data.get("per_h", {}).keys()))
+                }
+
+    # Optimized Models
+    for model_type in ["XGBoost", "LSTM", "ANN"]:
+        opt_key = f"opt_results_{model_type}"
+        if opt_key in st.session_state and st.session_state[opt_key]:
+            opt_data = st.session_state[opt_key]
+            trained_models[opt_key] = {
+                "name": f"{model_type} (Optimized)",
+                "type": "Optimized",
+                "source": opt_key,
+                "has_ci": False,  # Optimized models typically don't have CI
+                "status": "⚡ Optimized",
+                "best_params": opt_data.get("best_params", {}),
+                "best_score": opt_data.get("best_score"),
+                "method": st.session_state.get("opt_last_method", "Unknown")
+            }
+
+    # Hybrid Models
+    if "ensemble_results" in st.session_state and st.session_state["ensemble_results"]:
+        trained_models["ensemble_results"] = {
+            "name": "Ensemble",
+            "type": "Hybrid",
+            "source": "ensemble_results",
+            "has_ci": False,
+            "status": "🔗 Hybrid"
+        }
+
+    if "stacking_results" in st.session_state and st.session_state["stacking_results"]:
+        trained_models["stacking_results"] = {
+            "name": "Stacking",
+            "type": "Hybrid",
+            "source": "stacking_results",
+            "has_ci": False,
+            "status": "🔗 Hybrid"
+        }
+
+    if "decomposition_results" in st.session_state and st.session_state["decomposition_results"]:
+        trained_models["decomposition_results"] = {
+            "name": "Decomposition",
+            "type": "Hybrid",
+            "source": "decomposition_results",
+            "has_ci": False,
+            "status": "🔗 Hybrid"
+        }
+
+    # LSTM Hybrid Models
+    lstm_hybrid_keys = ["lstm_sarimax_results", "lstm_xgb_results", "lstm_ann_results"]
+    lstm_hybrid_names = ["LSTM+SARIMAX", "LSTM+XGBoost", "LSTM+ANN"]
+
+    for key, name in zip(lstm_hybrid_keys, lstm_hybrid_names):
+        if key in st.session_state and st.session_state[key]:
+            trained_models[key] = {
+                "name": name,
+                "type": "Hybrid",
+                "source": key,
+                "has_ci": False,
+                "status": "🔗 Hybrid"
+            }
+
+    return trained_models
+
+
+def get_model_summary_for_uncertainty() -> Tuple[int, int, int, int]:
+    """
+    Get summary counts of trained models by category.
+
+    Returns:
+        Tuple of (statistical_count, ml_count, optimized_count, hybrid_count)
+    """
+    all_models = get_all_trained_models_from_session()
+
+    stat_count = sum(1 for m in all_models.values() if m["type"] == "Statistical")
+    ml_count = sum(1 for m in all_models.values() if m["type"] == "ML")
+    opt_count = sum(1 for m in all_models.values() if m["type"] == "Optimized")
+    hybrid_count = sum(1 for m in all_models.values() if m["type"] == "Hybrid")
+
+    return stat_count, ml_count, opt_count, hybrid_count
+
+
+def get_models_with_uncertainty_capability() -> List[Dict[str, Any]]:
+    """
+    Get list of models that have confidence intervals available for uncertainty analysis.
+
+    This is an enhanced version of get_available_forecast_models() that:
+    1. Detects ALL trained models dynamically
+    2. Identifies which models have CI data
+    3. Returns comprehensive model information
+    """
+    models_with_ci = []
+    all_models = get_all_trained_models_from_session()
+
+    # Get base forecast models (these have actual F, L, U matrices)
+    base_models = get_available_forecast_models()
+
+    for model_info in base_models:
+        model_name = model_info["name"]
+        data = model_info.get("data", {})
+
+        # Check if this model has valid CI data
+        L = data.get("L")
+        U = data.get("U")
+
+        has_valid_ci = False
+        if L is not None and U is not None:
+            if not np.all(np.isnan(L)) and not np.all(np.isnan(U)):
+                has_valid_ci = True
+
+        # Find corresponding entry in all_models for extra metadata
+        extra_info = {}
+        for key, info in all_models.items():
+            if info["name"] == model_name or info["name"].replace(" (Optimized)", "") == model_name:
+                extra_info = info
+                break
+
+        models_with_ci.append({
+            "name": model_name,
+            "type": model_info.get("type", extra_info.get("type", "Unknown")),
+            "data": data,
+            "has_valid_ci": has_valid_ci,
+            "status": extra_info.get("status", "✅ Trained"),
+            "source": extra_info.get("source", "unknown")
+        })
+
+    return models_with_ci
+
+
 # =============================================================================
 # UNCERTAINTY WIDTH PIPELINE
 # =============================================================================
@@ -1523,7 +1742,7 @@ with tab_comparison:
             """)
 
 # =============================================================================
-# TAB 4: UNCERTAINTY ANALYSIS
+# TAB 4: UNCERTAINTY ANALYSIS (DYNAMIC)
 # =============================================================================
 with tab_uncertainty:
     st.markdown("### 📏 Uncertainty Width Analysis")
@@ -1536,12 +1755,140 @@ with tab_uncertainty:
     </div>
     """, unsafe_allow_html=True)
 
-    # Calculate uncertainty for all models
+    # ==========================================================================
+    # DYNAMIC MODEL DETECTION SECTION
+    # ==========================================================================
+    st.markdown("#### 🔍 Trained Models Detection")
+
+    # Refresh button for dynamic detection
+    refresh_col1, refresh_col2 = st.columns([1, 5])
+    with refresh_col1:
+        if st.button("🔄 Refresh", key="refresh_uncertainty_models", help="Re-scan session state for trained models"):
+            st.rerun()
+
+    with refresh_col2:
+        st.caption("Models are automatically detected from the Modeling Hub. Click refresh to update.")
+
+    # Get all trained models dynamically
+    all_trained_models = get_all_trained_models_from_session()
+    stat_count, ml_count, opt_count, hybrid_count = get_model_summary_for_uncertainty()
+    total_models = stat_count + ml_count + opt_count + hybrid_count
+
+    # Model detection summary cards
+    detect_cols = st.columns(5)
+
+    with detect_cols[0]:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: #3b82f6; --accent-color-end: #22d3ee; padding: 1rem;">
+            <div class="fq-kpi-label" style="font-size: 0.7rem;">TOTAL MODELS</div>
+            <div class="fq-kpi-value" style="font-size: 1.8rem;">{total_models}</div>
+            <div class="fq-kpi-sublabel">Detected</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with detect_cols[1]:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: #a855f7; --accent-color-end: #8b5cf6; padding: 1rem;">
+            <div class="fq-kpi-label" style="font-size: 0.7rem;">STATISTICAL</div>
+            <div class="fq-kpi-value" style="font-size: 1.8rem;">{stat_count}</div>
+            <div class="fq-kpi-sublabel">ARIMA/SARIMAX</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with detect_cols[2]:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: #60a5fa; --accent-color-end: #3b82f6; padding: 1rem;">
+            <div class="fq-kpi-label" style="font-size: 0.7rem;">ML MODELS</div>
+            <div class="fq-kpi-value" style="font-size: 1.8rem;">{ml_count}</div>
+            <div class="fq-kpi-sublabel">XGBoost/LSTM/ANN</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with detect_cols[3]:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: #fbbf24; --accent-color-end: #f59e0b; padding: 1rem;">
+            <div class="fq-kpi-label" style="font-size: 0.7rem;">OPTIMIZED</div>
+            <div class="fq-kpi-value" style="font-size: 1.8rem;">{opt_count}</div>
+            <div class="fq-kpi-sublabel">Hypertuned</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with detect_cols[4]:
+        st.markdown(f"""
+        <div class="fq-kpi-card" style="--accent-color: #ec4899; --accent-color-end: #f43f5e; padding: 1rem;">
+            <div class="fq-kpi-label" style="font-size: 0.7rem;">HYBRID</div>
+            <div class="fq-kpi-value" style="font-size: 1.8rem;">{hybrid_count}</div>
+            <div class="fq-kpi-sublabel">Ensemble/Stacking</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Show detailed list of all detected models
+    if all_trained_models:
+        with st.expander("📋 View All Detected Models", expanded=False):
+            # Create summary dataframe
+            model_rows = []
+            for key, info in all_trained_models.items():
+                ci_status = "✅ Yes" if info.get("has_ci", False) else "❌ No"
+                model_rows.append({
+                    "Model": info["name"],
+                    "Type": info["type"],
+                    "Status": info["status"],
+                    "Has CI": ci_status,
+                    "Source Key": info["source"]
+                })
+
+            if model_rows:
+                model_df = pd.DataFrame(model_rows)
+                st.dataframe(model_df, use_container_width=True, hide_index=True)
+
+                # Summary of CI availability
+                ci_available = sum(1 for info in all_trained_models.values() if info.get("has_ci", False))
+                ci_missing = total_models - ci_available
+
+                st.markdown(f"""
+                <div style="background: rgba(59, 130, 246, 0.1); padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem;">
+                    <strong>Confidence Interval Status:</strong>
+                    <span style="color: #22c55e;">✅ {ci_available} models with CI</span> |
+                    <span style="color: #fbbf24;">⚠️ {ci_missing} models without CI</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.info("💡 **Tip:** Only models with confidence intervals (ARIMA, SARIMAX, or ML with CQR) can be analyzed for uncertainty. Train statistical models or enable CQR prediction intervals for ML models.")
+
+    st.markdown("---")
+
+    # ==========================================================================
+    # UNCERTAINTY ANALYSIS SECTION
+    # ==========================================================================
+    st.markdown("#### 📊 Uncertainty Analysis Results")
+
+    # Calculate uncertainty for all models with CI
     uncertainty_results = get_uncertainty_for_all_models(available_models)
+
+    # Also get models without CI for display
+    models_with_capability = get_models_with_uncertainty_capability()
+    models_without_ci = [m for m in models_with_capability if not m.get("has_valid_ci", False)]
 
     if not uncertainty_results:
         st.warning("No models with valid confidence intervals found. Uncertainty analysis requires Upper (U) and Lower (L) bounds.")
-        st.info("Train models with confidence intervals enabled (ARIMA/SARIMAX) to see uncertainty analysis.")
+
+        # Show which models are missing CI
+        if models_without_ci:
+            st.markdown("##### Models Detected (Without Confidence Intervals)")
+            no_ci_df = pd.DataFrame([{
+                "Model": m["name"],
+                "Type": m["type"],
+                "Status": m.get("status", "Trained"),
+                "CI Status": "❌ No CI Data"
+            } for m in models_without_ci])
+            st.dataframe(no_ci_df, use_container_width=True, hide_index=True)
+
+        st.info("""
+        **How to get uncertainty analysis:**
+        1. **Statistical Models:** Train ARIMA or SARIMAX - they automatically include 95% confidence intervals
+        2. **ML Models:** Enable CQR (Conformalized Quantile Regression) prediction intervals in the Modeling Hub
+        3. **Return here** after training to see uncertainty analysis
+        """)
     else:
         # Summary table
         st.markdown("#### Model Uncertainty Summary")
@@ -1724,6 +2071,71 @@ with tab_uncertainty:
                     # PIW per horizon table
                     st.markdown("##### Metrics per Horizon")
                     st.dataframe(rpiw_df.round(2), use_container_width=True, hide_index=True)
+
+        # ==========================================================================
+        # ALL MODELS COMPARISON CHART
+        # ==========================================================================
+        if len(uncertainty_results) > 1:
+            st.markdown("---")
+            st.markdown("#### 📊 All Models RPIW Comparison")
+
+            # Create comparison bar chart
+            comparison_data = []
+            for model_name, metrics in uncertainty_results.items():
+                if not np.isnan(metrics.overall_rpiw):
+                    comparison_data.append({
+                        "Model": model_name,
+                        "RPIW (%)": metrics.overall_rpiw,
+                        "Level": metrics.uncertainty_level,
+                        "Method": metrics.recommended_method
+                    })
+
+            if comparison_data:
+                comp_df = pd.DataFrame(comparison_data).sort_values("RPIW (%)")
+
+                # Create colors based on uncertainty level
+                level_colors = {
+                    "LOW": "#22c55e",
+                    "MEDIUM": "#fbbf24",
+                    "HIGH": "#ef4444",
+                    "UNKNOWN": "#94a3b8"
+                }
+                colors = [level_colors.get(row["Level"], "#94a3b8") for _, row in comp_df.iterrows()]
+
+                fig_compare = go.Figure()
+                fig_compare.add_trace(go.Bar(
+                    x=comp_df["Model"],
+                    y=comp_df["RPIW (%)"],
+                    marker_color=colors,
+                    text=[f"{v:.1f}%" for v in comp_df["RPIW (%)"]],
+                    textposition="auto",
+                    hovertemplate="<b>%{x}</b><br>RPIW: %{y:.1f}%<extra></extra>"
+                ))
+
+                # Add threshold lines
+                fig_compare.add_hline(y=15, line_dash="dash", line_color="#22c55e",
+                                     annotation_text="Low (15%)", annotation_position="right")
+                fig_compare.add_hline(y=40, line_dash="dash", line_color="#fbbf24",
+                                     annotation_text="Medium (40%)", annotation_position="right")
+
+                fig_compare.update_layout(
+                    title="Model Comparison: Relative Prediction Interval Width",
+                    xaxis_title="Model",
+                    yaxis_title="Overall RPIW (%)",
+                    template="plotly_dark",
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=400,
+                    showlegend=False
+                )
+
+                st.plotly_chart(fig_compare, use_container_width=True)
+
+                # Show comparison table
+                st.markdown("##### Model Comparison Summary")
+                comp_display = comp_df.copy()
+                comp_display["RPIW (%)"] = comp_display["RPIW (%)"].round(2)
+                st.dataframe(comp_display, use_container_width=True, hide_index=True)
 
         # Save recommendation to session state
         if uncertainty_results:
