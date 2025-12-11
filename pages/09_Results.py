@@ -381,36 +381,41 @@ def _aggregate_horizon_metrics(results_df: pd.DataFrame, model_name: str) -> Opt
 
 
 def _extract_ml_metrics(ml_results: Dict, model_name: str) -> Optional[Dict]:
-    """Extract aggregated metrics from ML model results."""
+    """Extract aggregated metrics from ML model results.
+
+    ML results store metrics in results_df DataFrame with columns:
+    - Test_MAE, Test_RMSE, Test_MAPE, Test_Acc (for test metrics)
+    - Train_MAE, Train_RMSE, Train_MAPE, Train_Acc (for training metrics)
+    """
     try:
-        per_h = ml_results.get("per_h", {})
+        results_df = ml_results.get("results_df")
         successful = ml_results.get("successful", [])
 
-        if not per_h or not successful:
+        # Check if we have valid results DataFrame
+        if results_df is None or results_df.empty:
             return None
 
-        mae_list, rmse_list, mape_list, acc_list = [], [], [], []
-
-        for h in successful:
-            h_data = per_h.get(h, {})
-            mae_list.append(_safe_float(h_data.get("mae")))
-            rmse_list.append(_safe_float(h_data.get("rmse")))
-            mape_list.append(_safe_float(h_data.get("mape")))
-            acc_list.append(_safe_float(h_data.get("accuracy")))
+        # Extract test metrics from results_df (average across all horizons)
+        mae_avg = results_df["Test_MAE"].mean() if "Test_MAE" in results_df.columns else np.nan
+        rmse_avg = results_df["Test_RMSE"].mean() if "Test_RMSE" in results_df.columns else np.nan
+        mape_avg = results_df["Test_MAPE"].mean() if "Test_MAPE" in results_df.columns else np.nan
+        acc_avg = results_df["Test_Acc"].mean() if "Test_Acc" in results_df.columns else np.nan
 
         return {
             "Model": f"{model_name} (Avg)",
             "Category": _get_model_category(model_name),
             "Source": "Modeling Hub",
-            "MAE": np.nanmean(mae_list) if mae_list else np.nan,
-            "RMSE": np.nanmean(rmse_list) if rmse_list else np.nan,
-            "MAPE_%": np.nanmean(mape_list) if mape_list else np.nan,
-            "Accuracy_%": np.nanmean(acc_list) if acc_list else np.nan,
+            "MAE": _safe_float(mae_avg),
+            "RMSE": _safe_float(rmse_avg),
+            "MAPE_%": _safe_float(mape_avg),
+            "Accuracy_%": _safe_float(acc_avg),
             "Runtime_s": _safe_float(ml_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Parameters": f"Horizons: {len(successful)}",
+            "Parameters": f"Horizons: {len(successful) if successful else len(results_df)}",
         }
-    except Exception:
+    except Exception as e:
+        # Log error for debugging
+        print(f"Error extracting ML metrics for {model_name}: {e}")
         return None
 
 
@@ -418,14 +423,15 @@ def _extract_ensemble_metrics(ensemble_results: Dict) -> Optional[Dict]:
     """Extract metrics from ensemble results."""
     try:
         metrics = ensemble_results.get("metrics", {})
+        # Metrics stored with uppercase keys (MAE, RMSE, MAPE, Accuracy)
         return {
             "Model": "Ensemble (Weighted)",
             "Category": "Ensemble",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("mae")),
-            "RMSE": _safe_float(metrics.get("rmse")),
-            "MAPE_%": _safe_float(metrics.get("mape")),
-            "Accuracy_%": _safe_float(metrics.get("accuracy")),
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
             "Runtime_s": _safe_float(ensemble_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Models: {', '.join(ensemble_results.get('models', []))}",
@@ -438,14 +444,15 @@ def _extract_stacking_metrics(stacking_results: Dict) -> Optional[Dict]:
     """Extract metrics from stacking results."""
     try:
         metrics = stacking_results.get("metrics", {})
+        # Metrics stored with uppercase keys (MAE, RMSE, MAPE, Accuracy)
         return {
             "Model": "Stacking Meta-Learner",
             "Category": "Stacking",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("mae")),
-            "RMSE": _safe_float(metrics.get("rmse")),
-            "MAPE_%": _safe_float(metrics.get("mape")),
-            "Accuracy_%": _safe_float(metrics.get("accuracy")),
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
             "Runtime_s": _safe_float(stacking_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Meta: {stacking_results.get('meta_learner', 'Ridge')}",
@@ -458,14 +465,15 @@ def _extract_hybrid_metrics(hybrid_results: Dict) -> Optional[Dict]:
     """Extract metrics from hybrid LSTM-SARIMAX results."""
     try:
         metrics = hybrid_results.get("metrics", {})
+        # Metrics stored with uppercase keys (MAE, RMSE, MAPE, Accuracy)
         return {
             "Model": "Hybrid LSTM-SARIMAX",
             "Category": "Hybrid",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("mae")),
-            "RMSE": _safe_float(metrics.get("rmse")),
-            "MAPE_%": _safe_float(metrics.get("mape")),
-            "Accuracy_%": _safe_float(metrics.get("accuracy")),
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
             "Runtime_s": _safe_float(hybrid_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": "LSTM + SARIMAX residual correction",
@@ -979,18 +987,19 @@ def create_horizon_performance_chart(source: str = "all") -> Optional[go.Figure]
                     })
 
     if source in ["all", "ml"]:
-        # ML Models
+        # ML Models - metrics are in results_df, not per_h
         for model_name in ["XGBoost", "LSTM", "ANN"]:
             ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
             if ml_results:
-                per_h = ml_results.get("per_h", {})
-                for h, h_data in per_h.items():
-                    horizon_data.append({
-                        "Model": model_name,
-                        "Horizon": int(h),
-                        "MAE": _safe_float(h_data.get("mae")),
-                        "RMSE": _safe_float(h_data.get("rmse")),
-                    })
+                results_df = ml_results.get("results_df")
+                if results_df is not None and not results_df.empty:
+                    for _, row in results_df.iterrows():
+                        horizon_data.append({
+                            "Model": model_name,
+                            "Horizon": int(row.get("Horizon", 0)),
+                            "MAE": _safe_float(row.get("Test_MAE")),
+                            "RMSE": _safe_float(row.get("Test_RMSE")),
+                        })
 
     if not horizon_data:
         return None
@@ -1373,16 +1382,18 @@ with tab_horizons:
             for model_name in ["XGBoost", "LSTM", "ANN"]:
                 ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
                 if ml_results:
-                    per_h = ml_results.get("per_h", {})
-                    for h, h_data in per_h.items():
-                        horizon_df_data.append({
-                            "Model": model_name,
-                            "Horizon": int(h),
-                            "MAE": _safe_float(h_data.get("mae")),
-                            "RMSE": _safe_float(h_data.get("rmse")),
-                            "MAPE_%": _safe_float(h_data.get("mape")),
-                            "Accuracy_%": _safe_float(h_data.get("accuracy")),
-                        })
+                    # ML metrics are stored in results_df, not per_h
+                    results_df = ml_results.get("results_df")
+                    if results_df is not None and not results_df.empty:
+                        for _, row in results_df.iterrows():
+                            horizon_df_data.append({
+                                "Model": model_name,
+                                "Horizon": int(row.get("Horizon", 0)),
+                                "MAE": _safe_float(row.get("Test_MAE")),
+                                "RMSE": _safe_float(row.get("Test_RMSE")),
+                                "MAPE_%": _safe_float(row.get("Test_MAPE")),
+                                "Accuracy_%": _safe_float(row.get("Test_Acc")),
+                            })
 
         if horizon_df_data:
             horizon_df = pd.DataFrame(horizon_df_data)
