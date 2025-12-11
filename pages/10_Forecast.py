@@ -833,7 +833,7 @@ with tab_forecast:
     st.markdown("### 🔮 View Forecasts")
 
     # Model selection
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
     with col1:
         model_names = [m["name"] for m in available_models]
@@ -854,22 +854,47 @@ with tab_forecast:
     metrics_df = forecast_data.get("metrics_df")
     horizons = forecast_data["horizons"]
 
-    # Date selection
+    # Date selection - with safe date handling
     with col2:
-        if hasattr(test_eval.index, 'min'):
-            min_date = test_eval.index.min()
-            max_date = test_eval.index.max()
-            default_date = max_date - pd.Timedelta(days=7) if (max_date - min_date).days > 7 else min_date
+        selected_date = None
+        try:
+            if hasattr(test_eval.index, 'min') and len(test_eval) > 0:
+                min_date = test_eval.index.min()
+                max_date = test_eval.index.max()
 
-            selected_date = st.date_input(
-                "Forecast From:",
-                value=default_date.date() if hasattr(default_date, 'date') else default_date,
-                min_value=min_date.date() if hasattr(min_date, 'date') else min_date,
-                max_value=max_date.date() if hasattr(max_date, 'date') else max_date,
-                key="forecast_date_select"
-            )
-        else:
-            selected_date = None
+                # Safe conversion to datetime
+                if hasattr(min_date, 'to_pydatetime'):
+                    min_dt = min_date.to_pydatetime()
+                    max_dt = max_date.to_pydatetime()
+                elif isinstance(min_date, (pd.Timestamp, datetime)):
+                    min_dt = min_date
+                    max_dt = max_date
+                else:
+                    # Fallback for integer index
+                    min_dt = None
+                    max_dt = None
+
+                if min_dt is not None and max_dt is not None:
+                    # Calculate date difference safely
+                    try:
+                        date_diff = (max_dt - min_dt).days if hasattr(max_dt - min_dt, 'days') else 7
+                    except:
+                        date_diff = 7
+
+                    if date_diff > 7:
+                        default_date = max_dt - timedelta(days=7)
+                    else:
+                        default_date = min_dt
+
+                    selected_date = st.date_input(
+                        "Forecast From:",
+                        value=default_date.date() if hasattr(default_date, 'date') else default_date,
+                        min_value=min_dt.date() if hasattr(min_dt, 'date') else min_dt,
+                        max_value=max_dt.date() if hasattr(max_dt, 'date') else max_dt,
+                        key="forecast_date_select"
+                    )
+        except Exception as e:
+            st.caption(f"Date selection unavailable")
 
     with col3:
         max_h = len(horizons)
@@ -880,115 +905,152 @@ with tab_forecast:
             key="forecast_days_select"
         )
 
+    with col4:
+        st.write("")  # Spacer
+        generate_forecast = st.button("🚀 Generate Forecast", type="primary", use_container_width=True)
+
     st.divider()
 
-    # Find the index for selected date
-    forecast_idx = -1
-    if selected_date is not None and hasattr(test_eval.index, 'get_indexer'):
-        try:
-            selected_ts = pd.Timestamp(selected_date)
-            idx_loc = test_eval.index.get_indexer([selected_ts], method='nearest')[0]
-            forecast_idx = int(idx_loc)
-        except:
-            forecast_idx = len(test_eval) - 1
+    # Only show forecast when button is clicked or if already generated
+    if "forecast_generated" not in st.session_state:
+        st.session_state.forecast_generated = False
+
+    if generate_forecast:
+        st.session_state.forecast_generated = True
+        st.session_state.forecast_model = selected_model_name
+
+    if not st.session_state.forecast_generated:
+        st.info("👆 Select a model and click **Generate Forecast** to view predictions.")
     else:
-        forecast_idx = len(test_eval) - 1
+        # Find the index for selected date
+        forecast_idx = -1
+        if selected_date is not None:
+            try:
+                selected_ts = pd.Timestamp(selected_date)
+                if hasattr(test_eval.index, 'get_indexer'):
+                    idx_loc = test_eval.index.get_indexer([selected_ts], method='nearest')[0]
+                    forecast_idx = int(idx_loc)
+                else:
+                    forecast_idx = len(test_eval) - 1
+            except:
+                forecast_idx = len(test_eval) - 1
+        else:
+            forecast_idx = len(test_eval) - 1
 
-    if forecast_idx >= 0 and forecast_idx < len(test_eval):
-        base_date = test_eval.index[forecast_idx]
+        if forecast_idx >= 0 and forecast_idx < len(test_eval):
+            base_date = test_eval.index[forecast_idx]
 
-        # --- FORECAST CARDS ---
-        st.markdown(f"""
-        <div class='forecast-card' style='padding: 1.5rem;'>
-            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;'>
-                <div>
-                    <div style='font-size: 1.25rem; font-weight: 700; color: #e2e8f0;'>
-                        📅 {forecast_days}-Day Forecast
+            # Format base_date safely
+            if hasattr(base_date, 'strftime'):
+                base_date_str = base_date.strftime("%b %d, %Y")
+            else:
+                base_date_str = str(base_date)
+
+            # --- FORECAST HEADER ---
+            st.markdown(f"""
+            <div class='forecast-card' style='padding: 1.5rem;'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <div>
+                        <div style='font-size: 1.25rem; font-weight: 700; color: #e2e8f0;'>
+                            📅 {forecast_days}-Day Forecast
+                        </div>
+                        <div style='font-size: 0.875rem; color: #94a3b8; margin-top: 0.25rem;'>
+                            Model: <span style='color: #22d3ee;'>{selected_model_name}</span> •
+                            From: <span style='color: #a78bfa;'>{base_date_str}</span>
+                        </div>
                     </div>
-                    <div style='font-size: 0.875rem; color: #94a3b8; margin-top: 0.25rem;'>
-                        Model: <span style='color: #22d3ee;'>{selected_model_name}</span> •
-                        From: <span style='color: #a78bfa;'>{base_date.strftime("%b %d, %Y")}</span>
+                    <div style='padding: 0.5rem 1rem; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px;'>
+                        <span style='color: #a78bfa; font-weight: 600;'>⚡ Test Set Forecast</span>
                     </div>
-                </div>
-                <div style='padding: 0.5rem 1rem; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px;'>
-                    <span style='color: #a78bfa; font-weight: 600;'>⚡ Test Set Forecast</span>
                 </div>
             </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-        # Create forecast cards
-        num_cols = min(forecast_days, len(horizons), 7)
-        forecast_cols = st.columns(num_cols, gap="small")
+            st.write("")  # Spacer
 
-        for h_idx in range(min(forecast_days, len(horizons))):
-            horizon_num = horizons[h_idx]
-            forecast_dt = base_date + pd.Timedelta(days=horizon_num)
+            # --- FORECAST CARDS ---
+            num_cols = min(forecast_days, len(horizons), 7)
+            forecast_cols = st.columns(num_cols, gap="small")
 
-            # Get forecast and CI values
-            forecast_val = float(F[forecast_idx, h_idx]) if not np.isnan(F[forecast_idx, h_idx]) else 0
-            lower_val = float(L[forecast_idx, h_idx]) if L is not None and not np.isnan(L[forecast_idx, h_idx]) else forecast_val * 0.9
-            upper_val = float(U[forecast_idx, h_idx]) if U is not None and not np.isnan(U[forecast_idx, h_idx]) else forecast_val * 1.1
+            for h_idx in range(min(forecast_days, len(horizons))):
+                horizon_num = horizons[h_idx]
 
-            # Get actual value if available
-            actual_col = f"Target_{horizon_num}"
-            actual_val = None
-            if actual_col in test_eval.columns:
-                actual_val = test_eval.iloc[forecast_idx][actual_col]
-                if pd.isna(actual_val):
-                    actual_val = None
+                # Safe date calculation
+                forecast_dt = None
+                forecast_dt_day = f"Day {horizon_num}"
+                forecast_dt_date = f"h={horizon_num}"
+                if hasattr(base_date, '__add__'):
+                    try:
+                        forecast_dt = base_date + pd.Timedelta(days=horizon_num)
+                        if hasattr(forecast_dt, 'strftime'):
+                            forecast_dt_day = forecast_dt.strftime("%a").upper()
+                            forecast_dt_date = forecast_dt.strftime("%b %d")
+                    except:
+                        pass
 
-            # Get accuracy from metrics
-            metrics = get_metrics_from_df(metrics_df, horizon_num)
-            accuracy = metrics.get("Accuracy", np.nan)
-            accuracy_text = f"{accuracy:.0f}%" if pd.notna(accuracy) else "N/A"
+                # Get forecast and CI values
+                forecast_val = float(F[forecast_idx, h_idx]) if not np.isnan(F[forecast_idx, h_idx]) else 0
+                lower_val = float(L[forecast_idx, h_idx]) if L is not None and not np.isnan(L[forecast_idx, h_idx]) else forecast_val * 0.9
+                upper_val = float(U[forecast_idx, h_idx]) if U is not None and not np.isnan(U[forecast_idx, h_idx]) else forecast_val * 1.1
 
-            # Accuracy color
-            if pd.notna(accuracy):
-                if accuracy >= 90:
-                    acc_color = "#10b981"
-                    acc_bg = "rgba(16, 185, 129, 0.15)"
-                elif accuracy >= 80:
-                    acc_color = "#22d3ee"
-                    acc_bg = "rgba(34, 211, 238, 0.15)"
-                elif accuracy >= 70:
-                    acc_color = "#f59e0b"
-                    acc_bg = "rgba(245, 158, 11, 0.15)"
+                # Get actual value if available
+                actual_col = f"Target_{horizon_num}"
+                actual_val = None
+                if actual_col in test_eval.columns:
+                    actual_val = test_eval.iloc[forecast_idx][actual_col]
+                    if pd.isna(actual_val):
+                        actual_val = None
+
+                # Get accuracy from metrics
+                metrics = get_metrics_from_df(metrics_df, horizon_num)
+                accuracy = metrics.get("Accuracy", np.nan)
+                accuracy_text = f"{accuracy:.0f}%" if pd.notna(accuracy) else "N/A"
+
+                # Accuracy color
+                if pd.notna(accuracy):
+                    if accuracy >= 90:
+                        acc_color = "#10b981"
+                        acc_bg = "rgba(16, 185, 129, 0.15)"
+                    elif accuracy >= 80:
+                        acc_color = "#22d3ee"
+                        acc_bg = "rgba(34, 211, 238, 0.15)"
+                    elif accuracy >= 70:
+                        acc_color = "#f59e0b"
+                        acc_bg = "rgba(245, 158, 11, 0.15)"
+                    else:
+                        acc_color = "#ef4444"
+                        acc_bg = "rgba(239, 68, 68, 0.15)"
                 else:
-                    acc_color = "#ef4444"
-                    acc_bg = "rgba(239, 68, 68, 0.15)"
-            else:
-                acc_color = "#64748b"
-                acc_bg = "rgba(100, 116, 139, 0.15)"
+                    acc_color = "#64748b"
+                    acc_bg = "rgba(100, 116, 139, 0.15)"
 
-            col_idx = h_idx % num_cols
-            with forecast_cols[col_idx]:
-                is_primary = (h_idx == 0)
-                primary_class = " forecast-mini-card-primary" if is_primary else ""
+                col_idx = h_idx % num_cols
+                with forecast_cols[col_idx]:
+                    is_primary = (h_idx == 0)
+                    primary_class = " forecast-mini-card-primary" if is_primary else ""
 
-                actual_display = ""
-                if actual_val is not None:
-                    error = abs(forecast_val - actual_val)
-                    actual_display = f"""
-                    <div style='margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(100, 116, 139, 0.2);'>
-                        <div style='font-size: 0.7rem; color: #64748b;'>Actual</div>
-                        <div style='font-size: 1rem; font-weight: 700; color: #22d3ee;'>{int(actual_val)}</div>
-                        <div style='font-size: 0.65rem; color: {"#10b981" if error < 5 else "#f59e0b"};'>Error: ±{error:.1f}</div>
+                    actual_display = ""
+                    if actual_val is not None:
+                        error = abs(forecast_val - actual_val)
+                        actual_display = f"""
+                        <div style='margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(100, 116, 139, 0.2);'>
+                            <div style='font-size: 0.7rem; color: #64748b;'>Actual</div>
+                            <div style='font-size: 1rem; font-weight: 700; color: #22d3ee;'>{int(actual_val)}</div>
+                            <div style='font-size: 0.65rem; color: {"#10b981" if error < 5 else "#f59e0b"};'>Error: ±{error:.1f}</div>
+                        </div>
+                        """
+
+                    st.markdown(f"""
+                    <div class='forecast-mini-card{primary_class}' style='margin-bottom: 0.5rem;'>
+                        <div style='font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;'>{forecast_dt_day}</div>
+                        <div style='font-size: 0.7rem; color: #64748b; background: rgba(100, 116, 139, 0.15); padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; margin: 0.25rem 0;'>{forecast_dt_date}</div>
+                        <div class='forecast-number' style='margin: 0.5rem 0;'>{int(forecast_val)}</div>
+                        <div style='font-size: 0.6rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;'>Predicted</div>
+                        <div style='display: inline-block; padding: 0.25rem 0.5rem; background: {acc_bg}; border: 1px solid {acc_color}40; border-radius: 6px; font-size: 0.7rem; font-weight: 600; color: {acc_color}; margin: 0.5rem 0;'>✓ {accuracy_text}</div>
+                        <div style='font-size: 0.65rem; color: #64748b; background: rgba(30, 41, 59, 0.5); padding: 0.25rem 0.5rem; border-radius: 4px;'>{int(lower_val)} - {int(upper_val)}</div>
+                        {actual_display}
                     </div>
-                    """
-
-                st.markdown(f"""
-                <div class='forecast-mini-card{primary_class}' style='margin-bottom: 0.5rem;'>
-                    <div style='font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;'>{forecast_dt.strftime("%a").upper()}</div>
-                    <div style='font-size: 0.7rem; color: #64748b; background: rgba(100, 116, 139, 0.15); padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; margin: 0.25rem 0;'>{forecast_dt.strftime("%b %d")}</div>
-                    <div class='forecast-number' style='margin: 0.5rem 0;'>{int(forecast_val)}</div>
-                    <div style='font-size: 0.6rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;'>Predicted</div>
-                    <div style='display: inline-block; padding: 0.25rem 0.5rem; background: {acc_bg}; border: 1px solid {acc_color}40; border-radius: 6px; font-size: 0.7rem; font-weight: 600; color: {acc_color}; margin: 0.5rem 0;'>✓ {accuracy_text}</div>
-                    <div style='font-size: 0.65rem; color: #64748b; background: rgba(30, 41, 59, 0.5); padding: 0.25rem 0.5rem; border-radius: 4px;'>{int(lower_val)} - {int(upper_val)}</div>
-                    {actual_display}
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.markdown("</div>", unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
         # --- TIME SERIES CHART ---
         st.markdown("### 📊 Forecast vs Actual")
@@ -1024,8 +1086,17 @@ with tab_forecast:
 
         for h_idx in range(min(forecast_days, len(horizons))):
             horizon_num = horizons[h_idx]
-            fd = base_date + pd.Timedelta(days=horizon_num)
-            if fd in dates_window:
+            try:
+                fd = base_date + pd.Timedelta(days=horizon_num)
+            except:
+                continue
+
+            try:
+                is_in_window = fd in dates_window
+            except:
+                is_in_window = False
+
+            if is_in_window:
                 fv = F[forecast_idx, h_idx]
                 if pd.notna(fv):
                     forecast_dates_plot.append(fd)
@@ -1056,7 +1127,10 @@ with tab_forecast:
             ))
 
         # Vertical line at forecast start
-        fig.add_vline(x=base_date, line_dash="dot", line_color="#ef4444", line_width=2)
+        try:
+            fig.add_vline(x=base_date, line_dash="dot", line_color="#ef4444", line_width=2)
+        except:
+            pass  # Skip vline if date format incompatible
 
         fig.update_layout(
             title=dict(text=f"Forecast vs Actual - {selected_model_name}", x=0.5),
@@ -1066,6 +1140,8 @@ with tab_forecast:
             height=400,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             hovermode='x unified',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
         )
 
         st.plotly_chart(fig, use_container_width=True)
