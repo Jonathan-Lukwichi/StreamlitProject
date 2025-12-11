@@ -903,6 +903,49 @@ def create_improvement_chart(improvements_df: pd.DataFrame, best_model: str) -> 
     return fig
 
 
+def _generate_latex_table(df: pd.DataFrame) -> str:
+    """Generate LaTeX table code for thesis inclusion."""
+    if df.empty:
+        return "% No data available"
+
+    latex = r"""\begin{table}[htbp]
+\centering
+\caption{Forecasting Model Comparison Results}
+\label{tab:model_comparison}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{MAE} & \textbf{RMSE} & \textbf{MAPE (\%)} & \textbf{Accuracy (\%)} \\
+\midrule
+"""
+
+    ranked = compute_model_rankings(df)
+
+    for _, row in ranked.iterrows():
+        model = row["Model"].replace("_", r"\_")
+        mae = f"{row['MAE']:.4f}" if pd.notna(row.get('MAE')) else "--"
+        rmse = f"{row['RMSE']:.4f}" if pd.notna(row.get('RMSE')) else "--"
+        mape = f"{row['MAPE_%']:.2f}" if pd.notna(row.get('MAPE_%')) else "--"
+        acc = f"{row['Accuracy_%']:.2f}" if pd.notna(row.get('Accuracy_%')) else "--"
+
+        # Bold the best model
+        if row.get("Overall_Rank") == 1:
+            latex += f"\\textbf{{{model}}} & \\textbf{{{mae}}} & \\textbf{{{rmse}}} & \\textbf{{{mape}}} & \\textbf{{{acc}}} \\\\\n"
+        else:
+            latex += f"{model} & {mae} & {rmse} & {mape} & {acc} \\\\\n"
+
+    latex += r"""\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item Note: Bold values indicate the best performing model based on composite ranking.
+\item MAE = Mean Absolute Error, RMSE = Root Mean Square Error, MAPE = Mean Absolute Percentage Error.
+\end{tablenotes}
+\end{table}
+"""
+
+    return latex
+
+
 def create_horizon_performance_chart(source: str = "all") -> Optional[go.Figure]:
     """Create per-horizon performance comparison chart."""
     horizon_data = []
@@ -1494,49 +1537,6 @@ with tab_thesis:
             "model_comparison_table.tex",
             "text/plain",
         )
-
-
-def _generate_latex_table(df: pd.DataFrame) -> str:
-    """Generate LaTeX table code for thesis inclusion."""
-    if df.empty:
-        return "% No data available"
-
-    latex = r"""\begin{table}[htbp]
-\centering
-\caption{Forecasting Model Comparison Results}
-\label{tab:model_comparison}
-\begin{tabular}{lcccc}
-\toprule
-\textbf{Model} & \textbf{MAE} & \textbf{RMSE} & \textbf{MAPE (\%)} & \textbf{Accuracy (\%)} \\
-\midrule
-"""
-
-    ranked = compute_model_rankings(df)
-
-    for _, row in ranked.iterrows():
-        model = row["Model"].replace("_", r"\_")
-        mae = f"{row['MAE']:.4f}" if pd.notna(row.get('MAE')) else "--"
-        rmse = f"{row['RMSE']:.4f}" if pd.notna(row.get('RMSE')) else "--"
-        mape = f"{row['MAPE_%']:.2f}" if pd.notna(row.get('MAPE_%')) else "--"
-        acc = f"{row['Accuracy_%']:.2f}" if pd.notna(row.get('Accuracy_%')) else "--"
-
-        # Bold the best model
-        if row.get("Overall_Rank") == 1:
-            latex += f"\\textbf{{{model}}} & \\textbf{{{mae}}} & \\textbf{{{rmse}}} & \\textbf{{{mape}}} & \\textbf{{{acc}}} \\\\\n"
-        else:
-            latex += f"{model} & {mae} & {rmse} & {mape} & {acc} \\\\\n"
-
-    latex += r"""\bottomrule
-\end{tabular}
-\begin{tablenotes}
-\small
-\item Note: Bold values indicate the best performing model based on composite ranking.
-\item MAE = Mean Absolute Error, RMSE = Root Mean Square Error, MAPE = Mean Absolute Percentage Error.
-\end{tablenotes}
-\end{table}
-"""
-
-    return latex
 
 
 # -----------------------------------------------------------------------------
