@@ -284,6 +284,26 @@ class PredictionIntervalSource:
     is_actual: bool  # True if from actual model, False if estimated
 
 
+def _safe_get_first_valid(*values):
+    """
+    Safely get the first non-None value without triggering pandas boolean evaluation.
+
+    This avoids the ValueError when using 'or' with pandas Series/DataFrames.
+    """
+    for val in values:
+        if val is not None:
+            # Check if it's a pandas object with length
+            try:
+                if hasattr(val, '__len__') and len(val) > 0:
+                    return val
+                elif not hasattr(val, '__len__'):
+                    return val
+            except (ValueError, TypeError):
+                # If we can't check length, just return if not None
+                return val
+    return None
+
+
 def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSource]:
     """
     Extract actual prediction intervals from trained models in session state.
@@ -301,10 +321,13 @@ def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSo
     # -------------------------------------------------------------------------
     # 1. Check for CQR/Conformal Prediction results (highest priority)
     # -------------------------------------------------------------------------
-    cqr_results = st.session_state.get("cqr_results") or st.session_state.get("conformal_results")
+    cqr_results = _safe_get_first_valid(
+        st.session_state.get("cqr_results"),
+        st.session_state.get("conformal_results")
+    )
     if cqr_results and isinstance(cqr_results, dict):
-        lower = cqr_results.get("lower") or cqr_results.get("pred_lower")
-        upper = cqr_results.get("upper") or cqr_results.get("pred_upper")
+        lower = _safe_get_first_valid(cqr_results.get("lower"), cqr_results.get("pred_lower"))
+        upper = _safe_get_first_valid(cqr_results.get("upper"), cqr_results.get("pred_upper"))
         if lower is not None and upper is not None:
             lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
             upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
@@ -343,8 +366,8 @@ def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSo
         per_h = sarimax_results.get("per_h", {})
         if per_h:
             for h, h_data in sorted(per_h.items()):
-                lower = h_data.get("ci_lo") or h_data.get("forecast_lower")
-                upper = h_data.get("ci_hi") or h_data.get("forecast_upper")
+                lower = _safe_get_first_valid(h_data.get("ci_lo"), h_data.get("forecast_lower"))
+                upper = _safe_get_first_valid(h_data.get("ci_hi"), h_data.get("forecast_upper"))
                 if lower is not None and upper is not None:
                     lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
                     upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
@@ -368,8 +391,8 @@ def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSo
         per_h = arima_results.get("per_h", {})
         if per_h:
             for h, h_data in sorted(per_h.items()):
-                lower = h_data.get("ci_lo") or h_data.get("forecast_lower")
-                upper = h_data.get("ci_hi") or h_data.get("forecast_upper")
+                lower = _safe_get_first_valid(h_data.get("ci_lo"), h_data.get("forecast_lower"))
+                upper = _safe_get_first_valid(h_data.get("ci_hi"), h_data.get("forecast_upper"))
                 if lower is not None and upper is not None:
                     lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
                     upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
@@ -385,8 +408,8 @@ def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSo
                 break
 
         # Single-target ARIMA (legacy format)
-        lower = arima_results.get("ci_lower") or arima_results.get("forecast_lower")
-        upper = arima_results.get("ci_upper") or arima_results.get("forecast_upper")
+        lower = _safe_get_first_valid(arima_results.get("ci_lower"), arima_results.get("forecast_lower"))
+        upper = _safe_get_first_valid(arima_results.get("ci_upper"), arima_results.get("forecast_upper"))
         if lower is not None and upper is not None:
             lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
             upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
@@ -407,8 +430,8 @@ def extract_prediction_intervals_from_session() -> Optional[PredictionIntervalSo
         if key.startswith("ml_mh_results_"):
             data = st.session_state.get(key)
             if data and isinstance(data, dict):
-                lower = data.get("pred_lower") or data.get("lower_bound")
-                upper = data.get("pred_upper") or data.get("upper_bound")
+                lower = _safe_get_first_valid(data.get("pred_lower"), data.get("lower_bound"))
+                upper = _safe_get_first_valid(data.get("pred_upper"), data.get("upper_bound"))
                 if lower is not None and upper is not None:
                     lower_list = list(lower.values) if hasattr(lower, 'values') else list(lower)
                     upper_list = list(upper.values) if hasattr(upper, 'values') else list(upper)
