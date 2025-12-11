@@ -1269,43 +1269,72 @@ class UniversalForecastPipeline:
         forecast_dates: pd.DatetimeIndex,
         horizon: int
     ) -> Dict:
-        """Generate forecast using ML model approach."""
+        """Generate forecast using ML model approach.
 
-        # ML models typically store test predictions
-        # We'll use the last `horizon` test predictions as "forecast"
-        # Or re-train if model object is available
+        ML model results from Modeling Hub have structure:
+        {
+            "results_df": DataFrame with metrics,
+            "per_h": {h: {"y_test": ..., "forecast": ..., ...}},
+            "successful": [list of horizons],
+            ...
+        }
+        """
 
         for target in self.target_cols:
             if target not in train_df.columns:
                 continue
 
-            # Try to get predictions from model data
             forecast_values = None
 
-            # Check various keys where predictions might be stored
             if isinstance(model_data, dict):
-                # Multi-target results
-                if target in model_data:
-                    target_data = model_data[target]
-                    if isinstance(target_data, dict):
-                        if "test_predictions" in target_data:
-                            preds = target_data["test_predictions"]
-                            forecast_values = list(preds)[-horizon:] if hasattr(preds, '__iter__') else None
-                        elif "predictions" in target_data:
-                            preds = target_data["predictions"]
-                            forecast_values = list(preds)[-horizon:] if hasattr(preds, '__iter__') else None
+                # ---------------------------------------------------------------
+                # PRIORITY 1: Extract from per_h structure (Modeling Hub format)
+                # ---------------------------------------------------------------
+                per_h = model_data.get("per_h", {})
+                if per_h:
+                    # Collect forecasts from each horizon
+                    all_forecasts = []
+                    for h in sorted(per_h.keys()):
+                        h_data = per_h[h]
+                        if isinstance(h_data, dict):
+                            fc = h_data.get("forecast")
+                            if fc is not None:
+                                if hasattr(fc, '__iter__') and not isinstance(fc, str):
+                                    # Take the last value from each horizon's forecast
+                                    fc_list = list(fc) if not hasattr(fc, 'values') else list(fc.values) if hasattr(fc, 'values') else list(fc)
+                                    if fc_list:
+                                        all_forecasts.append(fc_list[-1])
 
-                # Single target results
-                if forecast_values is None:
-                    if "test_predictions" in model_data:
-                        preds = model_data["test_predictions"]
-                        if hasattr(preds, "values"):
-                            forecast_values = list(preds.values)[-horizon:]
-                        else:
+                    if all_forecasts:
+                        # Use the horizon forecasts (each horizon h predicts h days ahead)
+                        forecast_values = all_forecasts[:horizon]
+
+                # ---------------------------------------------------------------
+                # PRIORITY 2: Try legacy formats (test_predictions, predictions)
+                # ---------------------------------------------------------------
+                if forecast_values is None or len(forecast_values) < horizon:
+                    # Multi-target results
+                    if target in model_data:
+                        target_data = model_data[target]
+                        if isinstance(target_data, dict):
+                            if "test_predictions" in target_data:
+                                preds = target_data["test_predictions"]
+                                forecast_values = list(preds)[-horizon:] if hasattr(preds, '__iter__') else None
+                            elif "predictions" in target_data:
+                                preds = target_data["predictions"]
+                                forecast_values = list(preds)[-horizon:] if hasattr(preds, '__iter__') else None
+
+                    # Single target results
+                    if forecast_values is None:
+                        if "test_predictions" in model_data:
+                            preds = model_data["test_predictions"]
+                            if hasattr(preds, "values"):
+                                forecast_values = list(preds.values)[-horizon:]
+                            else:
+                                forecast_values = list(preds)[-horizon:]
+                        elif "predictions" in model_data:
+                            preds = model_data["predictions"]
                             forecast_values = list(preds)[-horizon:]
-                    elif "predictions" in model_data:
-                        preds = model_data["predictions"]
-                        forecast_values = list(preds)[-horizon:]
 
             # Fallback: use persistence forecast
             if forecast_values is None or len(forecast_values) < horizon:
@@ -1340,9 +1369,17 @@ class UniversalForecastPipeline:
         forecast_dates: pd.DatetimeIndex,
         horizon: int
     ) -> Dict:
-        """Generate forecast using statistical model approach."""
+        """Generate forecast using statistical model approach.
 
-        # Statistical models (ARIMA/SARIMAX) store forecast arrays
+        Statistical model results from Benchmarks have structure:
+        {
+            "results_df": DataFrame with metrics,
+            "per_h": {h: {"y_test": ..., "forecast": ..., "ci_lo": ..., "ci_hi": ..., ...}},
+            "successful": [list of horizons],
+            ...
+        }
+        """
+
         for target in self.target_cols:
             if target not in train_df.columns:
                 continue
@@ -1350,31 +1387,56 @@ class UniversalForecastPipeline:
             forecast_values = None
 
             if isinstance(model_data, dict):
-                # Multi-target results
-                if target in model_data:
-                    target_data = model_data[target]
-                    if isinstance(target_data, dict):
-                        if "forecast" in target_data:
-                            fc = target_data["forecast"]
+                # ---------------------------------------------------------------
+                # PRIORITY 1: Extract from per_h structure (Benchmarks format)
+                # ---------------------------------------------------------------
+                per_h = model_data.get("per_h", {})
+                if per_h:
+                    # Collect forecasts from each horizon
+                    all_forecasts = []
+                    for h in sorted(per_h.keys()):
+                        h_data = per_h[h]
+                        if isinstance(h_data, dict):
+                            fc = h_data.get("forecast")
+                            if fc is not None:
+                                if hasattr(fc, '__iter__') and not isinstance(fc, str):
+                                    fc_list = list(fc) if not hasattr(fc, 'values') else list(fc.values) if hasattr(fc, 'values') else list(fc)
+                                    if fc_list:
+                                        # Take the last value from each horizon's forecast
+                                        all_forecasts.append(fc_list[-1])
+
+                    if all_forecasts:
+                        forecast_values = all_forecasts[:horizon]
+
+                # ---------------------------------------------------------------
+                # PRIORITY 2: Try legacy formats (top-level forecast key)
+                # ---------------------------------------------------------------
+                if forecast_values is None or len(forecast_values) < horizon:
+                    # Multi-target results
+                    if target in model_data:
+                        target_data = model_data[target]
+                        if isinstance(target_data, dict):
+                            if "forecast" in target_data:
+                                fc = target_data["forecast"]
+                                if hasattr(fc, "values"):
+                                    forecast_values = list(fc.values)[-horizon:]
+                                else:
+                                    forecast_values = list(fc)[-horizon:]
+                            elif "forecasts" in target_data:
+                                fc = target_data["forecasts"]
+                                forecast_values = list(fc)[-horizon:]
+
+                    # Single target results
+                    if forecast_values is None:
+                        if "forecast" in model_data:
+                            fc = model_data["forecast"]
                             if hasattr(fc, "values"):
                                 forecast_values = list(fc.values)[-horizon:]
                             else:
                                 forecast_values = list(fc)[-horizon:]
-                        elif "forecasts" in target_data:
-                            fc = target_data["forecasts"]
+                        elif "forecasts" in model_data:
+                            fc = model_data["forecasts"]
                             forecast_values = list(fc)[-horizon:]
-
-                # Single target results
-                if forecast_values is None:
-                    if "forecast" in model_data:
-                        fc = model_data["forecast"]
-                        if hasattr(fc, "values"):
-                            forecast_values = list(fc.values)[-horizon:]
-                        else:
-                            forecast_values = list(fc)[-horizon:]
-                    elif "forecasts" in model_data:
-                        fc = model_data["forecasts"]
-                        forecast_values = list(fc)[-horizon:]
 
             # Fallback: use persistence
             if forecast_values is None or len(forecast_values) < horizon:
