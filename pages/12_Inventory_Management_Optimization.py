@@ -649,8 +649,9 @@ with tab1:
                 if "Date" in df.columns:
                     df = df.sort_values("Date").tail(30)
 
-                    # Find usage columns
-                    usage_cols = [c for c in df.columns if "Usage" in c or "usage" in c]
+                    # Find usage columns - actual column names from Supabase:
+                    # Inventory_Used_Gloves, Inventory_Used_PPE_Sets, Inventory_Used_Medications
+                    usage_cols = [c for c in df.columns if "Used" in c or "Usage" in c or "used" in c or "usage" in c]
 
                     # Equipment selection options
                     equipment_options = ["📊 All Equipment"]
@@ -697,10 +698,12 @@ with tab1:
                         # Show all equipment
                         colors = equipment_colors["📊 All Equipment"]
                         for i, col in enumerate(usage_cols[:5]):
+                            # Format display name: Inventory_Used_Gloves -> Gloves
+                            display_name = col.replace("Inventory_Used_", "").replace("_", " ")
                             fig.add_trace(go.Scatter(
                                 x=df["Date"],
                                 y=df[col],
-                                name=col.replace("_", " "),
+                                name=display_name,
                                 line=dict(color=colors[i % len(colors)], width=2),
                                 mode='lines+markers',
                                 marker=dict(size=4)
