@@ -1,22 +1,20 @@
 # =============================================================================
 # 11_Staff_Scheduling_Optimization.py
-# SIMPLIFIED: Forecast-Driven Staff Scheduling with Before/After Comparison
+# INTERACTIVE: Button-Driven Staff Optimization with Expert Manager View
 # Design: Matches Modeling Hub (Page 08) styling
-# DATA: Connected to Supabase (staff_scheduling, financial_data tables)
+# DATA: Fetched from Supabase via button click (staff_scheduling, financial_data)
 # =============================================================================
 """
-Simplified Staff Scheduling - Forecast Driven
+Interactive Staff Scheduling Optimization
 
-Approach:
-- BEFORE: Real historical staffing data from Supabase (staff_scheduling table)
-- AFTER: Dynamic staffing based on ML predictions by clinical category
-
-Key Formula:
-    Staff Needed = Σ (Predicted Patients by Category × Staffing Ratio)
+Workflow:
+1. STEP 1: Click "Load Data" button to fetch real hospital data from Supabase
+2. STEP 2: View current hospital situation (Expert Manager Dashboard)
+3. STEP 3: Click "Optimize Staff" to apply forecast and see financial impact
 
 Data Sources:
-- Staff data: Supabase staff_scheduling table
-- Cost params: Supabase financial_data table
+- Staff data: Supabase staff_scheduling table (via API button)
+- Cost params: Supabase financial_data table (via API button)
 - Forecasts: Session state from Modeling Hub (ml_mh_results, arima_mh_results, etc.)
 """
 from __future__ import annotations
@@ -62,11 +60,9 @@ add_logout_button()
 # =============================================================================
 # CONFIGURATION: STAFFING RATIOS BY CLINICAL CATEGORY
 # =============================================================================
-# These ratios represent: 1 staff member per X patients
-
 STAFFING_RATIOS = {
-    "CARDIAC": {"doctors": 5, "nurses": 3, "support": 8},       # High acuity
-    "TRAUMA": {"doctors": 6, "nurses": 2, "support": 5},        # Nurse-heavy
+    "CARDIAC": {"doctors": 5, "nurses": 3, "support": 8},
+    "TRAUMA": {"doctors": 6, "nurses": 2, "support": 5},
     "RESPIRATORY": {"doctors": 8, "nurses": 4, "support": 10},
     "GASTROINTESTINAL": {"doctors": 10, "nurses": 5, "support": 12},
     "INFECTIOUS": {"doctors": 12, "nurses": 6, "support": 15},
@@ -74,7 +70,7 @@ STAFFING_RATIOS = {
     "OTHER": {"doctors": 15, "nurses": 8, "support": 20},
 }
 
-# Default cost parameters (USD) - will be overridden by Supabase data
+# Default cost parameters (USD)
 DEFAULT_COST_PARAMS = {
     "doctor_hourly": 150,
     "nurse_hourly": 50,
@@ -84,163 +80,16 @@ DEFAULT_COST_PARAMS = {
     "understaffing_penalty_per_patient": 200,
 }
 
-# Default fixed staffing (BEFORE) - will be overridden by Supabase data
-DEFAULT_FIXED_STAFFING = {
-    "doctors": 10,
-    "nurses": 30,
-    "support": 15,
-}
-
 
 # =============================================================================
-# SUPABASE DATA LOADING FUNCTIONS
-# =============================================================================
-
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def load_cost_params_from_supabase() -> Dict[str, Any]:
-    """
-    Load real cost parameters from Supabase financial_data table.
-    Falls back to defaults if Supabase is not available.
-    """
-    try:
-        financial_service = get_financial_service()
-        if not financial_service.is_connected():
-            return DEFAULT_COST_PARAMS.copy()
-
-        labor_params = financial_service.get_labor_cost_params()
-
-        if not labor_params:
-            return DEFAULT_COST_PARAMS.copy()
-
-        # Map Supabase fields to our params
-        return {
-            "doctor_hourly": labor_params.get("doctor_hourly_rate", DEFAULT_COST_PARAMS["doctor_hourly"]),
-            "nurse_hourly": labor_params.get("nurse_hourly_rate", DEFAULT_COST_PARAMS["nurse_hourly"]),
-            "support_hourly": labor_params.get("support_hourly_rate", DEFAULT_COST_PARAMS["support_hourly"]),
-            "shift_hours": 8,  # Standard shift
-            "overtime_multiplier": labor_params.get("overtime_multiplier", DEFAULT_COST_PARAMS["overtime_multiplier"]),
-            "understaffing_penalty_per_patient": labor_params.get(
-                "understaffing_penalty", DEFAULT_COST_PARAMS["understaffing_penalty_per_patient"]
-            ),
-            "overstaffing_penalty": labor_params.get("overstaffing_penalty", 0),
-            "source": "supabase",
-        }
-    except Exception as e:
-        st.warning(f"Could not load cost params from Supabase: {e}")
-        return DEFAULT_COST_PARAMS.copy()
-
-
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def load_staff_data_from_supabase() -> Dict[str, Any]:
-    """
-    Load real staff scheduling data from Supabase staff_scheduling table.
-    Returns historical staffing levels and statistics.
-    """
-    result = {
-        "has_data": False,
-        "source": "default",
-        "avg_doctors": DEFAULT_FIXED_STAFFING["doctors"],
-        "avg_nurses": DEFAULT_FIXED_STAFFING["nurses"],
-        "avg_support": DEFAULT_FIXED_STAFFING["support"],
-        "total_records": 0,
-        "date_range": None,
-        "daily_data": None,
-        "overtime_hours": 0,
-        "utilization_rate": 0,
-        "shortage_days": 0,
-    }
-
-    try:
-        staff_service = StaffSchedulingService()
-        if not staff_service.is_connected():
-            return result
-
-        # Fetch staff data
-        staff_df = staff_service.fetch_staff_data()
-
-        if staff_df.empty:
-            return result
-
-        result["has_data"] = True
-        result["source"] = "supabase"
-        result["total_records"] = len(staff_df)
-        result["daily_data"] = staff_df
-
-        # Calculate averages
-        if "Doctors_on_Duty" in staff_df.columns:
-            result["avg_doctors"] = int(staff_df["Doctors_on_Duty"].mean())
-        if "Nurses_on_Duty" in staff_df.columns:
-            result["avg_nurses"] = int(staff_df["Nurses_on_Duty"].mean())
-        if "Support_Staff_on_Duty" in staff_df.columns:
-            result["avg_support"] = int(staff_df["Support_Staff_on_Duty"].mean())
-
-        # Get date range
-        if "Date" in staff_df.columns:
-            result["date_range"] = {
-                "start": staff_df["Date"].min(),
-                "end": staff_df["Date"].max(),
-            }
-
-        # Get overtime and utilization stats
-        if "Overtime_Hours" in staff_df.columns:
-            result["overtime_hours"] = float(staff_df["Overtime_Hours"].sum())
-        if "Staff_Utilization_Rate" in staff_df.columns:
-            result["utilization_rate"] = float(staff_df["Staff_Utilization_Rate"].mean())
-        if "Staff_Shortage_Flag" in staff_df.columns:
-            result["shortage_days"] = int(staff_df["Staff_Shortage_Flag"].sum())
-
-        return result
-
-    except Exception as e:
-        st.warning(f"Could not load staff data from Supabase: {e}")
-        return result
-
-
-def get_financial_kpis_from_supabase() -> Dict[str, Any]:
-    """
-    Load comprehensive financial KPIs for optimization analysis.
-    """
-    try:
-        financial_service = get_financial_service()
-        if not financial_service.is_connected():
-            return {}
-
-        return financial_service.get_comprehensive_financial_kpis()
-    except Exception:
-        return {}
-
-
-# Load data at startup
-COST_PARAMS = load_cost_params_from_supabase()
-STAFF_DATA = load_staff_data_from_supabase()
-FINANCIAL_KPIS = get_financial_kpis_from_supabase()
-
-# Set fixed staffing from real data (or defaults)
-FIXED_STAFFING = {
-    "doctors": STAFF_DATA["avg_doctors"],
-    "nurses": STAFF_DATA["avg_nurses"],
-    "support": STAFF_DATA["avg_support"],
-}
-
-
-# =============================================================================
-# FLUORESCENT EFFECTS + CUSTOM TAB STYLING (Same as Modeling Hub)
+# FLUORESCENT EFFECTS + CUSTOM STYLING
 # =============================================================================
 st.markdown(f"""
 <style>
-/* ========================================
-   FLUORESCENT EFFECTS FOR STAFF SCHEDULING
-   ======================================== */
-
+/* Fluorescent Effects */
 @keyframes float-orb {{
-    0%, 100% {{
-        transform: translate(0, 0) scale(1);
-        opacity: 0.25;
-    }}
-    50% {{
-        transform: translate(30px, -30px) scale(1.05);
-        opacity: 0.35;
-    }}
+    0%, 100% {{ transform: translate(0, 0) scale(1); opacity: 0.25; }}
+    50% {{ transform: translate(30px, -30px) scale(1.05); opacity: 0.35; }}
 }}
 
 .fluorescent-orb {{
@@ -252,162 +101,178 @@ st.markdown(f"""
 }}
 
 .orb-1 {{
-    width: 350px;
-    height: 350px;
+    width: 350px; height: 350px;
     background: radial-gradient(circle, rgba(34, 197, 94, 0.25), transparent 70%);
-    top: 15%;
-    right: 20%;
+    top: 15%; right: 20%;
     animation: float-orb 25s ease-in-out infinite;
 }}
 
 .orb-2 {{
-    width: 300px;
-    height: 300px;
+    width: 300px; height: 300px;
     background: radial-gradient(circle, rgba(59, 130, 246, 0.2), transparent 70%);
-    bottom: 20%;
-    left: 15%;
+    bottom: 20%; left: 15%;
     animation: float-orb 30s ease-in-out infinite;
     animation-delay: 5s;
 }}
 
-@keyframes sparkle {{
-    0%, 100% {{
-        opacity: 0;
-        transform: scale(0);
-    }}
-    50% {{
-        opacity: 0.6;
-        transform: scale(1);
-    }}
-}}
-
-.sparkle {{
-    position: fixed;
-    width: 3px;
-    height: 3px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 197, 94, 0.3));
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 2;
-    animation: sparkle 3s ease-in-out infinite;
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
-}}
-
-.sparkle-1 {{ top: 25%; left: 35%; animation-delay: 0s; }}
-.sparkle-2 {{ top: 65%; left: 70%; animation-delay: 1s; }}
-.sparkle-3 {{ top: 45%; left: 15%; animation-delay: 2s; }}
-
-/* ========================================
-   CUSTOM TAB STYLING (Modern Design)
-   ======================================== */
-
-/* Tab container */
-.stTabs {{
-    background: transparent;
-    margin-top: 1rem;
-}}
-
-/* Tab list (container for all tab buttons) */
+/* Custom Tab Styling */
 .stTabs [data-baseweb="tab-list"] {{
     gap: 0.5rem;
     background: linear-gradient(135deg, rgba(11, 17, 32, 0.6), rgba(5, 8, 22, 0.5));
     padding: 0.5rem;
     border-radius: 16px;
     border: 1px solid rgba(34, 197, 94, 0.2);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }}
 
-/* Individual tab buttons */
 .stTabs [data-baseweb="tab"] {{
     height: 50px;
     background: transparent;
     border-radius: 12px;
     padding: 0 1.5rem;
     font-weight: 600;
-    font-size: 0.95rem;
     color: {BODY_TEXT};
     border: 1px solid transparent;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s ease;
 }}
 
-/* Tab button hover effect */
 .stTabs [data-baseweb="tab"]:hover {{
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(59, 130, 246, 0.1));
     border-color: rgba(34, 197, 94, 0.3);
-    color: {TEXT_COLOR};
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
 }}
 
-/* Active/selected tab */
 .stTabs [aria-selected="true"] {{
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(59, 130, 246, 0.2)) !important;
     border: 1px solid rgba(34, 197, 94, 0.5) !important;
-    color: {TEXT_COLOR} !important;
-    box-shadow:
-        0 0 20px rgba(34, 197, 94, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }}
 
-/* Active tab indicator (underline) - hide it */
-.stTabs [data-baseweb="tab-highlight"] {{
-    background-color: transparent;
-}}
-
-/* Tab panels (content area) */
-.stTabs [data-baseweb="tab-panel"] {{
-    padding-top: 1.5rem;
-}}
-
-/* ========================================
-   METRIC CARDS (Staff Scheduling Style)
-   ======================================== */
-
-.metric-card {{
+/* Step Cards */
+.step-card {{
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+    border: 2px solid rgba(59, 130, 246, 0.3);
+    border-radius: 16px;
+    padding: 2rem;
+    margin: 1rem 0;
+    transition: all 0.3s ease;
+}}
+
+.step-card.active {{
+    border-color: rgba(34, 197, 94, 0.6);
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.2);
+}}
+
+.step-card.completed {{
+    border-color: rgba(34, 197, 94, 0.8);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(15, 23, 42, 0.98));
+}}
+
+.step-number {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    border-radius: 50%;
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-right: 1rem;
+}}
+
+.step-number.completed {{
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+}}
+
+.step-title {{
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #f1f5f9;
+}}
+
+/* KPI Cards */
+.kpi-card {{
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
     border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 12px;
     padding: 1.5rem;
     text-align: center;
-    margin-bottom: 1rem;
     transition: all 0.3s ease;
 }}
 
-.metric-card:hover {{
-    transform: translateY(-2px);
+.kpi-card:hover {{
+    transform: translateY(-3px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }}
 
-.metric-card.before {{
-    border-color: rgba(239, 68, 68, 0.5);
-}}
-
-.metric-card.after {{
-    border-color: rgba(34, 197, 94, 0.5);
-}}
-
-.metric-card.savings {{
+.kpi-card.warning {{
     border-color: rgba(234, 179, 8, 0.5);
-    background: linear-gradient(135deg, rgba(234, 179, 8, 0.1), rgba(15, 23, 42, 0.98));
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.1), rgba(15, 23, 42, 0.95));
 }}
 
-.metric-value {{
-    font-size: 2rem;
+.kpi-card.danger {{
+    border-color: rgba(239, 68, 68, 0.5);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(15, 23, 42, 0.95));
+}}
+
+.kpi-card.success {{
+    border-color: rgba(34, 197, 94, 0.5);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(15, 23, 42, 0.95));
+}}
+
+.kpi-value {{
+    font-size: 2.5rem;
     font-weight: 700;
     margin-bottom: 0.5rem;
 }}
 
-.metric-value.red {{ color: #ef4444; }}
-.metric-value.green {{ color: #22c55e; }}
-.metric-value.blue {{ color: #3b82f6; }}
-.metric-value.yellow {{ color: #eab308; }}
+.kpi-value.red {{ color: #ef4444; }}
+.kpi-value.green {{ color: #22c55e; }}
+.kpi-value.blue {{ color: #3b82f6; }}
+.kpi-value.yellow {{ color: #eab308; }}
 
-.metric-label {{
+.kpi-label {{
     font-size: 0.9rem;
     color: #94a3b8;
 }}
 
-/* Section headers */
+.kpi-delta {{
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}}
+
+.kpi-delta.positive {{ color: #22c55e; }}
+.kpi-delta.negative {{ color: #ef4444; }}
+
+/* Action Button */
+.action-button {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}}
+
+.action-button:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+}}
+
+.action-button.success {{
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+}}
+
+.action-button.success:hover {{
+    box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4);
+}}
+
+/* Section Header */
 .section-header {{
     font-size: 1.5rem;
     font-weight: 600;
@@ -417,81 +282,46 @@ st.markdown(f"""
     border-bottom: 2px solid rgba(34, 197, 94, 0.3);
 }}
 
-/* Comparison table */
-.comparison-table {{
-    width: 100%;
-    border-collapse: collapse;
+/* Alert Box */
+.alert-box {{
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
     margin: 1rem 0;
 }}
 
-.comparison-table th, .comparison-table td {{
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-}}
-
-.comparison-table th {{
+.alert-box.info {{
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.4);
     color: #60a5fa;
-    font-weight: 600;
 }}
 
-.highlight-good {{ color: #22c55e; font-weight: 600; }}
-.highlight-bad {{ color: #ef4444; font-weight: 600; }}
-
-/* Data source badge */
-.data-source-badge {{
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(59, 130, 246, 0.15));
-    border: 1px solid rgba(34, 197, 94, 0.4);
-    border-radius: 20px;
-    font-size: 0.875rem;
-    color: #22c55e;
-    font-weight: 500;
-}}
-
-.data-source-badge.warning {{
-    background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(234, 179, 8, 0.1));
-    border-color: rgba(234, 179, 8, 0.4);
+.alert-box.warning {{
+    background: rgba(234, 179, 8, 0.15);
+    border: 1px solid rgba(234, 179, 8, 0.4);
     color: #eab308;
 }}
 
-@media (max-width: 768px) {{
-    .fluorescent-orb {{
-        width: 200px !important;
-        height: 200px !important;
-        filter: blur(50px);
-    }}
-    .sparkle {{
-        display: none;
-    }}
+.alert-box.success {{
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    color: #22c55e;
+}}
 
-    /* Make tabs stack vertically on mobile */
-    .stTabs [data-baseweb="tab-list"] {{
-        flex-direction: column;
-    }}
-
-    .stTabs [data-baseweb="tab"] {{
-        width: 100%;
-    }}
+.alert-box.danger {{
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
 }}
 </style>
 
 <!-- Fluorescent Floating Orbs -->
 <div class="fluorescent-orb orb-1"></div>
 <div class="fluorescent-orb orb-2"></div>
-
-<!-- Sparkle Particles -->
-<div class="sparkle sparkle-1"></div>
-<div class="sparkle sparkle-2"></div>
-<div class="sparkle sparkle-3"></div>
 """, unsafe_allow_html=True)
 
 
 # =============================================================================
-# HERO HEADER (Same style as Modeling Hub)
+# HERO HEADER
 # =============================================================================
 st.markdown(
     f"""
@@ -501,7 +331,7 @@ st.markdown(
         <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Staff Scheduling Optimization</h1>
       </div>
       <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
-        Forecast-driven resource allocation with Before/After financial impact comparison
+        Expert Manager Dashboard - Load hospital data, analyze current situation, and optimize with forecasts
       </p>
     </div>
     """,
@@ -510,120 +340,122 @@ st.markdown(
 
 
 # =============================================================================
-# STEP 1: DATA EXTRACTION FUNCTIONS (Connected to Page 10 Forecast Hub)
+# SESSION STATE INITIALIZATION
+# =============================================================================
+if "staff_db_loaded" not in st.session_state:
+    st.session_state.staff_db_loaded = False
+if "staff_data" not in st.session_state:
+    st.session_state.staff_data = None
+if "financial_data" not in st.session_state:
+    st.session_state.financial_data = None
+if "cost_params" not in st.session_state:
+    st.session_state.cost_params = DEFAULT_COST_PARAMS.copy()
+if "optimization_applied" not in st.session_state:
+    st.session_state.optimization_applied = False
+if "optimized_schedule" not in st.session_state:
+    st.session_state.optimized_schedule = None
+
+
+# =============================================================================
+# DATA LOADING FUNCTIONS
 # =============================================================================
 
-def extract_forecast_from_ml_results() -> Optional[Dict[str, Any]]:
-    """
-    Extract forecast data from ML multi-horizon results.
-    Uses the same format as Page 10 (Forecast Hub).
-    """
-    ml_results = st.session_state.get("ml_mh_results")
-    if not ml_results or not isinstance(ml_results, dict):
-        return None
-
-    for model_name in ["XGBoost", "LSTM", "ANN"]:
-        if model_name in ml_results:
-            model_data = ml_results[model_name]
-            per_h = model_data.get("per_h", {})
-
-            if not per_h:
-                continue
-
-            try:
-                # Get horizons
-                horizons = sorted([int(h) for h in per_h.keys()])
-                if not horizons:
-                    continue
-
-                # Build forecast array
-                forecasts = []
-                for h in horizons[:7]:  # Max 7 days
-                    h_data = per_h.get(h, {})
-                    pred = h_data.get("predictions") or h_data.get("forecast") or h_data.get("y_pred")
-                    if pred is not None:
-                        pred_arr = pred.values if hasattr(pred, 'values') else np.array(pred)
-                        # Take last prediction for each horizon
-                        forecasts.append(float(pred_arr[-1]) if len(pred_arr) > 0 else 0)
-
-                if forecasts:
-                    return {
-                        "model": f"ML ({model_name})",
-                        "forecasts": forecasts,
-                        "horizons": horizons[:7],
-                    }
-            except Exception:
-                continue
-
-    return None
-
-
-def extract_forecast_from_arima() -> Optional[Dict[str, Any]]:
-    """
-    Extract forecast data from ARIMA multi-horizon results.
-    """
-    arima_results = st.session_state.get("arima_mh_results")
-    if not arima_results or not isinstance(arima_results, dict):
-        return None
-
-    per_h = arima_results.get("per_h", {})
-    if not per_h:
-        return None
+def fetch_staff_data_from_api() -> Dict[str, Any]:
+    """Fetch staff scheduling data from Supabase API."""
+    result = {
+        "success": False,
+        "data": None,
+        "stats": {},
+        "error": None,
+    }
 
     try:
-        horizons = sorted([int(h) for h in per_h.keys()])
-        forecasts = []
+        staff_service = StaffSchedulingService()
+        if not staff_service.is_connected():
+            result["error"] = "Supabase not connected. Check your credentials."
+            return result
 
-        for h in horizons[:7]:
-            h_data = per_h.get(h, {})
-            fc = h_data.get("forecast")
-            if fc is not None:
-                fc_arr = fc.values if hasattr(fc, 'values') else np.array(fc)
-                forecasts.append(float(fc_arr[-1]) if len(fc_arr) > 0 else 0)
+        # Fetch all staff data
+        staff_df = staff_service.fetch_staff_data()
 
-        if forecasts:
-            return {
-                "model": "ARIMA",
-                "forecasts": forecasts,
-                "horizons": horizons[:7],
+        if staff_df.empty:
+            result["error"] = "No staff scheduling data found in database."
+            return result
+
+        result["success"] = True
+        result["data"] = staff_df
+
+        # Calculate statistics
+        result["stats"] = {
+            "total_records": len(staff_df),
+            "avg_doctors": int(staff_df["Doctors_on_Duty"].mean()) if "Doctors_on_Duty" in staff_df.columns else 0,
+            "avg_nurses": int(staff_df["Nurses_on_Duty"].mean()) if "Nurses_on_Duty" in staff_df.columns else 0,
+            "avg_support": int(staff_df["Support_Staff_on_Duty"].mean()) if "Support_Staff_on_Duty" in staff_df.columns else 0,
+            "total_overtime": float(staff_df["Overtime_Hours"].sum()) if "Overtime_Hours" in staff_df.columns else 0,
+            "avg_utilization": float(staff_df["Staff_Utilization_Rate"].mean()) if "Staff_Utilization_Rate" in staff_df.columns else 0,
+            "shortage_days": int(staff_df["Staff_Shortage_Flag"].sum()) if "Staff_Shortage_Flag" in staff_df.columns else 0,
+            "date_start": staff_df["Date"].min() if "Date" in staff_df.columns else None,
+            "date_end": staff_df["Date"].max() if "Date" in staff_df.columns else None,
+        }
+
+        return result
+
+    except Exception as e:
+        result["error"] = str(e)
+        return result
+
+
+def fetch_financial_data_from_api() -> Dict[str, Any]:
+    """Fetch financial data from Supabase API."""
+    result = {
+        "success": False,
+        "data": None,
+        "cost_params": DEFAULT_COST_PARAMS.copy(),
+        "kpis": {},
+        "error": None,
+    }
+
+    try:
+        financial_service = get_financial_service()
+        if not financial_service.is_connected():
+            result["error"] = "Supabase not connected."
+            return result
+
+        # Fetch labor cost parameters
+        labor_params = financial_service.get_labor_cost_params()
+        if labor_params:
+            result["cost_params"] = {
+                "doctor_hourly": labor_params.get("doctor_hourly_rate", 150),
+                "nurse_hourly": labor_params.get("nurse_hourly_rate", 50),
+                "support_hourly": labor_params.get("support_hourly_rate", 25),
+                "shift_hours": 8,
+                "overtime_multiplier": labor_params.get("overtime_multiplier", 1.5),
+                "understaffing_penalty_per_patient": labor_params.get("understaffing_penalty", 200),
+                "overstaffing_penalty": labor_params.get("overstaffing_penalty", 0),
             }
-    except Exception:
-        pass
 
-    return None
+        # Fetch comprehensive KPIs
+        kpis = financial_service.get_comprehensive_financial_kpis()
+        if kpis:
+            result["kpis"] = kpis
 
+        # Fetch raw data
+        fin_df = financial_service.fetch_all()
+        if not fin_df.empty:
+            result["data"] = fin_df
+            result["success"] = True
+        else:
+            result["success"] = True  # Cost params loaded even if no raw data
 
-def extract_forecast_from_sarimax() -> Optional[Dict[str, Any]]:
-    """
-    Extract forecast data from SARIMAX results.
-    """
-    sarimax_results = st.session_state.get("sarimax_results")
-    if not sarimax_results or not isinstance(sarimax_results, dict):
-        return None
+        return result
 
-    try:
-        fc = sarimax_results.get("forecast")
-        if fc is not None:
-            fc_arr = fc.values if hasattr(fc, 'values') else np.array(fc)
-            if len(fc_arr) > 0:
-                forecasts = list(fc_arr[:7])
-                return {
-                    "model": "SARIMAX",
-                    "forecasts": forecasts,
-                    "horizons": list(range(1, len(forecasts) + 1)),
-                }
-    except Exception:
-        pass
-
-    return None
+    except Exception as e:
+        result["error"] = str(e)
+        return result
 
 
 def get_forecast_data() -> Dict[str, Any]:
-    """
-    Extract forecast data from session state.
-    Priority: ML models > ARIMA > SARIMAX
-    Returns total patient forecast and by clinical category.
-    """
+    """Extract forecast data from session state."""
     result = {
         "has_forecast": False,
         "source": None,
@@ -633,40 +465,63 @@ def get_forecast_data() -> Dict[str, Any]:
         "horizon": 0,
     }
 
-    # Try each source in priority order
-    forecast_source = None
+    # Try ML models
+    ml_results = st.session_state.get("ml_mh_results")
+    if ml_results and isinstance(ml_results, dict):
+        for model_name in ["XGBoost", "LSTM", "ANN"]:
+            if model_name in ml_results:
+                per_h = ml_results[model_name].get("per_h", {})
+                if per_h:
+                    try:
+                        horizons = sorted([int(h) for h in per_h.keys()])
+                        forecasts = []
+                        for h in horizons[:7]:
+                            h_data = per_h.get(h, {})
+                            pred = h_data.get("predictions") or h_data.get("forecast") or h_data.get("y_pred")
+                            if pred is not None:
+                                pred_arr = pred.values if hasattr(pred, 'values') else np.array(pred)
+                                forecasts.append(float(pred_arr[-1]) if len(pred_arr) > 0 else 0)
 
-    # 1. Try ML models
-    forecast_source = extract_forecast_from_ml_results()
+                        if forecasts:
+                            result["has_forecast"] = True
+                            result["source"] = f"ML ({model_name})"
+                            result["total_forecast"] = forecasts
+                            result["horizon"] = len(forecasts)
+                            break
+                    except Exception:
+                        continue
 
-    # 2. Try ARIMA
-    if not forecast_source:
-        forecast_source = extract_forecast_from_arima()
+    # Try ARIMA
+    if not result["has_forecast"]:
+        arima_results = st.session_state.get("arima_mh_results")
+        if arima_results and isinstance(arima_results, dict):
+            per_h = arima_results.get("per_h", {})
+            if per_h:
+                try:
+                    horizons = sorted([int(h) for h in per_h.keys()])
+                    forecasts = []
+                    for h in horizons[:7]:
+                        fc = per_h.get(h, {}).get("forecast")
+                        if fc is not None:
+                            fc_arr = fc.values if hasattr(fc, 'values') else np.array(fc)
+                            forecasts.append(float(fc_arr[-1]) if len(fc_arr) > 0 else 0)
 
-    # 3. Try SARIMAX
-    if not forecast_source:
-        forecast_source = extract_forecast_from_sarimax()
+                    if forecasts:
+                        result["has_forecast"] = True
+                        result["source"] = "ARIMA"
+                        result["total_forecast"] = forecasts
+                        result["horizon"] = len(forecasts)
+                except Exception:
+                    pass
 
-    if forecast_source:
-        result["has_forecast"] = True
-        result["source"] = forecast_source["model"]
-        result["total_forecast"] = forecast_source["forecasts"]
-        result["horizon"] = len(forecast_source["forecasts"])
-
-        # Generate dates
+    # Generate dates and category distribution
+    if result["has_forecast"]:
         today = datetime.now().date()
-        result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d")
-                          for i in range(1, result["horizon"] + 1)]
+        result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, result["horizon"] + 1)]
 
-        # Distribute total forecast by clinical category
         distribution = {
-            "CARDIAC": 0.15,
-            "TRAUMA": 0.20,
-            "RESPIRATORY": 0.25,
-            "GASTROINTESTINAL": 0.15,
-            "INFECTIOUS": 0.15,
-            "NEUROLOGICAL": 0.05,
-            "OTHER": 0.05,
+            "CARDIAC": 0.15, "TRAUMA": 0.20, "RESPIRATORY": 0.25,
+            "GASTROINTESTINAL": 0.15, "INFECTIOUS": 0.15, "NEUROLOGICAL": 0.05, "OTHER": 0.05,
         }
         for cat, pct in distribution.items():
             result["category_forecast"][cat] = [f * pct for f in result["total_forecast"]]
@@ -674,712 +529,427 @@ def get_forecast_data() -> Dict[str, Any]:
     return result
 
 
-def get_historical_data() -> Dict[str, Any]:
-    """
-    Extract historical patient data for BEFORE analysis.
-    """
-    result = {
-        "has_data": False,
-        "daily_patients": [],
-        "dates": [],
-        "category_data": {},
-    }
-
-    # Try to get processed data
-    processed_df = st.session_state.get("processed_df")
-    if processed_df is not None and len(processed_df) > 0:
-        result["has_data"] = True
-
-        # Get last 30 days of data
-        if "patient_count" in processed_df.columns:
-            result["daily_patients"] = processed_df["patient_count"].tail(30).tolist()
-        elif "Target_1" in processed_df.columns:
-            result["daily_patients"] = processed_df["Target_1"].tail(30).tolist()
-
-        # Get category data if available
-        for cat in ["CARDIAC", "TRAUMA", "RESPIRATORY", "GASTROINTESTINAL", "INFECTIOUS", "NEUROLOGICAL"]:
-            if cat in processed_df.columns:
-                result["category_data"][cat] = processed_df[cat].tail(30).tolist()
-
-    return result
-
-
-def calculate_staff_needed(patients_by_category: Dict[str, float]) -> Dict[str, int]:
-    """
-    Calculate staff needed based on patient forecast by category.
-
-    Formula: staff = ceil(patients / ratio)
-    """
-    doctors = 0
-    nurses = 0
-    support = 0
-
-    for category, patients in patients_by_category.items():
-        if category in STAFFING_RATIOS:
-            ratios = STAFFING_RATIOS[category]
-            doctors += np.ceil(patients / ratios["doctors"])
-            nurses += np.ceil(patients / ratios["nurses"])
-            support += np.ceil(patients / ratios["support"])
-
-    return {
-        "doctors": int(doctors),
-        "nurses": int(nurses),
-        "support": int(support),
-        "total": int(doctors + nurses + support),
-    }
-
-
-def calculate_daily_cost(staff: Dict[str, int], overtime_hours: float = 0) -> float:
-    """
-    Calculate daily staffing cost.
-    """
-    regular_cost = (
-        staff["doctors"] * COST_PARAMS["doctor_hourly"] * COST_PARAMS["shift_hours"] +
-        staff["nurses"] * COST_PARAMS["nurse_hourly"] * COST_PARAMS["shift_hours"] +
-        staff["support"] * COST_PARAMS["support_hourly"] * COST_PARAMS["shift_hours"]
-    )
-
-    overtime_cost = overtime_hours * COST_PARAMS["nurse_hourly"] * COST_PARAMS["overtime_multiplier"]
-
-    return regular_cost + overtime_cost
-
-
-def analyze_before_scenario(historical_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Analyze BEFORE scenario: Uses REAL Supabase staff data when available.
-
-    Priority:
-    1. Real staff data from Supabase (STAFF_DATA)
-    2. Historical patient data (processed_df)
-    3. Default values if nothing available
-    """
-    # Check if we have real Supabase staff data
-    has_supabase_staff = STAFF_DATA.get("has_data", False)
-    has_patient_data = historical_data.get("has_data", False)
-
-    if not has_supabase_staff and not has_patient_data:
-        return {"has_analysis": False}
-
-    # Use real Supabase data if available
-    if has_supabase_staff and STAFF_DATA.get("daily_data") is not None:
-        staff_df = STAFF_DATA["daily_data"]
-        total_days = len(staff_df)
-
-        # Real overtime from Supabase
-        total_overtime_hours = STAFF_DATA.get("overtime_hours", 0)
-        understaffed_days = STAFF_DATA.get("shortage_days", 0)
-        utilization_rate = STAFF_DATA.get("utilization_rate", 0)
-
-        # Calculate costs from real financial data
-        fixed_daily_cost = calculate_daily_cost(FIXED_STAFFING)
-        total_labor_cost = fixed_daily_cost * total_days
-        total_overtime_cost = total_overtime_hours * COST_PARAMS["nurse_hourly"] * COST_PARAMS["overtime_multiplier"]
-
-        # Use real financial KPIs if available
-        if FINANCIAL_KPIS:
-            penalties = FINANCIAL_KPIS.get("penalties", {})
-            total_penalty = penalties.get("total_understaffing_penalty", 0)
-            overstaffing_cost = penalties.get("total_overstaffing_cost", 0)
-        else:
-            total_penalty = understaffed_days * COST_PARAMS["understaffing_penalty_per_patient"]
-            overstaffing_cost = 0
-
-        # Calculate overstaffed days from utilization
-        overstaffed_days = int(total_days * max(0, (1 - utilization_rate / 100)) * 0.3) if utilization_rate else 0
-        efficiency_rate = utilization_rate if utilization_rate else 70
-
-        data_source = "supabase"
-
-    else:
-        # Fallback to patient data analysis
-        daily_patients = historical_data.get("daily_patients", [])
-        if not daily_patients:
-            return {"has_analysis": False}
-
-        fixed_daily_cost = calculate_daily_cost(FIXED_STAFFING)
-
-        overtime_days = 0
-        understaffed_days = 0
-        overstaffed_days = 0
-        total_overtime_hours = 0
-        total_penalty = 0
-
-        fixed_capacity = FIXED_STAFFING["doctors"] * 10 + FIXED_STAFFING["nurses"] * 6 + FIXED_STAFFING["support"] * 3
-
-        for patients in daily_patients:
-            if patients > fixed_capacity * 1.1:
-                understaffed_days += 1
-                overtime = (patients - fixed_capacity) / 5
-                total_overtime_hours += overtime
-                excess_patients = patients - fixed_capacity
-                total_penalty += excess_patients * COST_PARAMS["understaffing_penalty_per_patient"] * 0.1
-            elif patients < fixed_capacity * 0.7:
-                overstaffed_days += 1
-
-        total_days = len(daily_patients)
-        total_labor_cost = fixed_daily_cost * total_days
-        total_overtime_cost = total_overtime_hours * COST_PARAMS["nurse_hourly"] * COST_PARAMS["overtime_multiplier"]
-        overstaffing_cost = 0
-        efficiency_rate = 100 - (understaffed_days + overstaffed_days) / total_days * 100
-        data_source = "patient_data"
-
-    return {
-        "has_analysis": True,
-        "data_source": data_source,
-        "total_days": total_days,
-        "fixed_staff": FIXED_STAFFING,
-        "fixed_daily_cost": fixed_daily_cost,
-        "total_labor_cost": total_labor_cost,
-        "overtime_days": understaffed_days,  # Days with overtime needed
-        "understaffed_days": understaffed_days,
-        "overstaffed_days": overstaffed_days,
-        "total_overtime_hours": total_overtime_hours,
-        "total_overtime_cost": total_overtime_cost,
-        "overstaffing_cost": overstaffing_cost,
-        "total_penalty": total_penalty,
-        "total_cost": total_labor_cost + total_overtime_cost + total_penalty,
-        "avg_daily_cost": (total_labor_cost + total_overtime_cost + total_penalty) / total_days if total_days > 0 else 0,
-        "efficiency_rate": efficiency_rate,
-    }
-
-
-def analyze_after_scenario(forecast_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Analyze AFTER scenario: Forecast-driven dynamic staffing.
-    """
+def calculate_optimized_schedule(forecast_data: Dict[str, Any], cost_params: Dict[str, Any]) -> Dict[str, Any]:
+    """Calculate optimized staffing schedule based on forecast."""
     if not forecast_data["has_forecast"]:
-        return {"has_analysis": False}
+        return {"success": False, "error": "No forecast data available"}
 
-    daily_costs = []
-    daily_staff = []
+    daily_schedules = []
+    total_cost = 0
 
     for day_idx in range(forecast_data["horizon"]):
-        # Get patients by category for this day
-        patients_by_category = {}
-        for cat, forecasts in forecast_data["category_forecast"].items():
-            if day_idx < len(forecasts):
-                patients_by_category[cat] = forecasts[day_idx]
+        patients_by_category = {cat: forecasts[day_idx] for cat, forecasts in forecast_data["category_forecast"].items() if day_idx < len(forecasts)}
 
         # Calculate optimal staff
-        staff = calculate_staff_needed(patients_by_category)
-        daily_staff.append(staff)
+        doctors = sum(np.ceil(patients / STAFFING_RATIOS[cat]["doctors"]) for cat, patients in patients_by_category.items() if cat in STAFFING_RATIOS)
+        nurses = sum(np.ceil(patients / STAFFING_RATIOS[cat]["nurses"]) for cat, patients in patients_by_category.items() if cat in STAFFING_RATIOS)
+        support = sum(np.ceil(patients / STAFFING_RATIOS[cat]["support"]) for cat, patients in patients_by_category.items() if cat in STAFFING_RATIOS)
 
-        # Calculate cost (no overtime needed with proper staffing)
-        cost = calculate_daily_cost(staff, overtime_hours=0)
-        daily_costs.append(cost)
+        # Calculate cost
+        daily_cost = (
+            doctors * cost_params["doctor_hourly"] * cost_params["shift_hours"] +
+            nurses * cost_params["nurse_hourly"] * cost_params["shift_hours"] +
+            support * cost_params["support_hourly"] * cost_params["shift_hours"]
+        )
 
-    total_cost = sum(daily_costs)
+        daily_schedules.append({
+            "date": forecast_data["dates"][day_idx],
+            "expected_patients": sum(patients_by_category.values()),
+            "doctors": int(doctors),
+            "nurses": int(nurses),
+            "support": int(support),
+            "total_staff": int(doctors + nurses + support),
+            "daily_cost": daily_cost,
+        })
+
+        total_cost += daily_cost
 
     return {
-        "has_analysis": True,
-        "horizon": forecast_data["horizon"],
-        "source": forecast_data["source"],
-        "daily_staff": daily_staff,
-        "daily_costs": daily_costs,
+        "success": True,
+        "schedules": daily_schedules,
         "total_cost": total_cost,
         "avg_daily_cost": total_cost / forecast_data["horizon"],
-        "total_forecast": forecast_data["total_forecast"],
-        "category_forecast": forecast_data["category_forecast"],
-        "dates": forecast_data["dates"],
-        "overtime_hours": 0,  # Proper staffing = no overtime
-        "overtime_cost": 0,
-        "penalty": 0,  # Proper staffing = no understaffing penalty
+        "horizon": forecast_data["horizon"],
+        "source": forecast_data["source"],
     }
 
 
 # =============================================================================
-# LOAD DATA
+# MAIN INTERFACE
 # =============================================================================
 
-forecast_data = get_forecast_data()
-historical_data = get_historical_data()
+# Step indicator
+step1_complete = st.session_state.staff_db_loaded
+step2_complete = step1_complete
+step3_complete = st.session_state.optimization_applied
 
-# Show data status with styled badges
-st.markdown("### 📡 Data Connection Status")
-col1, col2, col3 = st.columns(3)
+st.markdown("---")
+
+# =============================================================================
+# STEP 1: LOAD DATA FROM DATABASE
+# =============================================================================
+step1_class = "completed" if step1_complete else "active"
+st.markdown(f"""
+<div class="step-card {step1_class}">
+    <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+        <span class="step-number {'completed' if step1_complete else ''}">{'✓' if step1_complete else '1'}</span>
+        <span class="step-title">Load Hospital Data from Database</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([2, 2, 2])
 
 with col1:
-    if forecast_data["has_forecast"]:
-        st.markdown(f"""
-        <div class="data-source-badge">
-            ✅ Forecast: {forecast_data['source']} ({forecast_data['horizon']} days)
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="data-source-badge warning">
-            ⚠️ No forecast - Run models in Modeling Hub
-        </div>
-        """, unsafe_allow_html=True)
+    if st.button("🔄 Load Staff & Financial Data", type="primary", use_container_width=True):
+        with st.spinner("Fetching data from Supabase..."):
+            # Fetch staff data
+            staff_result = fetch_staff_data_from_api()
+
+            # Fetch financial data
+            fin_result = fetch_financial_data_from_api()
+
+            if staff_result["success"]:
+                st.session_state.staff_data = staff_result
+                st.session_state.staff_db_loaded = True
+
+                if fin_result["success"]:
+                    st.session_state.financial_data = fin_result
+                    st.session_state.cost_params = fin_result["cost_params"]
+
+                st.success(f"✅ Loaded {staff_result['stats']['total_records']} staff records!")
+                st.rerun()
+            else:
+                st.error(f"❌ Failed to load data: {staff_result['error']}")
 
 with col2:
-    if STAFF_DATA["has_data"]:
-        st.markdown(f"""
-        <div class="data-source-badge">
-            ✅ Staff Data: Supabase ({STAFF_DATA['total_records']} records)
-        </div>
-        """, unsafe_allow_html=True)
+    if step1_complete:
+        st.success(f"✅ {st.session_state.staff_data['stats']['total_records']} days loaded")
     else:
-        st.markdown("""
-        <div class="data-source-badge warning">
-            ⚠️ Staff: Using defaults (Supabase not connected)
-        </div>
-        """, unsafe_allow_html=True)
+        st.info("Click button to fetch from Supabase")
 
 with col3:
-    if COST_PARAMS.get("source") == "supabase":
-        st.markdown("""
-        <div class="data-source-badge">
-            ✅ Costs: Supabase (Real financial data)
+    if st.button("🗑️ Clear Data", use_container_width=True):
+        st.session_state.staff_db_loaded = False
+        st.session_state.staff_data = None
+        st.session_state.financial_data = None
+        st.session_state.optimization_applied = False
+        st.session_state.optimized_schedule = None
+        st.rerun()
+
+st.markdown("---")
+
+# =============================================================================
+# STEP 2: CURRENT HOSPITAL SITUATION (Expert Manager View)
+# =============================================================================
+if st.session_state.staff_db_loaded and st.session_state.staff_data:
+
+    step2_class = "completed" if step2_complete else "active"
+    st.markdown(f"""
+    <div class="step-card {step2_class}">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+            <span class="step-number {'completed' if step2_complete else ''}">{'✓' if step2_complete else '2'}</span>
+            <span class="step-title">Current Hospital Situation - Expert Manager Dashboard</span>
         </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="data-source-badge warning">
-            ⚠️ Costs: Using defaults
+    </div>
+    """, unsafe_allow_html=True)
+
+    stats = st.session_state.staff_data["stats"]
+    cost_params = st.session_state.cost_params
+
+    # Date range info
+    st.markdown(f"""
+    <div class="alert-box info">
+        📅 Data Period: <strong>{stats['date_start'].strftime('%Y-%m-%d') if stats['date_start'] else 'N/A'}</strong>
+        to <strong>{stats['date_end'].strftime('%Y-%m-%d') if stats['date_end'] else 'N/A'}</strong>
+        ({stats['total_records']} days)
+    </div>
+    """, unsafe_allow_html=True)
+
+    # KPI Cards Row 1: Staff Levels
+    st.markdown("### 👥 Current Staffing Levels (Daily Averages)")
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-value blue">{stats['avg_doctors']}</div>
+            <div class="kpi-label">Doctors/Day</div>
+            <div class="kpi-delta">@ ${cost_params['doctor_hourly']}/hr</div>
         </div>
         """, unsafe_allow_html=True)
 
-# Show additional data source info
-if STAFF_DATA["has_data"] or historical_data["has_data"]:
-    with st.expander("📊 Data Source Details", expanded=False):
-        col1, col2 = st.columns(2)
+    with col2:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-value blue">{stats['avg_nurses']}</div>
+            <div class="kpi-label">Nurses/Day</div>
+            <div class="kpi-delta">@ ${cost_params['nurse_hourly']}/hr</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-value blue">{stats['avg_support']}</div>
+            <div class="kpi-label">Support Staff/Day</div>
+            <div class="kpi-delta">@ ${cost_params['support_hourly']}/hr</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        total_staff = stats['avg_doctors'] + stats['avg_nurses'] + stats['avg_support']
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-value green">{total_staff}</div>
+            <div class="kpi-label">Total Staff/Day</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # KPI Cards Row 2: Financial & Efficiency
+    st.markdown("### 💰 Financial & Operational Metrics")
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Calculate daily cost
+    daily_labor_cost = (
+        stats['avg_doctors'] * cost_params['doctor_hourly'] * cost_params['shift_hours'] +
+        stats['avg_nurses'] * cost_params['nurse_hourly'] * cost_params['shift_hours'] +
+        stats['avg_support'] * cost_params['support_hourly'] * cost_params['shift_hours']
+    )
+
+    with col1:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-value yellow">${daily_labor_cost:,.0f}</div>
+            <div class="kpi-label">Daily Labor Cost</div>
+            <div class="kpi-delta">${daily_labor_cost * 30:,.0f}/month</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        utilization = stats['avg_utilization']
+        card_class = "success" if utilization >= 80 else "warning" if utilization >= 60 else "danger"
+        st.markdown(f"""
+        <div class="kpi-card {card_class}">
+            <div class="kpi-value {'green' if utilization >= 80 else 'yellow' if utilization >= 60 else 'red'}">{utilization:.1f}%</div>
+            <div class="kpi-label">Staff Utilization</div>
+            <div class="kpi-delta">{'Good' if utilization >= 80 else 'Needs Improvement' if utilization >= 60 else 'Critical'}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        overtime = stats['total_overtime']
+        overtime_cost = overtime * cost_params['nurse_hourly'] * cost_params['overtime_multiplier']
+        card_class = "danger" if overtime > 100 else "warning" if overtime > 50 else ""
+        st.markdown(f"""
+        <div class="kpi-card {card_class}">
+            <div class="kpi-value {'red' if overtime > 100 else 'yellow' if overtime > 50 else 'blue'}">{overtime:.0f}h</div>
+            <div class="kpi-label">Total Overtime Hours</div>
+            <div class="kpi-delta negative">${overtime_cost:,.0f} extra cost</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        shortage = stats['shortage_days']
+        shortage_pct = (shortage / stats['total_records'] * 100) if stats['total_records'] > 0 else 0
+        card_class = "danger" if shortage_pct > 20 else "warning" if shortage_pct > 10 else "success"
+        st.markdown(f"""
+        <div class="kpi-card {card_class}">
+            <div class="kpi-value {'red' if shortage_pct > 20 else 'yellow' if shortage_pct > 10 else 'green'}">{shortage}</div>
+            <div class="kpi-label">Staff Shortage Days</div>
+            <div class="kpi-delta {'negative' if shortage > 0 else ''}">{shortage_pct:.1f}% of days</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Issues Summary
+    st.markdown("### ⚠️ Current Issues & Alerts")
+
+    issues = []
+    if utilization < 70:
+        issues.append(("danger", f"LOW UTILIZATION: Staff utilization at {utilization:.1f}% - potential overstaffing"))
+    elif utilization < 80:
+        issues.append(("warning", f"MODERATE UTILIZATION: Staff utilization at {utilization:.1f}% - room for improvement"))
+
+    if overtime > 100:
+        issues.append(("danger", f"HIGH OVERTIME: {overtime:.0f} hours of overtime costing ${overtime_cost:,.0f}"))
+    elif overtime > 50:
+        issues.append(("warning", f"MODERATE OVERTIME: {overtime:.0f} hours of overtime"))
+
+    if shortage > stats['total_records'] * 0.2:
+        issues.append(("danger", f"FREQUENT SHORTAGES: {shortage} days ({shortage_pct:.1f}%) with staff shortage"))
+    elif shortage > stats['total_records'] * 0.1:
+        issues.append(("warning", f"OCCASIONAL SHORTAGES: {shortage} days ({shortage_pct:.1f}%) with staff shortage"))
+
+    if not issues:
+        issues.append(("success", "All metrics within acceptable ranges. Hospital staffing is well-managed."))
+
+    for level, msg in issues:
+        st.markdown(f'<div class="alert-box {level}">{msg}</div>', unsafe_allow_html=True)
+
+    # Data Table
+    with st.expander("📋 View Raw Staff Data", expanded=False):
+        if st.session_state.staff_data["data"] is not None:
+            st.dataframe(st.session_state.staff_data["data"].tail(30), use_container_width=True)
+
+    st.markdown("---")
+
+    # ==========================================================================
+    # STEP 3: OPTIMIZE WITH FORECAST
+    # ==========================================================================
+    forecast_data = get_forecast_data()
+
+    step3_class = "completed" if step3_complete else "active" if forecast_data["has_forecast"] else ""
+    st.markdown(f"""
+    <div class="step-card {step3_class}">
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+            <span class="step-number {'completed' if step3_complete else ''}">{'✓' if step3_complete else '3'}</span>
+            <span class="step-title">Optimize Staffing with Forecast</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not forecast_data["has_forecast"]:
+        st.warning("""
+        ⚠️ **No forecast data available!**
+
+        Please run forecasting models in the **Modeling Hub (Page 08)** first, then return here to optimize staffing.
+        """)
+    else:
+        st.markdown(f"""
+        <div class="alert-box success">
+            ✅ Forecast Available: <strong>{forecast_data['source']}</strong> - {forecast_data['horizon']} days ahead
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2 = st.columns([1, 2])
+
         with col1:
-            st.markdown("**Staff Scheduling (Supabase):**")
-            if STAFF_DATA["has_data"]:
-                st.markdown(f"""
-                - Records: **{STAFF_DATA['total_records']}** days
-                - Avg Doctors: **{STAFF_DATA['avg_doctors']}**/day
-                - Avg Nurses: **{STAFF_DATA['avg_nurses']}**/day
-                - Avg Support: **{STAFF_DATA['avg_support']}**/day
-                - Overtime Hours: **{STAFF_DATA['overtime_hours']:.0f}** total
-                - Shortage Days: **{STAFF_DATA['shortage_days']}**
-                """)
-            else:
-                st.markdown("*Using default values*")
+            if st.button("🚀 Apply Forecast Optimization", type="primary", use_container_width=True):
+                with st.spinner("Calculating optimized schedule..."):
+                    optimized = calculate_optimized_schedule(forecast_data, cost_params)
+
+                    if optimized["success"]:
+                        st.session_state.optimized_schedule = optimized
+                        st.session_state.optimization_applied = True
+                        st.success("✅ Optimization complete!")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Optimization failed: {optimized.get('error', 'Unknown error')}")
 
         with col2:
-            st.markdown("**Financial Data (Supabase):**")
-            if COST_PARAMS.get("source") == "supabase":
-                st.markdown(f"""
-                - Doctor Rate: **${COST_PARAMS['doctor_hourly']:.0f}**/hr
-                - Nurse Rate: **${COST_PARAMS['nurse_hourly']:.0f}**/hr
-                - Support Rate: **${COST_PARAMS['support_hourly']:.0f}**/hr
-                - Overtime Multiplier: **{COST_PARAMS['overtime_multiplier']:.1f}x**
-                """)
+            if st.session_state.optimization_applied:
+                st.success("✅ Optimization applied - see results below")
             else:
-                st.markdown("*Using default values*")
-
-
-# =============================================================================
-# ANALYSIS
-# =============================================================================
-
-# Check if we have any data to analyze
-has_any_data = (
-    forecast_data["has_forecast"] or
-    historical_data["has_data"] or
-    STAFF_DATA.get("has_data", False)
-)
-
-if has_any_data:
-
-    before_analysis = analyze_before_scenario(historical_data)
-    after_analysis = analyze_after_scenario(forecast_data)
+                st.info("Click to generate optimized schedule based on patient forecast")
 
     # ==========================================================================
-    # TAB LAYOUT
+    # OPTIMIZATION RESULTS
     # ==========================================================================
+    if st.session_state.optimization_applied and st.session_state.optimized_schedule:
+        st.markdown("---")
+        st.markdown('<div class="section-header">📊 Optimization Results: Before vs After</div>', unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Executive Summary",
-        "🔴 BEFORE Analysis",
-        "🟢 AFTER Analysis",
-        "📈 Comparison Charts"
-    ])
+        optimized = st.session_state.optimized_schedule
+        current_daily_cost = daily_labor_cost
+        optimized_daily_cost = optimized["avg_daily_cost"]
 
-    # ==========================================================================
-    # TAB 1: EXECUTIVE SUMMARY
-    # ==========================================================================
-    with tab1:
-        st.markdown('<div class="section-header">💰 Financial Impact Summary</div>', unsafe_allow_html=True)
+        # Financial Impact Summary
+        weekly_before = current_daily_cost * 7
+        weekly_after = optimized["total_cost"]
+        weekly_savings = weekly_before - weekly_after
+        savings_pct = (weekly_savings / weekly_before * 100) if weekly_before > 0 else 0
 
-        if before_analysis.get("has_analysis") and after_analysis.get("has_analysis"):
-            # Calculate savings
-            # Normalize to same period (7 days)
-            before_weekly = before_analysis["avg_daily_cost"] * 7
-            after_weekly = after_analysis["total_cost"]
+        st.markdown("### 💰 Financial Impact (Weekly)")
+        col1, col2, col3, col4 = st.columns(4)
 
-            weekly_savings = before_weekly - after_weekly
-            savings_pct = (weekly_savings / before_weekly) * 100 if before_weekly > 0 else 0
-            annual_savings = weekly_savings * 52
-
-            # Display metrics
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                st.markdown(f"""
-                <div class="metric-card before">
-                    <div class="metric-value red">${before_weekly:,.0f}</div>
-                    <div class="metric-label">BEFORE (Weekly Cost)</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col2:
-                st.markdown(f"""
-                <div class="metric-card after">
-                    <div class="metric-value green">${after_weekly:,.0f}</div>
-                    <div class="metric-label">AFTER (Weekly Cost)</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col3:
-                st.markdown(f"""
-                <div class="metric-card savings">
-                    <div class="metric-value yellow">${weekly_savings:,.0f}</div>
-                    <div class="metric-label">Weekly Savings ({savings_pct:.1f}%)</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col4:
-                st.markdown(f"""
-                <div class="metric-card savings">
-                    <div class="metric-value yellow">${annual_savings:,.0f}</div>
-                    <div class="metric-label">Projected Annual Savings</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # Key insights
-            st.markdown("---")
-            st.markdown("### 🎯 Key Insights")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.markdown("**Problems with Fixed Staffing (BEFORE):**")
-                st.markdown(f"""
-                - 📅 Analyzed **{before_analysis['total_days']} days** of historical data
-                - ⚠️ **{before_analysis['understaffed_days']} days** understaffed (overtime needed)
-                - 💸 **{before_analysis['overstaffed_days']} days** overstaffed (wasted labor)
-                - ⏰ **{before_analysis['total_overtime_hours']:.0f} hours** of overtime
-                - 📉 Staffing efficiency: **{before_analysis['efficiency_rate']:.1f}%**
-                """)
-
-            with col2:
-                st.markdown("**Benefits of Forecast-Driven Staffing (AFTER):**")
-                st.markdown(f"""
-                - 🎯 Staff matches **predicted demand** each day
-                - ✅ **Zero overtime** needed (right staff, right time)
-                - ✅ **No understaffing** penalties
-                - 📊 Based on **{after_analysis['source']}** predictions
-                - 💰 **{savings_pct:.1f}% cost reduction**
-                """)
-
-        else:
-            st.info("Run forecasting models and load historical data to see the comparison.")
-
-    # ==========================================================================
-    # TAB 2: BEFORE ANALYSIS
-    # ==========================================================================
-    with tab2:
-        st.markdown('<div class="section-header">🔴 BEFORE: Fixed Staffing Analysis</div>', unsafe_allow_html=True)
-
-        if before_analysis.get("has_analysis"):
-            # Show data source
-            data_source = before_analysis.get("data_source", "unknown")
-            if data_source == "supabase":
-                st.success("📊 **Using REAL data from Supabase** (staff_scheduling & financial_data tables)")
-            else:
-                st.info("📊 Using patient volume data for analysis")
-
-            st.markdown("""
-            **Traditional Approach:** Hospital schedules the same number of staff every day,
-            regardless of expected patient volume.
-            """)
-
-            # Fixed staffing display
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Doctors (Daily)", f"{FIXED_STAFFING['doctors']}", "Fixed")
-            with col2:
-                st.metric("Nurses (Daily)", f"{FIXED_STAFFING['nurses']}", "Fixed")
-            with col3:
-                st.metric("Support Staff (Daily)", f"{FIXED_STAFFING['support']}", "Fixed")
-
-            st.markdown("---")
-
-            # Cost breakdown
-            st.markdown("### 💰 Cost Breakdown")
-
-            cost_data = {
-                "Category": ["Regular Labor", "Overtime", "Understaffing Penalty", "TOTAL"],
-                "Amount": [
-                    f"${before_analysis['total_labor_cost']:,.0f}",
-                    f"${before_analysis['total_overtime_cost']:,.0f}",
-                    f"${before_analysis['total_penalty']:,.0f}",
-                    f"${before_analysis['total_cost']:,.0f}",
-                ],
-                "Per Day": [
-                    f"${before_analysis['fixed_daily_cost']:,.0f}",
-                    f"${before_analysis['total_overtime_cost']/before_analysis['total_days']:,.0f}",
-                    f"${before_analysis['total_penalty']/before_analysis['total_days']:,.0f}",
-                    f"${before_analysis['avg_daily_cost']:,.0f}",
-                ],
-            }
-            st.dataframe(pd.DataFrame(cost_data), use_container_width=True, hide_index=True)
-
-            # Problem visualization
-            if historical_data["daily_patients"]:
-                st.markdown("### 📊 Demand vs Fixed Capacity")
-
-                fig = go.Figure()
-
-                # Patient demand line
-                fig.add_trace(go.Scatter(
-                    y=historical_data["daily_patients"],
-                    mode='lines+markers',
-                    name='Actual Patient Demand',
-                    line=dict(color='#3b82f6', width=2),
-                ))
-
-                # Fixed capacity line
-                fixed_capacity = FIXED_STAFFING["doctors"] * 10 + FIXED_STAFFING["nurses"] * 6 + FIXED_STAFFING["support"] * 3
-                fig.add_hline(
-                    y=fixed_capacity,
-                    line_dash="dash",
-                    line_color="#ef4444",
-                    annotation_text=f"Fixed Capacity ({fixed_capacity})",
-                )
-
-                fig.update_layout(
-                    title="Patient Demand vs Fixed Staff Capacity",
-                    xaxis_title="Day",
-                    yaxis_title="Patients",
-                    template="plotly_dark",
-                    height=400,
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-
-                st.caption("🔴 Days above the line = understaffed (overtime/poor care). Days far below = overstaffed (wasted money).")
-
-        else:
-            st.info("Load historical data to analyze the BEFORE scenario.")
-
-    # ==========================================================================
-    # TAB 3: AFTER ANALYSIS
-    # ==========================================================================
-    with tab3:
-        st.markdown('<div class="section-header">🟢 AFTER: Forecast-Driven Staffing</div>', unsafe_allow_html=True)
-
-        if after_analysis.get("has_analysis"):
+        with col1:
             st.markdown(f"""
-            **Forecast-Driven Approach:** Staff allocation based on **{after_analysis['source']}** predictions.
-            Staff levels adjust daily to match predicted patient volume by clinical category.
-            """)
+            <div class="kpi-card danger">
+                <div class="kpi-value red">${weekly_before:,.0f}</div>
+                <div class="kpi-label">BEFORE (Current)</div>
+                <div class="kpi-delta">Fixed staffing</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # Daily staffing table
-            st.markdown("### 📅 Recommended Weekly Schedule")
+        with col2:
+            st.markdown(f"""
+            <div class="kpi-card success">
+                <div class="kpi-value green">${weekly_after:,.0f}</div>
+                <div class="kpi-label">AFTER (Optimized)</div>
+                <div class="kpi-delta">Forecast-driven</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            schedule_data = []
-            for i, (date, staff) in enumerate(zip(after_analysis["dates"], after_analysis["daily_staff"])):
-                total_patients = after_analysis["total_forecast"][i] if i < len(after_analysis["total_forecast"]) else 0
-                schedule_data.append({
-                    "Day": date,
-                    "Expected Patients": f"{total_patients:.0f}",
-                    "Doctors": staff["doctors"],
-                    "Nurses": staff["nurses"],
-                    "Support": staff["support"],
-                    "Total Staff": staff["total"],
-                    "Daily Cost": f"${after_analysis['daily_costs'][i]:,.0f}",
-                })
+        with col3:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="kpi-value yellow">${weekly_savings:,.0f}</div>
+                <div class="kpi-label">Weekly Savings</div>
+                <div class="kpi-delta positive">{savings_pct:.1f}% reduction</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.dataframe(pd.DataFrame(schedule_data), use_container_width=True, hide_index=True)
+        with col4:
+            annual_savings = weekly_savings * 52
+            st.markdown(f"""
+            <div class="kpi-card success">
+                <div class="kpi-value green">${annual_savings:,.0f}</div>
+                <div class="kpi-label">Annual Savings</div>
+                <div class="kpi-delta positive">Projected</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # Category breakdown
-            st.markdown("### 📊 Staffing by Clinical Category")
+        # Optimized Schedule Table
+        st.markdown("### 📅 Optimized Staff Schedule")
+        schedule_df = pd.DataFrame(optimized["schedules"])
+        schedule_df["daily_cost"] = schedule_df["daily_cost"].apply(lambda x: f"${x:,.0f}")
+        schedule_df["expected_patients"] = schedule_df["expected_patients"].apply(lambda x: f"{x:.0f}")
+        st.dataframe(schedule_df, use_container_width=True, hide_index=True)
 
-            if after_analysis["category_forecast"]:
-                # Create stacked bar chart
-                fig = go.Figure()
+        # Comparison Chart
+        st.markdown("### 📈 Cost Comparison")
 
-                categories = list(after_analysis["category_forecast"].keys())
-                colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#6b7280']
+        fig = go.Figure()
 
-                for idx, cat in enumerate(categories):
-                    forecasts = after_analysis["category_forecast"][cat]
-                    fig.add_trace(go.Bar(
-                        name=cat,
-                        x=after_analysis["dates"],
-                        y=forecasts[:len(after_analysis["dates"])],
-                        marker_color=colors[idx % len(colors)],
-                    ))
+        fig.add_trace(go.Bar(
+            x=['Current (Fixed)', 'Optimized (Forecast)'],
+            y=[weekly_before, weekly_after],
+            marker_color=['#ef4444', '#22c55e'],
+            text=[f'${weekly_before:,.0f}', f'${weekly_after:,.0f}'],
+            textposition='auto',
+        ))
 
-                fig.update_layout(
-                    barmode='stack',
-                    title="Patient Forecast by Clinical Category",
-                    xaxis_title="Day",
-                    yaxis_title="Patients",
-                    template="plotly_dark",
-                    height=400,
-                )
+        fig.update_layout(
+            title="Weekly Staffing Cost: Before vs After Optimization",
+            yaxis_title="Cost ($)",
+            template="plotly_dark",
+            height=400,
+        )
 
-                st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-            # Cost summary
-            st.markdown("### 💰 Cost Summary")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Weekly Cost", f"${after_analysis['total_cost']:,.0f}")
-            with col2:
-                st.metric("Average Daily Cost", f"${after_analysis['avg_daily_cost']:,.0f}")
-            with col3:
-                st.metric("Overtime Cost", f"${after_analysis['overtime_cost']:,.0f}", "Zero!")
+        # Summary
+        st.success(f"""
+        ### 🎉 Optimization Summary
 
-        else:
-            st.info("Run forecasting models in the Modeling Hub to see the AFTER scenario.")
+        By applying **forecast-driven staffing** using **{optimized['source']}** predictions:
 
-    # ==========================================================================
-    # TAB 4: COMPARISON CHARTS
-    # ==========================================================================
-    with tab4:
-        st.markdown('<div class="section-header">📈 Before vs After Comparison</div>', unsafe_allow_html=True)
-
-        if before_analysis.get("has_analysis") and after_analysis.get("has_analysis"):
-
-            # Chart 1: Cost Comparison Bar
-            st.markdown("### 💰 Weekly Cost Comparison")
-
-            before_weekly = before_analysis["avg_daily_cost"] * 7
-            after_weekly = after_analysis["total_cost"]
-
-            fig_cost = go.Figure()
-
-            fig_cost.add_trace(go.Bar(
-                x=['BEFORE (Fixed)', 'AFTER (Forecast)'],
-                y=[before_weekly, after_weekly],
-                marker_color=['#ef4444', '#22c55e'],
-                text=[f'${before_weekly:,.0f}', f'${after_weekly:,.0f}'],
-                textposition='auto',
-            ))
-
-            fig_cost.update_layout(
-                title="Weekly Staffing Cost: Before vs After",
-                yaxis_title="Cost ($)",
-                template="plotly_dark",
-                height=400,
-            )
-
-            st.plotly_chart(fig_cost, use_container_width=True)
-
-            # Chart 2: Cost Breakdown Comparison
-            st.markdown("### 📊 Cost Breakdown")
-
-            fig_breakdown = go.Figure()
-
-            categories = ['Labor', 'Overtime', 'Penalties']
-            before_values = [
-                before_analysis["fixed_daily_cost"] * 7,
-                before_analysis["total_overtime_cost"] / before_analysis["total_days"] * 7,
-                before_analysis["total_penalty"] / before_analysis["total_days"] * 7,
-            ]
-            after_values = [
-                after_analysis["total_cost"],
-                0,
-                0,
-            ]
-
-            fig_breakdown.add_trace(go.Bar(
-                name='BEFORE',
-                x=categories,
-                y=before_values,
-                marker_color='#ef4444',
-            ))
-
-            fig_breakdown.add_trace(go.Bar(
-                name='AFTER',
-                x=categories,
-                y=after_values,
-                marker_color='#22c55e',
-            ))
-
-            fig_breakdown.update_layout(
-                barmode='group',
-                title="Cost Breakdown: Before vs After",
-                yaxis_title="Weekly Cost ($)",
-                template="plotly_dark",
-                height=400,
-            )
-
-            st.plotly_chart(fig_breakdown, use_container_width=True)
-
-            # Chart 3: Efficiency Metrics
-            st.markdown("### 🎯 Efficiency Comparison")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                # Gauge for BEFORE
-                fig_gauge_before = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=before_analysis["efficiency_rate"],
-                    title={'text': "BEFORE: Staffing Efficiency"},
-                    gauge={
-                        'axis': {'range': [0, 100]},
-                        'bar': {'color': "#ef4444"},
-                        'steps': [
-                            {'range': [0, 50], 'color': "rgba(239,68,68,0.3)"},
-                            {'range': [50, 75], 'color': "rgba(234,179,8,0.3)"},
-                            {'range': [75, 100], 'color': "rgba(34,197,94,0.3)"},
-                        ],
-                    }
-                ))
-                fig_gauge_before.update_layout(height=300, template="plotly_dark")
-                st.plotly_chart(fig_gauge_before, use_container_width=True)
-
-            with col2:
-                # Gauge for AFTER (100% efficiency with forecasting)
-                fig_gauge_after = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=100,
-                    title={'text': "AFTER: Staffing Efficiency"},
-                    gauge={
-                        'axis': {'range': [0, 100]},
-                        'bar': {'color': "#22c55e"},
-                        'steps': [
-                            {'range': [0, 50], 'color': "rgba(239,68,68,0.3)"},
-                            {'range': [50, 75], 'color': "rgba(234,179,8,0.3)"},
-                            {'range': [75, 100], 'color': "rgba(34,197,94,0.3)"},
-                        ],
-                    }
-                ))
-                fig_gauge_after.update_layout(height=300, template="plotly_dark")
-                st.plotly_chart(fig_gauge_after, use_container_width=True)
-
-            # Summary box
-            st.success(f"""
-            ### 🎉 Summary
-
-            By using **ML forecasting** instead of fixed staffing:
-            - **Weekly savings:** ${before_weekly - after_weekly:,.0f} ({((before_weekly - after_weekly) / before_weekly * 100):.1f}%)
-            - **Annual savings:** ${(before_weekly - after_weekly) * 52:,.0f}
-            - **Overtime eliminated:** {before_analysis['total_overtime_hours']:.0f} hours/month
-            - **Efficiency improved:** {before_analysis['efficiency_rate']:.1f}% → 100%
-            """)
-
-        else:
-            st.info("Load both historical data and run forecasting models to see comparison charts.")
+        - **Weekly savings:** ${weekly_savings:,.0f} ({savings_pct:.1f}% reduction)
+        - **Annual savings:** ${annual_savings:,.0f}
+        - **Staff aligned to demand:** {optimized['horizon']} days optimized
+        - **Zero overtime expected:** Staff matched to predicted patient volume
+        """)
 
 else:
-    st.warning("""
-    ### ⚠️ No Data Available
+    # No data loaded yet
+    st.info("""
+    ### 👆 Start Here
 
-    To use Staff Scheduling, please:
-    1. **Load patient data** in the Data Hub (Page 02)
-    2. **Process the data** in Data Preparation Studio (Page 03)
-    3. **Run forecasting models** in the Modeling Hub (Page 08)
+    Click **"Load Staff & Financial Data"** above to fetch real hospital data from Supabase.
 
-    Then return here to see the Before vs After comparison!
+    Once loaded, you'll see:
+    1. **Current Hospital Situation** - Expert manager view of staffing and costs
+    2. **Optimization Options** - Apply ML forecasts to optimize staffing
     """)
 
 
@@ -1396,13 +966,17 @@ with st.sidebar:
             st.text(f"{cat}: Dr={ratios['doctors']}, RN={ratios['nurses']}")
 
     with st.expander("Cost Parameters", expanded=False):
+        params = st.session_state.cost_params
         st.caption("Hourly rates (USD)")
-        st.text(f"Doctor: ${COST_PARAMS['doctor_hourly']}/hr")
-        st.text(f"Nurse: ${COST_PARAMS['nurse_hourly']}/hr")
-        st.text(f"Support: ${COST_PARAMS['support_hourly']}/hr")
+        st.text(f"Doctor: ${params['doctor_hourly']}/hr")
+        st.text(f"Nurse: ${params['nurse_hourly']}/hr")
+        st.text(f"Support: ${params['support_hourly']}/hr")
+        st.text(f"Overtime: {params['overtime_multiplier']}x")
 
-    with st.expander("Fixed Staffing (BEFORE)", expanded=False):
-        st.caption("Traditional fixed schedule")
-        st.text(f"Doctors: {FIXED_STAFFING['doctors']}/day")
-        st.text(f"Nurses: {FIXED_STAFFING['nurses']}/day")
-        st.text(f"Support: {FIXED_STAFFING['support']}/day")
+    if st.session_state.staff_db_loaded:
+        with st.expander("Data Status", expanded=False):
+            stats = st.session_state.staff_data["stats"]
+            st.text(f"Records: {stats['total_records']}")
+            st.text(f"Avg Doctors: {stats['avg_doctors']}")
+            st.text(f"Avg Nurses: {stats['avg_nurses']}")
+            st.text(f"Avg Support: {stats['avg_support']}")
