@@ -345,21 +345,30 @@ def load_staff_data() -> Dict[str, Any]:
         result["success"] = True
         result["data"] = df
 
-        # Calculate stats
+        # Calculate raw stats
+        raw_avg_doctors = df["Doctors_on_Duty"].mean() if "Doctors_on_Duty" in df.columns else 0
+        raw_avg_nurses = df["Nurses_on_Duty"].mean() if "Nurses_on_Duty" in df.columns else 0
+        raw_avg_support = df["Support_Staff_on_Duty"].mean() if "Support_Staff_on_Duty" in df.columns else 0
+        raw_total_overtime = df["Overtime_Hours"].sum() if "Overtime_Hours" in df.columns else 0
+        raw_avg_utilization = df["Staff_Utilization_Rate"].mean() if "Staff_Utilization_Rate" in df.columns else 0
+        raw_shortage_days = df["Staff_Shortage_Flag"].sum() if "Staff_Shortage_Flag" in df.columns else 0
+
+        # Validate stats - ensure no negative values
+        # Utilization should be 0-100%, others should be >= 0
         result["stats"] = {
             "total_records": len(df),
             "date_start": df["Date"].min() if "Date" in df.columns else None,
             "date_end": df["Date"].max() if "Date" in df.columns else None,
-            "avg_doctors": df["Doctors_on_Duty"].mean() if "Doctors_on_Duty" in df.columns else 0,
-            "avg_nurses": df["Nurses_on_Duty"].mean() if "Nurses_on_Duty" in df.columns else 0,
-            "avg_support": df["Support_Staff_on_Duty"].mean() if "Support_Staff_on_Duty" in df.columns else 0,
-            "total_overtime": df["Overtime_Hours"].sum() if "Overtime_Hours" in df.columns else 0,
-            "avg_utilization": df["Staff_Utilization_Rate"].mean() if "Staff_Utilization_Rate" in df.columns else 0,
-            "shortage_days": df["Staff_Shortage_Flag"].sum() if "Staff_Shortage_Flag" in df.columns else 0,
-            "max_doctors": df["Doctors_on_Duty"].max() if "Doctors_on_Duty" in df.columns else 0,
-            "min_doctors": df["Doctors_on_Duty"].min() if "Doctors_on_Duty" in df.columns else 0,
-            "max_nurses": df["Nurses_on_Duty"].max() if "Nurses_on_Duty" in df.columns else 0,
-            "min_nurses": df["Nurses_on_Duty"].min() if "Nurses_on_Duty" in df.columns else 0,
+            "avg_doctors": max(0, raw_avg_doctors) if raw_avg_doctors else 0,
+            "avg_nurses": max(0, raw_avg_nurses) if raw_avg_nurses else 0,
+            "avg_support": max(0, raw_avg_support) if raw_avg_support else 0,
+            "total_overtime": max(0, raw_total_overtime) if raw_total_overtime else 0,
+            "avg_utilization": max(0, min(100, abs(raw_avg_utilization))) if raw_avg_utilization else 0,
+            "shortage_days": max(0, int(raw_shortage_days)) if raw_shortage_days else 0,
+            "max_doctors": max(0, df["Doctors_on_Duty"].max()) if "Doctors_on_Duty" in df.columns else 0,
+            "min_doctors": max(0, df["Doctors_on_Duty"].min()) if "Doctors_on_Duty" in df.columns else 0,
+            "max_nurses": max(0, df["Nurses_on_Duty"].max()) if "Nurses_on_Duty" in df.columns else 0,
+            "min_nurses": max(0, df["Nurses_on_Duty"].min()) if "Nurses_on_Duty" in df.columns else 0,
         }
 
         return result

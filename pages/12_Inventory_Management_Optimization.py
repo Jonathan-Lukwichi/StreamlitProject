@@ -359,23 +359,30 @@ def load_inventory_data() -> Dict[str, Any]:
         avg_usage = stats.get("avg_usage", {})
         avg_levels = stats.get("avg_levels", {})
 
-        # Get stockout risk and ensure it's valid (0-100%)
+        # Get raw values
+        raw_gloves_usage = avg_usage.get("gloves", 0)
+        raw_ppe_usage = avg_usage.get("ppe", 0)
+        raw_medication_usage = avg_usage.get("medications", 0)
+        raw_gloves_level = avg_levels.get("gloves", 0)
+        raw_ppe_level = avg_levels.get("ppe", 0)
+        raw_medication_level = avg_levels.get("medications", 0)
+        raw_restock_events = stats.get("restock_events", 0)
         raw_stockout_risk = stats.get("avg_stockout_risk", 0)
-        # Handle negative values by taking absolute value, then clamp to 0-100
-        avg_stockout_risk = max(0, min(100, abs(raw_stockout_risk))) if raw_stockout_risk else 0
 
+        # Validate all values - ensure no negative values
+        # Stockout risk should be 0-100%, all others should be >= 0
         result["stats"] = {
             "total_records": len(df),
             "date_start": df["Date"].min() if "Date" in df.columns else None,
             "date_end": df["Date"].max() if "Date" in df.columns else None,
-            "avg_gloves_usage": avg_usage.get("gloves", 0),
-            "avg_ppe_usage": avg_usage.get("ppe", 0),
-            "avg_medication_usage": avg_usage.get("medications", 0),
-            "avg_gloves_level": avg_levels.get("gloves", 0),
-            "avg_ppe_level": avg_levels.get("ppe", 0),
-            "avg_medication_level": avg_levels.get("medications", 0),
-            "restock_events": stats.get("restock_events", 0),
-            "avg_stockout_risk": avg_stockout_risk,
+            "avg_gloves_usage": max(0, raw_gloves_usage) if raw_gloves_usage else 0,
+            "avg_ppe_usage": max(0, raw_ppe_usage) if raw_ppe_usage else 0,
+            "avg_medication_usage": max(0, raw_medication_usage) if raw_medication_usage else 0,
+            "avg_gloves_level": max(0, raw_gloves_level) if raw_gloves_level else 0,
+            "avg_ppe_level": max(0, raw_ppe_level) if raw_ppe_level else 0,
+            "avg_medication_level": max(0, raw_medication_level) if raw_medication_level else 0,
+            "restock_events": max(0, int(raw_restock_events)) if raw_restock_events else 0,
+            "avg_stockout_risk": max(0, min(100, abs(raw_stockout_risk))) if raw_stockout_risk else 0,
         }
 
         return result
