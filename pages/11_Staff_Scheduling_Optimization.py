@@ -706,26 +706,26 @@ with tab1:
             with c1:
                 st.markdown(f"""
                 <div class="kpi-card financial">
-                    <div class="kpi-value blue">${cost_params['doctor_hourly']}</div>
+                    <div class="kpi-value blue">${cost_params['doctor_hourly']:.0f}</div>
                     <div class="kpi-label">Doctor Hourly Rate</div>
                 </div>
                 """, unsafe_allow_html=True)
                 st.markdown(f"""
                 <div class="kpi-card financial">
-                    <div class="kpi-value blue">${cost_params['nurse_hourly']}</div>
+                    <div class="kpi-value blue">${cost_params['nurse_hourly']:.0f}</div>
                     <div class="kpi-label">Nurse Hourly Rate</div>
                 </div>
                 """, unsafe_allow_html=True)
             with c2:
                 st.markdown(f"""
                 <div class="kpi-card financial">
-                    <div class="kpi-value blue">${cost_params['support_hourly']}</div>
+                    <div class="kpi-value blue">${cost_params['support_hourly']:.0f}</div>
                     <div class="kpi-label">Support Hourly Rate</div>
                 </div>
                 """, unsafe_allow_html=True)
                 st.markdown(f"""
                 <div class="kpi-card financial">
-                    <div class="kpi-value yellow">{cost_params['overtime_multiplier']}x</div>
+                    <div class="kpi-value yellow">{cost_params['overtime_multiplier']:.2f}x</div>
                     <div class="kpi-label">Overtime Multiplier</div>
                 </div>
                 """, unsafe_allow_html=True)
