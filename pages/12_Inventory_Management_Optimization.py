@@ -2,16 +2,22 @@
 # 12_Inventory_Management_Optimization.py
 # SIMPLIFIED: Forecast-Driven Inventory Management with Before/After Comparison
 # Design: Matches Modeling Hub (Page 08) and Staff Scheduling (Page 11) styling
+# DATA: Connected to Supabase (inventory_management, financial_data tables)
 # =============================================================================
 """
 Simplified Inventory Management - Forecast Driven
 
 Approach:
-- BEFORE: Fixed reorder points and quantities (historical approach without forecasting)
+- BEFORE: Real historical inventory data from Supabase (inventory_management table)
 - AFTER: Dynamic ordering based on ML demand predictions
 
 Key Formula:
     Optimal Order = Σ (Predicted Patients × Usage Rate per Item) + Safety Stock
+
+Data Sources:
+- Inventory data: Supabase inventory_management table
+- Cost params: Supabase financial_data table
+- Forecasts: Session state from Modeling Hub (ml_mh_results, arima_mh_results, etc.)
 """
 from __future__ import annotations
 import streamlit as st
@@ -29,6 +35,10 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+
+# Import Supabase services for real data
+from app_core.data.inventory_service import InventoryService, get_inventory_service, fetch_inventory_data
+from app_core.data.financial_service import FinancialService, get_financial_service
 
 # ============================================================================
 # AUTHENTICATION CHECK
@@ -52,9 +62,9 @@ add_logout_button()
 # =============================================================================
 # CONFIGURATION: INVENTORY ITEMS & PARAMETERS
 # =============================================================================
-# Items with their parameters
+# Default items with their parameters - will be enhanced with Supabase data
 
-INVENTORY_ITEMS = {
+DEFAULT_INVENTORY_ITEMS = {
     "GLOVES": {
         "name": "Medical Gloves (boxes)",
         "usage_per_patient": 2.0,
@@ -107,14 +117,162 @@ INVENTORY_ITEMS = {
     },
 }
 
-# Fixed ordering approach (BEFORE - no forecasting)
-FIXED_ORDER_PARAMS = {
+# Default fixed ordering approach (BEFORE - no forecasting)
+DEFAULT_FIXED_ORDER_PARAMS = {
     "GLOVES": {"reorder_point": 200, "order_quantity": 500},
     "PPE_SETS": {"reorder_point": 50, "order_quantity": 150},
     "MEDICATIONS": {"reorder_point": 300, "order_quantity": 800},
     "SYRINGES": {"reorder_point": 150, "order_quantity": 400},
     "BANDAGES": {"reorder_point": 250, "order_quantity": 600},
 }
+
+
+# =============================================================================
+# SUPABASE DATA LOADING FUNCTIONS
+# =============================================================================
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_inventory_data_from_supabase() -> Dict[str, Any]:
+    """
+    Load real inventory data from Supabase inventory_management table.
+    Returns historical usage and levels for each item.
+    """
+    result = {
+        "has_data": False,
+        "source": "default",
+        "total_records": 0,
+        "date_range": None,
+        "daily_data": None,
+        "avg_usage": {
+            "gloves": 0,
+            "ppe": 0,
+            "medications": 0,
+        },
+        "avg_levels": {
+            "gloves": 0,
+            "ppe": 0,
+            "medications": 0,
+        },
+        "restock_events": 0,
+        "avg_stockout_risk": 0,
+    }
+
+    try:
+        inventory_service = get_inventory_service()
+        if not inventory_service.is_connected():
+            return result
+
+        # Fetch all inventory data
+        inv_df = inventory_service.fetch_all()
+
+        if inv_df.empty:
+            return result
+
+        result["has_data"] = True
+        result["source"] = "supabase"
+        result["total_records"] = len(inv_df)
+        result["daily_data"] = inv_df
+
+        # Get date range
+        if "Date" in inv_df.columns:
+            result["date_range"] = {
+                "start": inv_df["Date"].min(),
+                "end": inv_df["Date"].max(),
+            }
+
+        # Get summary stats
+        stats = inventory_service.get_summary_stats()
+        if stats:
+            result["avg_usage"] = stats.get("avg_usage", result["avg_usage"])
+            result["avg_levels"] = stats.get("avg_levels", result["avg_levels"])
+            result["restock_events"] = stats.get("restock_events", 0)
+            result["avg_stockout_risk"] = stats.get("avg_stockout_risk", 0)
+
+        return result
+
+    except Exception as e:
+        st.warning(f"Could not load inventory data from Supabase: {e}")
+        return result
+
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_inventory_cost_params_from_supabase() -> Dict[str, Any]:
+    """
+    Load real inventory cost parameters from Supabase financial_data table.
+    """
+    result = {
+        "has_data": False,
+        "source": "default",
+        "gloves_unit_cost": DEFAULT_INVENTORY_ITEMS["GLOVES"]["unit_cost"],
+        "ppe_unit_cost": DEFAULT_INVENTORY_ITEMS["PPE_SETS"]["unit_cost"],
+        "medication_unit_cost": DEFAULT_INVENTORY_ITEMS["MEDICATIONS"]["unit_cost"],
+        "holding_cost": 0.25,  # 25% default
+        "ordering_cost": 50.0,
+        "stockout_penalty": 100.0,
+        "overstock_penalty": 25.0,
+    }
+
+    try:
+        financial_service = get_financial_service()
+        if not financial_service.is_connected():
+            return result
+
+        inv_params = financial_service.get_inventory_cost_params()
+
+        if not inv_params:
+            return result
+
+        result["has_data"] = True
+        result["source"] = "supabase"
+        result["gloves_unit_cost"] = inv_params.get("gloves_unit_cost", result["gloves_unit_cost"])
+        result["ppe_unit_cost"] = inv_params.get("ppe_unit_cost", result["ppe_unit_cost"])
+        result["medication_unit_cost"] = inv_params.get("medication_unit_cost", result["medication_unit_cost"])
+        result["holding_cost"] = inv_params.get("holding_cost", result["holding_cost"])
+        result["ordering_cost"] = inv_params.get("ordering_cost", result["ordering_cost"])
+        result["stockout_penalty"] = inv_params.get("stockout_penalty", result["stockout_penalty"])
+        result["overstock_penalty"] = inv_params.get("overstock_penalty", result["overstock_penalty"])
+
+        return result
+
+    except Exception as e:
+        st.warning(f"Could not load inventory cost params from Supabase: {e}")
+        return result
+
+
+def get_financial_kpis_from_supabase() -> Dict[str, Any]:
+    """
+    Load comprehensive financial KPIs for inventory analysis.
+    """
+    try:
+        financial_service = get_financial_service()
+        if not financial_service.is_connected():
+            return {}
+
+        return financial_service.get_comprehensive_financial_kpis()
+    except Exception:
+        return {}
+
+
+# Load data at startup
+INVENTORY_DATA = load_inventory_data_from_supabase()
+INVENTORY_COST_PARAMS = load_inventory_cost_params_from_supabase()
+FINANCIAL_KPIS = get_financial_kpis_from_supabase()
+
+# Update inventory items with real costs from Supabase
+INVENTORY_ITEMS = DEFAULT_INVENTORY_ITEMS.copy()
+if INVENTORY_COST_PARAMS.get("source") == "supabase":
+    INVENTORY_ITEMS["GLOVES"]["unit_cost"] = INVENTORY_COST_PARAMS["gloves_unit_cost"]
+    INVENTORY_ITEMS["PPE_SETS"]["unit_cost"] = INVENTORY_COST_PARAMS["ppe_unit_cost"]
+    INVENTORY_ITEMS["MEDICATIONS"]["unit_cost"] = INVENTORY_COST_PARAMS["medication_unit_cost"]
+    INVENTORY_ITEMS["GLOVES"]["ordering_cost"] = INVENTORY_COST_PARAMS["ordering_cost"]
+    INVENTORY_ITEMS["PPE_SETS"]["ordering_cost"] = INVENTORY_COST_PARAMS["ordering_cost"]
+    INVENTORY_ITEMS["MEDICATIONS"]["ordering_cost"] = INVENTORY_COST_PARAMS["ordering_cost"]
+    INVENTORY_ITEMS["GLOVES"]["stockout_penalty"] = INVENTORY_COST_PARAMS["stockout_penalty"]
+    INVENTORY_ITEMS["PPE_SETS"]["stockout_penalty"] = INVENTORY_COST_PARAMS["stockout_penalty"]
+    INVENTORY_ITEMS["MEDICATIONS"]["stockout_penalty"] = INVENTORY_COST_PARAMS["stockout_penalty"]
+
+# Use defaults for fixed order params (could be customized)
+FIXED_ORDER_PARAMS = DEFAULT_FIXED_ORDER_PARAMS.copy()
 
 
 # =============================================================================
@@ -569,83 +727,132 @@ def calculate_inventory_demand(patients: float, item_id: str) -> float:
 
 def analyze_before_scenario(historical_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Analyze BEFORE scenario: Fixed reorder points and quantities.
+    Analyze BEFORE scenario: Uses REAL Supabase inventory data when available.
+
+    Priority:
+    1. Real inventory data from Supabase (INVENTORY_DATA)
+    2. Historical patient data (processed_df)
+    3. Default simulation if nothing available
     """
-    if not historical_data["has_data"]:
+    # Check if we have real Supabase inventory data
+    has_supabase_inventory = INVENTORY_DATA.get("has_data", False)
+    has_patient_data = historical_data.get("has_data", False)
+
+    if not has_supabase_inventory and not has_patient_data:
         return {"has_analysis": False}
 
-    daily_patients = historical_data["daily_patients"]
-    total_days = len(daily_patients)
+    # Use real Supabase inventory data if available
+    if has_supabase_inventory and INVENTORY_DATA.get("daily_data") is not None:
+        inv_df = INVENTORY_DATA["daily_data"]
+        total_days = len(inv_df)
 
-    # Simulate inventory with fixed ordering
-    total_ordering_cost = 0
-    total_holding_cost = 0
-    total_stockout_cost = 0
-    total_waste_cost = 0
-    stockout_days = 0
-    orders_placed = 0
+        # Calculate real costs from Supabase data
+        avg_usage = INVENTORY_DATA.get("avg_usage", {})
+        total_restock_events = INVENTORY_DATA.get("restock_events", 0)
+        avg_stockout_risk = INVENTORY_DATA.get("avg_stockout_risk", 0)
 
-    item_results = {}
+        # Calculate ordering cost from restock events
+        avg_ordering_cost = INVENTORY_COST_PARAMS.get("ordering_cost", 50.0)
+        total_ordering_cost = total_restock_events * avg_ordering_cost
 
-    for item_id, item_params in INVENTORY_ITEMS.items():
-        fixed_params = FIXED_ORDER_PARAMS[item_id]
-        reorder_point = fixed_params["reorder_point"]
-        order_qty = fixed_params["order_quantity"]
-
-        # Starting inventory
-        inventory = order_qty * 2
-        item_stockouts = 0
-        item_orders = 0
-        item_holding_cost = 0
-        item_waste = 0
-
-        for patients in daily_patients:
-            demand = calculate_inventory_demand(patients, item_id)
-
-            # Check if we need to order
-            if inventory <= reorder_point:
-                item_orders += 1
-                inventory += order_qty
-                total_ordering_cost += item_params["ordering_cost"]
-
-            # Consume inventory
-            if inventory >= demand:
-                inventory -= demand
+        # Calculate holding cost from average inventory levels
+        avg_levels = INVENTORY_DATA.get("avg_levels", {})
+        total_holding_cost = 0
+        for item_key in ["gloves", "ppe", "medications"]:
+            level = avg_levels.get(item_key, 0)
+            if item_key == "gloves":
+                unit_cost = INVENTORY_COST_PARAMS.get("gloves_unit_cost", 15.0)
+            elif item_key == "ppe":
+                unit_cost = INVENTORY_COST_PARAMS.get("ppe_unit_cost", 45.0)
             else:
-                # Stockout
-                stockout_qty = demand - inventory
-                inventory = 0
-                item_stockouts += 1
-                total_stockout_cost += stockout_qty * item_params["stockout_penalty"]
+                unit_cost = INVENTORY_COST_PARAMS.get("medication_unit_cost", 8.0)
+            holding_rate = INVENTORY_COST_PARAMS.get("holding_cost", 0.25) / 365
+            total_holding_cost += level * unit_cost * holding_rate * total_days
 
-            # Holding cost (daily)
-            daily_holding = inventory * item_params["unit_cost"] * (item_params["holding_cost_pct"] / 365)
-            item_holding_cost += daily_holding
-            total_holding_cost += daily_holding
+        # Estimate stockout costs from stockout risk
+        stockout_penalty = INVENTORY_COST_PARAMS.get("stockout_penalty", 100.0)
+        stockout_days = int(total_days * avg_stockout_risk / 100) if avg_stockout_risk else 0
+        total_stockout_cost = stockout_days * stockout_penalty
 
-        item_results[item_id] = {
-            "stockouts": item_stockouts,
-            "orders": item_orders,
-            "holding_cost": item_holding_cost,
-        }
-        stockout_days += item_stockouts
-        orders_placed += item_orders
+        total_cost = total_ordering_cost + total_holding_cost + total_stockout_cost
+        service_level = 100 - avg_stockout_risk
 
-    total_cost = total_ordering_cost + total_holding_cost + total_stockout_cost + total_waste_cost
+        data_source = "supabase"
+        item_results = {}  # Detailed per-item from Supabase
+
+    else:
+        # Fallback to patient data simulation
+        daily_patients = historical_data.get("daily_patients", [])
+        if not daily_patients:
+            return {"has_analysis": False}
+
+        total_days = len(daily_patients)
+        total_ordering_cost = 0
+        total_holding_cost = 0
+        total_stockout_cost = 0
+        total_waste_cost = 0
+        stockout_days = 0
+        orders_placed = 0
+
+        item_results = {}
+
+        for item_id, item_params in INVENTORY_ITEMS.items():
+            fixed_params = FIXED_ORDER_PARAMS[item_id]
+            reorder_point = fixed_params["reorder_point"]
+            order_qty = fixed_params["order_quantity"]
+
+            inventory = order_qty * 2
+            item_stockouts = 0
+            item_orders = 0
+            item_holding_cost = 0
+
+            for patients in daily_patients:
+                demand = calculate_inventory_demand(patients, item_id)
+
+                if inventory <= reorder_point:
+                    item_orders += 1
+                    inventory += order_qty
+                    total_ordering_cost += item_params["ordering_cost"]
+
+                if inventory >= demand:
+                    inventory -= demand
+                else:
+                    stockout_qty = demand - inventory
+                    inventory = 0
+                    item_stockouts += 1
+                    total_stockout_cost += stockout_qty * item_params["stockout_penalty"]
+
+                daily_holding = inventory * item_params["unit_cost"] * (item_params["holding_cost_pct"] / 365)
+                item_holding_cost += daily_holding
+                total_holding_cost += daily_holding
+
+            item_results[item_id] = {
+                "stockouts": item_stockouts,
+                "orders": item_orders,
+                "holding_cost": item_holding_cost,
+            }
+            stockout_days += item_stockouts
+            orders_placed += item_orders
+
+        total_cost = total_ordering_cost + total_holding_cost + total_stockout_cost + total_waste_cost
+        service_level = 100 * (1 - stockout_days / (total_days * len(INVENTORY_ITEMS)))
+        data_source = "patient_data"
+        total_restock_events = orders_placed
 
     return {
         "has_analysis": True,
+        "data_source": data_source,
         "total_days": total_days,
         "total_cost": total_cost,
         "ordering_cost": total_ordering_cost,
         "holding_cost": total_holding_cost,
         "stockout_cost": total_stockout_cost,
-        "waste_cost": total_waste_cost,
+        "waste_cost": 0,
         "stockout_days": stockout_days,
-        "orders_placed": orders_placed,
-        "avg_daily_cost": total_cost / total_days,
+        "orders_placed": total_restock_events,
+        "avg_daily_cost": total_cost / total_days if total_days > 0 else 0,
         "item_results": item_results,
-        "service_level": 100 * (1 - stockout_days / (total_days * len(INVENTORY_ITEMS))),
+        "service_level": service_level,
     }
 
 
@@ -725,7 +932,7 @@ historical_data = get_historical_data()
 
 # Show data status with styled badges
 st.markdown("### 📡 Data Connection Status")
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     if forecast_data["has_forecast"]:
@@ -742,25 +949,79 @@ with col1:
         """, unsafe_allow_html=True)
 
 with col2:
-    if historical_data["has_data"]:
+    if INVENTORY_DATA["has_data"]:
         st.markdown(f"""
         <div class="data-source-badge">
-            ✅ Historical: {len(historical_data['daily_patients'])} days
+            ✅ Inventory: Supabase ({INVENTORY_DATA['total_records']} records)
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
         <div class="data-source-badge warning">
-            ⚠️ No historical data - Load in Data Hub
+            ⚠️ Inventory: Using defaults (Supabase not connected)
         </div>
         """, unsafe_allow_html=True)
+
+with col3:
+    if INVENTORY_COST_PARAMS.get("source") == "supabase":
+        st.markdown("""
+        <div class="data-source-badge">
+            ✅ Costs: Supabase (Real financial data)
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="data-source-badge warning">
+            ⚠️ Costs: Using defaults
+        </div>
+        """, unsafe_allow_html=True)
+
+# Show additional data source info
+if INVENTORY_DATA["has_data"] or historical_data["has_data"]:
+    with st.expander("📊 Data Source Details", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Inventory Management (Supabase):**")
+            if INVENTORY_DATA["has_data"]:
+                avg_usage = INVENTORY_DATA.get("avg_usage", {})
+                avg_levels = INVENTORY_DATA.get("avg_levels", {})
+                st.markdown(f"""
+                - Records: **{INVENTORY_DATA['total_records']}** days
+                - Avg Gloves Usage: **{avg_usage.get('gloves', 0):.0f}**/day
+                - Avg PPE Usage: **{avg_usage.get('ppe', 0):.0f}**/day
+                - Avg Medications: **{avg_usage.get('medications', 0):.0f}**/day
+                - Restock Events: **{INVENTORY_DATA.get('restock_events', 0)}** total
+                - Avg Stockout Risk: **{INVENTORY_DATA.get('avg_stockout_risk', 0):.1f}%**
+                """)
+            else:
+                st.markdown("*Using default values*")
+
+        with col2:
+            st.markdown("**Financial Data (Supabase):**")
+            if INVENTORY_COST_PARAMS.get("source") == "supabase":
+                st.markdown(f"""
+                - Gloves Cost: **${INVENTORY_COST_PARAMS['gloves_unit_cost']:.2f}**/unit
+                - PPE Cost: **${INVENTORY_COST_PARAMS['ppe_unit_cost']:.2f}**/set
+                - Medication Cost: **${INVENTORY_COST_PARAMS['medication_unit_cost']:.2f}**/unit
+                - Ordering Cost: **${INVENTORY_COST_PARAMS['ordering_cost']:.0f}**/order
+                - Stockout Penalty: **${INVENTORY_COST_PARAMS['stockout_penalty']:.0f}**
+                """)
+            else:
+                st.markdown("*Using default values*")
 
 
 # =============================================================================
 # ANALYSIS
 # =============================================================================
 
-if forecast_data["has_forecast"] or historical_data["has_data"]:
+# Check if we have any data to analyze
+has_any_data = (
+    forecast_data["has_forecast"] or
+    historical_data["has_data"] or
+    INVENTORY_DATA.get("has_data", False)
+)
+
+if has_any_data:
 
     before_analysis = analyze_before_scenario(historical_data)
     after_analysis = analyze_after_scenario(forecast_data)
@@ -862,6 +1123,13 @@ if forecast_data["has_forecast"] or historical_data["has_data"]:
         st.markdown('<div class="section-header">🔴 BEFORE: Fixed Ordering Analysis</div>', unsafe_allow_html=True)
 
         if before_analysis.get("has_analysis"):
+            # Show data source
+            data_source = before_analysis.get("data_source", "unknown")
+            if data_source == "supabase":
+                st.success("📊 **Using REAL data from Supabase** (inventory_management & financial_data tables)")
+            else:
+                st.info("📊 Using patient volume data for simulation")
+
             st.markdown("""
             **Traditional Approach:** Hospital uses fixed reorder points and order quantities,
             regardless of expected patient volume.

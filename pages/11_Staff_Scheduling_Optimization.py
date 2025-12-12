@@ -2,16 +2,22 @@
 # 11_Staff_Scheduling_Optimization.py
 # SIMPLIFIED: Forecast-Driven Staff Scheduling with Before/After Comparison
 # Design: Matches Modeling Hub (Page 08) styling
+# DATA: Connected to Supabase (staff_scheduling, financial_data tables)
 # =============================================================================
 """
 Simplified Staff Scheduling - Forecast Driven
 
 Approach:
-- BEFORE: Fixed staffing (historical approach without forecasting)
+- BEFORE: Real historical staffing data from Supabase (staff_scheduling table)
 - AFTER: Dynamic staffing based on ML predictions by clinical category
 
 Key Formula:
     Staff Needed = Σ (Predicted Patients by Category × Staffing Ratio)
+
+Data Sources:
+- Staff data: Supabase staff_scheduling table
+- Cost params: Supabase financial_data table
+- Forecasts: Session state from Modeling Hub (ml_mh_results, arima_mh_results, etc.)
 """
 from __future__ import annotations
 import streamlit as st
@@ -29,6 +35,10 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+
+# Import Supabase services for real data
+from app_core.data.staff_scheduling_service import StaffSchedulingService, fetch_staff_scheduling_data
+from app_core.data.financial_service import FinancialService, get_financial_service
 
 # ============================================================================
 # AUTHENTICATION CHECK
@@ -64,21 +74,152 @@ STAFFING_RATIOS = {
     "OTHER": {"doctors": 15, "nurses": 8, "support": 20},
 }
 
-# Cost parameters (USD)
-COST_PARAMS = {
+# Default cost parameters (USD) - will be overridden by Supabase data
+DEFAULT_COST_PARAMS = {
     "doctor_hourly": 150,
     "nurse_hourly": 50,
     "support_hourly": 25,
     "shift_hours": 8,
     "overtime_multiplier": 1.5,
-    "understaffing_penalty_per_patient": 200,  # Cost of poor care
+    "understaffing_penalty_per_patient": 200,
 }
 
-# Fixed staffing (BEFORE - what hospital did without forecasting)
-FIXED_STAFFING = {
+# Default fixed staffing (BEFORE) - will be overridden by Supabase data
+DEFAULT_FIXED_STAFFING = {
     "doctors": 10,
     "nurses": 30,
     "support": 15,
+}
+
+
+# =============================================================================
+# SUPABASE DATA LOADING FUNCTIONS
+# =============================================================================
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_cost_params_from_supabase() -> Dict[str, Any]:
+    """
+    Load real cost parameters from Supabase financial_data table.
+    Falls back to defaults if Supabase is not available.
+    """
+    try:
+        financial_service = get_financial_service()
+        if not financial_service.is_connected():
+            return DEFAULT_COST_PARAMS.copy()
+
+        labor_params = financial_service.get_labor_cost_params()
+
+        if not labor_params:
+            return DEFAULT_COST_PARAMS.copy()
+
+        # Map Supabase fields to our params
+        return {
+            "doctor_hourly": labor_params.get("doctor_hourly_rate", DEFAULT_COST_PARAMS["doctor_hourly"]),
+            "nurse_hourly": labor_params.get("nurse_hourly_rate", DEFAULT_COST_PARAMS["nurse_hourly"]),
+            "support_hourly": labor_params.get("support_hourly_rate", DEFAULT_COST_PARAMS["support_hourly"]),
+            "shift_hours": 8,  # Standard shift
+            "overtime_multiplier": labor_params.get("overtime_multiplier", DEFAULT_COST_PARAMS["overtime_multiplier"]),
+            "understaffing_penalty_per_patient": labor_params.get(
+                "understaffing_penalty", DEFAULT_COST_PARAMS["understaffing_penalty_per_patient"]
+            ),
+            "overstaffing_penalty": labor_params.get("overstaffing_penalty", 0),
+            "source": "supabase",
+        }
+    except Exception as e:
+        st.warning(f"Could not load cost params from Supabase: {e}")
+        return DEFAULT_COST_PARAMS.copy()
+
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_staff_data_from_supabase() -> Dict[str, Any]:
+    """
+    Load real staff scheduling data from Supabase staff_scheduling table.
+    Returns historical staffing levels and statistics.
+    """
+    result = {
+        "has_data": False,
+        "source": "default",
+        "avg_doctors": DEFAULT_FIXED_STAFFING["doctors"],
+        "avg_nurses": DEFAULT_FIXED_STAFFING["nurses"],
+        "avg_support": DEFAULT_FIXED_STAFFING["support"],
+        "total_records": 0,
+        "date_range": None,
+        "daily_data": None,
+        "overtime_hours": 0,
+        "utilization_rate": 0,
+        "shortage_days": 0,
+    }
+
+    try:
+        staff_service = StaffSchedulingService()
+        if not staff_service.is_connected():
+            return result
+
+        # Fetch staff data
+        staff_df = staff_service.fetch_staff_data()
+
+        if staff_df.empty:
+            return result
+
+        result["has_data"] = True
+        result["source"] = "supabase"
+        result["total_records"] = len(staff_df)
+        result["daily_data"] = staff_df
+
+        # Calculate averages
+        if "Doctors_on_Duty" in staff_df.columns:
+            result["avg_doctors"] = int(staff_df["Doctors_on_Duty"].mean())
+        if "Nurses_on_Duty" in staff_df.columns:
+            result["avg_nurses"] = int(staff_df["Nurses_on_Duty"].mean())
+        if "Support_Staff_on_Duty" in staff_df.columns:
+            result["avg_support"] = int(staff_df["Support_Staff_on_Duty"].mean())
+
+        # Get date range
+        if "Date" in staff_df.columns:
+            result["date_range"] = {
+                "start": staff_df["Date"].min(),
+                "end": staff_df["Date"].max(),
+            }
+
+        # Get overtime and utilization stats
+        if "Overtime_Hours" in staff_df.columns:
+            result["overtime_hours"] = float(staff_df["Overtime_Hours"].sum())
+        if "Staff_Utilization_Rate" in staff_df.columns:
+            result["utilization_rate"] = float(staff_df["Staff_Utilization_Rate"].mean())
+        if "Staff_Shortage_Flag" in staff_df.columns:
+            result["shortage_days"] = int(staff_df["Staff_Shortage_Flag"].sum())
+
+        return result
+
+    except Exception as e:
+        st.warning(f"Could not load staff data from Supabase: {e}")
+        return result
+
+
+def get_financial_kpis_from_supabase() -> Dict[str, Any]:
+    """
+    Load comprehensive financial KPIs for optimization analysis.
+    """
+    try:
+        financial_service = get_financial_service()
+        if not financial_service.is_connected():
+            return {}
+
+        return financial_service.get_comprehensive_financial_kpis()
+    except Exception:
+        return {}
+
+
+# Load data at startup
+COST_PARAMS = load_cost_params_from_supabase()
+STAFF_DATA = load_staff_data_from_supabase()
+FINANCIAL_KPIS = get_financial_kpis_from_supabase()
+
+# Set fixed staffing from real data (or defaults)
+FIXED_STAFFING = {
+    "doctors": STAFF_DATA["avg_doctors"],
+    "nurses": STAFF_DATA["avg_nurses"],
+    "support": STAFF_DATA["avg_support"],
 }
 
 
@@ -605,57 +746,100 @@ def calculate_daily_cost(staff: Dict[str, int], overtime_hours: float = 0) -> fl
 
 def analyze_before_scenario(historical_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Analyze BEFORE scenario: Fixed staffing without forecasting.
+    Analyze BEFORE scenario: Uses REAL Supabase staff data when available.
+
+    Priority:
+    1. Real staff data from Supabase (STAFF_DATA)
+    2. Historical patient data (processed_df)
+    3. Default values if nothing available
     """
-    if not historical_data["has_data"]:
+    # Check if we have real Supabase staff data
+    has_supabase_staff = STAFF_DATA.get("has_data", False)
+    has_patient_data = historical_data.get("has_data", False)
+
+    if not has_supabase_staff and not has_patient_data:
         return {"has_analysis": False}
 
-    daily_patients = historical_data["daily_patients"]
+    # Use real Supabase data if available
+    if has_supabase_staff and STAFF_DATA.get("daily_data") is not None:
+        staff_df = STAFF_DATA["daily_data"]
+        total_days = len(staff_df)
 
-    # Fixed daily cost
-    fixed_daily_cost = calculate_daily_cost(FIXED_STAFFING)
+        # Real overtime from Supabase
+        total_overtime_hours = STAFF_DATA.get("overtime_hours", 0)
+        understaffed_days = STAFF_DATA.get("shortage_days", 0)
+        utilization_rate = STAFF_DATA.get("utilization_rate", 0)
 
-    # Analyze each day
-    overtime_days = 0
-    understaffed_days = 0
-    overstaffed_days = 0
-    total_overtime_hours = 0
-    total_penalty = 0
+        # Calculate costs from real financial data
+        fixed_daily_cost = calculate_daily_cost(FIXED_STAFFING)
+        total_labor_cost = fixed_daily_cost * total_days
+        total_overtime_cost = total_overtime_hours * COST_PARAMS["nurse_hourly"] * COST_PARAMS["overtime_multiplier"]
 
-    # Capacity with fixed staffing (rough estimate: 10 patients per staff)
-    fixed_capacity = FIXED_STAFFING["doctors"] * 10 + FIXED_STAFFING["nurses"] * 6 + FIXED_STAFFING["support"] * 3
+        # Use real financial KPIs if available
+        if FINANCIAL_KPIS:
+            penalties = FINANCIAL_KPIS.get("penalties", {})
+            total_penalty = penalties.get("total_understaffing_penalty", 0)
+            overstaffing_cost = penalties.get("total_overstaffing_cost", 0)
+        else:
+            total_penalty = understaffed_days * COST_PARAMS["understaffing_penalty_per_patient"]
+            overstaffing_cost = 0
 
-    for patients in daily_patients:
-        if patients > fixed_capacity * 1.1:  # Over capacity by 10%
-            understaffed_days += 1
-            # Overtime needed
-            overtime = (patients - fixed_capacity) / 5  # Hours of overtime
-            total_overtime_hours += overtime
-            # Penalty for potential poor care
-            excess_patients = patients - fixed_capacity
-            total_penalty += excess_patients * COST_PARAMS["understaffing_penalty_per_patient"] * 0.1
-        elif patients < fixed_capacity * 0.7:  # Under capacity by 30%
-            overstaffed_days += 1
+        # Calculate overstaffed days from utilization
+        overstaffed_days = int(total_days * max(0, (1 - utilization_rate / 100)) * 0.3) if utilization_rate else 0
+        efficiency_rate = utilization_rate if utilization_rate else 70
 
-    total_days = len(daily_patients)
-    total_labor_cost = fixed_daily_cost * total_days
-    total_overtime_cost = total_overtime_hours * COST_PARAMS["nurse_hourly"] * COST_PARAMS["overtime_multiplier"]
+        data_source = "supabase"
+
+    else:
+        # Fallback to patient data analysis
+        daily_patients = historical_data.get("daily_patients", [])
+        if not daily_patients:
+            return {"has_analysis": False}
+
+        fixed_daily_cost = calculate_daily_cost(FIXED_STAFFING)
+
+        overtime_days = 0
+        understaffed_days = 0
+        overstaffed_days = 0
+        total_overtime_hours = 0
+        total_penalty = 0
+
+        fixed_capacity = FIXED_STAFFING["doctors"] * 10 + FIXED_STAFFING["nurses"] * 6 + FIXED_STAFFING["support"] * 3
+
+        for patients in daily_patients:
+            if patients > fixed_capacity * 1.1:
+                understaffed_days += 1
+                overtime = (patients - fixed_capacity) / 5
+                total_overtime_hours += overtime
+                excess_patients = patients - fixed_capacity
+                total_penalty += excess_patients * COST_PARAMS["understaffing_penalty_per_patient"] * 0.1
+            elif patients < fixed_capacity * 0.7:
+                overstaffed_days += 1
+
+        total_days = len(daily_patients)
+        total_labor_cost = fixed_daily_cost * total_days
+        total_overtime_cost = total_overtime_hours * COST_PARAMS["nurse_hourly"] * COST_PARAMS["overtime_multiplier"]
+        overstaffing_cost = 0
+        efficiency_rate = 100 - (understaffed_days + overstaffed_days) / total_days * 100
+        data_source = "patient_data"
 
     return {
         "has_analysis": True,
+        "data_source": data_source,
         "total_days": total_days,
         "fixed_staff": FIXED_STAFFING,
         "fixed_daily_cost": fixed_daily_cost,
         "total_labor_cost": total_labor_cost,
-        "overtime_days": overtime_days,
+        "overtime_days": understaffed_days,  # Days with overtime needed
         "understaffed_days": understaffed_days,
         "overstaffed_days": overstaffed_days,
         "total_overtime_hours": total_overtime_hours,
         "total_overtime_cost": total_overtime_cost,
+        "overstaffing_cost": overstaffing_cost,
         "total_penalty": total_penalty,
         "total_cost": total_labor_cost + total_overtime_cost + total_penalty,
-        "avg_daily_cost": (total_labor_cost + total_overtime_cost + total_penalty) / total_days,
-        "efficiency_rate": 100 - (understaffed_days + overstaffed_days) / total_days * 100,
+        "avg_daily_cost": (total_labor_cost + total_overtime_cost + total_penalty) / total_days if total_days > 0 else 0,
+        "efficiency_rate": efficiency_rate,
     }
 
 
@@ -712,7 +896,7 @@ historical_data = get_historical_data()
 
 # Show data status with styled badges
 st.markdown("### 📡 Data Connection Status")
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     if forecast_data["has_forecast"]:
@@ -729,25 +913,76 @@ with col1:
         """, unsafe_allow_html=True)
 
 with col2:
-    if historical_data["has_data"]:
+    if STAFF_DATA["has_data"]:
         st.markdown(f"""
         <div class="data-source-badge">
-            ✅ Historical: {len(historical_data['daily_patients'])} days
+            ✅ Staff Data: Supabase ({STAFF_DATA['total_records']} records)
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
         <div class="data-source-badge warning">
-            ⚠️ No historical data - Load in Data Hub
+            ⚠️ Staff: Using defaults (Supabase not connected)
         </div>
         """, unsafe_allow_html=True)
+
+with col3:
+    if COST_PARAMS.get("source") == "supabase":
+        st.markdown("""
+        <div class="data-source-badge">
+            ✅ Costs: Supabase (Real financial data)
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="data-source-badge warning">
+            ⚠️ Costs: Using defaults
+        </div>
+        """, unsafe_allow_html=True)
+
+# Show additional data source info
+if STAFF_DATA["has_data"] or historical_data["has_data"]:
+    with st.expander("📊 Data Source Details", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Staff Scheduling (Supabase):**")
+            if STAFF_DATA["has_data"]:
+                st.markdown(f"""
+                - Records: **{STAFF_DATA['total_records']}** days
+                - Avg Doctors: **{STAFF_DATA['avg_doctors']}**/day
+                - Avg Nurses: **{STAFF_DATA['avg_nurses']}**/day
+                - Avg Support: **{STAFF_DATA['avg_support']}**/day
+                - Overtime Hours: **{STAFF_DATA['overtime_hours']:.0f}** total
+                - Shortage Days: **{STAFF_DATA['shortage_days']}**
+                """)
+            else:
+                st.markdown("*Using default values*")
+
+        with col2:
+            st.markdown("**Financial Data (Supabase):**")
+            if COST_PARAMS.get("source") == "supabase":
+                st.markdown(f"""
+                - Doctor Rate: **${COST_PARAMS['doctor_hourly']:.0f}**/hr
+                - Nurse Rate: **${COST_PARAMS['nurse_hourly']:.0f}**/hr
+                - Support Rate: **${COST_PARAMS['support_hourly']:.0f}**/hr
+                - Overtime Multiplier: **{COST_PARAMS['overtime_multiplier']:.1f}x**
+                """)
+            else:
+                st.markdown("*Using default values*")
 
 
 # =============================================================================
 # ANALYSIS
 # =============================================================================
 
-if forecast_data["has_forecast"] or historical_data["has_data"]:
+# Check if we have any data to analyze
+has_any_data = (
+    forecast_data["has_forecast"] or
+    historical_data["has_data"] or
+    STAFF_DATA.get("has_data", False)
+)
+
+if has_any_data:
 
     before_analysis = analyze_before_scenario(historical_data)
     after_analysis = analyze_after_scenario(forecast_data)
@@ -850,6 +1085,13 @@ if forecast_data["has_forecast"] or historical_data["has_data"]:
         st.markdown('<div class="section-header">🔴 BEFORE: Fixed Staffing Analysis</div>', unsafe_allow_html=True)
 
         if before_analysis.get("has_analysis"):
+            # Show data source
+            data_source = before_analysis.get("data_source", "unknown")
+            if data_source == "supabase":
+                st.success("📊 **Using REAL data from Supabase** (staff_scheduling & financial_data tables)")
+            else:
+                st.info("📊 Using patient volume data for analysis")
+
             st.markdown("""
             **Traditional Approach:** Hospital schedules the same number of staff every day,
             regardless of expected patient volume.
