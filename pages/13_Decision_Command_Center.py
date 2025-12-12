@@ -1,7 +1,7 @@
 # =============================================================================
 # 13_Decision_Command_Center.py — Hospital Manager Decision Dashboard
-# Plain-language operational insights for healthcare administrators
-# No ML knowledge required - just actionable information
+# Integrated with Pages 10, 11, 12 session state
+# Follows Modeling Hub design pattern
 # =============================================================================
 from __future__ import annotations
 import streamlit as st
@@ -11,12 +11,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass
 
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
@@ -37,18 +36,142 @@ st.set_page_config(
 apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
+add_logout_button()
 
 # =============================================================================
-# CUSTOM CSS - Clean, Professional Hospital Dashboard
+# CUSTOM CSS - Modeling Hub Style Design
 # =============================================================================
-st.markdown("""
+st.markdown(f"""
 <style>
 /* ========================================
-   HOSPITAL COMMAND CENTER - CLEAN STYLES
+   FLUORESCENT EFFECTS FOR COMMAND CENTER
    ======================================== */
 
-/* Executive Summary Card */
-.exec-summary-card {
+@keyframes float-orb {{
+    0%, 100% {{
+        transform: translate(0, 0) scale(1);
+        opacity: 0.25;
+    }}
+    50% {{
+        transform: translate(30px, -30px) scale(1.05);
+        opacity: 0.35;
+    }}
+}}
+
+.fluorescent-orb {{
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(70px);
+}}
+
+.orb-1 {{
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.25), transparent 70%);
+    top: 15%;
+    right: 20%;
+    animation: float-orb 25s ease-in-out infinite;
+}}
+
+.orb-2 {{
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.2), transparent 70%);
+    bottom: 20%;
+    left: 15%;
+    animation: float-orb 30s ease-in-out infinite;
+    animation-delay: 5s;
+}}
+
+@keyframes sparkle {{
+    0%, 100% {{
+        opacity: 0;
+        transform: scale(0);
+    }}
+    50% {{
+        opacity: 0.6;
+        transform: scale(1);
+    }}
+}}
+
+.sparkle {{
+    position: fixed;
+    width: 3px;
+    height: 3px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 197, 94, 0.3));
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 2;
+    animation: sparkle 3s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}}
+
+.sparkle-1 {{ top: 25%; left: 35%; animation-delay: 0s; }}
+.sparkle-2 {{ top: 65%; left: 70%; animation-delay: 1s; }}
+.sparkle-3 {{ top: 45%; left: 15%; animation-delay: 2s; }}
+
+/* ========================================
+   CUSTOM TAB STYLING (Modern Design)
+   ======================================== */
+
+.stTabs {{
+    background: transparent;
+    margin-top: 1rem;
+}}
+
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 0.5rem;
+    background: linear-gradient(135deg, rgba(11, 17, 32, 0.6), rgba(5, 8, 22, 0.5));
+    padding: 0.5rem;
+    border-radius: 16px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    height: 50px;
+    background: transparent;
+    border-radius: 12px;
+    padding: 0 1.5rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: {BODY_TEXT};
+    border: 1px solid transparent;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}}
+
+.stTabs [data-baseweb="tab"]:hover {{
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(59, 130, 246, 0.1));
+    border-color: rgba(34, 197, 94, 0.3);
+    color: {TEXT_COLOR};
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+}}
+
+.stTabs [aria-selected="true"] {{
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(59, 130, 246, 0.2)) !important;
+    border: 1px solid rgba(34, 197, 94, 0.5) !important;
+    color: {TEXT_COLOR} !important;
+    box-shadow:
+        0 0 20px rgba(34, 197, 94, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}}
+
+.stTabs [data-baseweb="tab-highlight"] {{
+    background-color: transparent;
+}}
+
+.stTabs [data-baseweb="tab-panel"] {{
+    padding-top: 1.5rem;
+}}
+
+/* ========================================
+   KPI CARDS - Command Center Style
+   ======================================== */
+
+.cmd-kpi-card {{
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
     border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 16px;
@@ -58,15 +181,15 @@ st.markdown("""
     overflow: hidden;
     transition: all 0.3s ease;
     height: 100%;
-}
+}}
 
-.exec-summary-card:hover {
+.cmd-kpi-card:hover {{
     border-color: rgba(59, 130, 246, 0.6);
     transform: translateY(-2px);
     box-shadow: 0 8px 30px rgba(59, 130, 246, 0.15);
-}
+}}
 
-.exec-summary-card::before {
+.cmd-kpi-card::before {{
     content: '';
     position: absolute;
     top: 0;
@@ -74,62 +197,62 @@ st.markdown("""
     right: 0;
     height: 4px;
     background: linear-gradient(90deg, var(--accent-color, #3b82f6), var(--accent-end, #22d3ee));
-}
+}}
 
-.card-icon {
+.cmd-kpi-icon {{
     font-size: 2.5rem;
     margin-bottom: 0.5rem;
-}
+}}
 
-.card-value {
+.cmd-kpi-value {{
     font-size: 2rem;
     font-weight: 800;
     color: #f8fafc;
     margin: 0.25rem 0;
-}
+}}
 
-.card-label {
+.cmd-kpi-label {{
     font-size: 0.9rem;
     color: #94a3b8;
     font-weight: 600;
-}
+}}
 
-.card-sublabel {
+.cmd-kpi-sublabel {{
     font-size: 0.75rem;
     color: #64748b;
     margin-top: 0.25rem;
-}
+}}
 
-/* Status Indicators */
-.status-good {
+/* Status Badges */
+.status-good {{
     color: #22c55e;
     background: rgba(34, 197, 94, 0.15);
     padding: 0.25rem 0.75rem;
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 600;
-}
+}}
 
-.status-warning {
+.status-warning {{
     color: #f59e0b;
     background: rgba(245, 158, 11, 0.15);
     padding: 0.25rem 0.75rem;
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 600;
-}
+}}
 
-.status-alert {
+.status-alert {{
     color: #ef4444;
     background: rgba(239, 68, 68, 0.15);
     padding: 0.25rem 0.75rem;
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 600;
-}
+}}
 
 /* Action Card */
-.action-card {
+.action-card {{
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
     border-radius: 12px;
     padding: 1rem 1.25rem;
@@ -139,188 +262,203 @@ st.markdown("""
     gap: 1rem;
     border-left: 4px solid;
     transition: all 0.2s ease;
-}
+}}
 
-.action-card:hover {
+.action-card:hover {{
     transform: translateX(5px);
-}
+}}
 
-.action-urgent {
+.action-urgent {{
     border-left-color: #ef4444;
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(15, 23, 42, 0.95));
-}
+}}
 
-.action-important {
+.action-important {{
     border-left-color: #f59e0b;
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(15, 23, 42, 0.95));
-}
+}}
 
-.action-normal {
+.action-normal {{
     border-left-color: #3b82f6;
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(15, 23, 42, 0.95));
-}
+}}
 
-.action-icon {
+.action-icon {{
     font-size: 1.5rem;
     flex-shrink: 0;
-}
+}}
 
-.action-content {
+.action-content {{
     flex: 1;
-}
+}}
 
-.action-title {
+.action-title {{
     font-weight: 600;
     color: #f1f5f9;
     margin-bottom: 0.25rem;
     font-size: 0.95rem;
-}
+}}
 
-.action-description {
+.action-description {{
     font-size: 0.85rem;
     color: #94a3b8;
     line-height: 1.4;
-}
+}}
+
+/* Data Status Box */
+.data-status-box {{
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}}
+
+.data-status-item {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+}}
+
+.data-status-item:last-child {{
+    border-bottom: none;
+}}
+
+/* Section Header */
+.section-header {{
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.5rem 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(34, 197, 94, 0.3);
+}}
+
+.section-icon {{
+    font-size: 1.5rem;
+}}
+
+.section-title {{
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f1f5f9;
+}}
 
 /* Savings Card */
-.savings-card {
+.savings-card {{
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
     border: 2px solid rgba(34, 197, 94, 0.4);
     border-radius: 16px;
     padding: 1.5rem;
     text-align: center;
-}
+}}
 
-.savings-value {
+.savings-value {{
     font-size: 2.5rem;
     font-weight: 800;
     color: #22c55e;
     text-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
-}
+}}
 
-.savings-label {
+.savings-label {{
     font-size: 1rem;
     color: #86efac;
     font-weight: 600;
-}
+}}
 
-/* Week Day Card */
-.day-card {
+/* Day Card for Forecast */
+.day-card {{
     background: rgba(30, 41, 59, 0.8);
     border: 1px solid rgba(100, 116, 139, 0.3);
     border-radius: 10px;
     padding: 1rem;
     text-align: center;
     transition: all 0.2s ease;
-}
+}}
 
-.day-card:hover {
+.day-card:hover {{
     border-color: rgba(59, 130, 246, 0.5);
-}
+}}
 
-.day-card.today {
+.day-card.today {{
     border-color: #3b82f6;
     background: rgba(59, 130, 246, 0.1);
-}
+}}
 
-.day-card.high-volume {
+.day-card.high-volume {{
     border-color: #f59e0b;
     background: rgba(245, 158, 11, 0.1);
-}
+}}
 
-.day-name {
+.day-name {{
     font-size: 0.85rem;
     color: #94a3b8;
     font-weight: 600;
-}
+}}
 
-.day-date {
+.day-date {{
     font-size: 0.75rem;
     color: #64748b;
-}
+}}
 
-.day-patients {
+.day-patients {{
     font-size: 1.5rem;
     font-weight: 700;
     color: #f1f5f9;
     margin: 0.5rem 0;
-}
+}}
 
-.day-label {
+.day-label {{
     font-size: 0.7rem;
     color: #64748b;
-}
-
-/* Section Header */
-.section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 1.5rem 0 1rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid rgba(59, 130, 246, 0.3);
-}
-
-.section-icon {
-    font-size: 1.5rem;
-}
-
-.section-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #f1f5f9;
-}
-
-/* Insight Box */
-.insight-box {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.08));
-    border: 1px solid rgba(59, 130, 246, 0.25);
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    margin: 1rem 0;
-}
-
-.insight-title {
-    font-weight: 600;
-    color: #60a5fa;
-    margin-bottom: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.insight-content {
-    color: #cbd5e1;
-    font-size: 0.9rem;
-    line-height: 1.6;
-}
-
-/* Supply Status */
-.supply-ok { color: #22c55e; }
-.supply-low { color: #f59e0b; }
-.supply-critical { color: #ef4444; }
+}}
 
 /* Mobile Responsive */
-@media (max-width: 768px) {
-    .card-value { font-size: 1.5rem; }
-    .savings-value { font-size: 2rem; }
-    .day-patients { font-size: 1.25rem; }
-}
+@media (max-width: 768px) {{
+    .fluorescent-orb {{
+        width: 200px !important;
+        height: 200px !important;
+        filter: blur(50px);
+    }}
+    .sparkle {{
+        display: none;
+    }}
+    .cmd-kpi-value {{ font-size: 1.5rem; }}
+    .savings-value {{ font-size: 2rem; }}
+    .day-patients {{ font-size: 1.25rem; }}
+}}
 </style>
+
+<!-- Fluorescent Floating Orbs -->
+<div class="fluorescent-orb orb-1"></div>
+<div class="fluorescent-orb orb-2"></div>
+
+<!-- Sparkle Particles -->
+<div class="sparkle sparkle-1"></div>
+<div class="sparkle sparkle-2"></div>
+<div class="sparkle sparkle-3"></div>
 """, unsafe_allow_html=True)
 
 
 # =============================================================================
-# DATA EXTRACTION FUNCTIONS (from pages 08-12)
+# DATA EXTRACTION FUNCTIONS - Aligned with Pages 10, 11, 12
 # =============================================================================
 
-def get_weekly_patient_forecast() -> Dict[str, Any]:
-    """Extract 7-day patient forecast in plain terms."""
+def get_forecast_data() -> Dict[str, Any]:
+    """
+    Extract forecast data from session state.
+    Priority: forecast_hub_demand (Page 10) > ML models > ARIMA
+    """
     result = {
         "has_forecast": False,
-        "daily_patients": [],
-        "total_week": 0,
+        "source": None,
+        "forecasts": [],
+        "dates": [],
+        "horizon": 0,
         "avg_daily": 0,
+        "total_week": 0,
         "peak_day": None,
         "peak_patients": 0,
         "low_day": None,
@@ -329,202 +467,303 @@ def get_weekly_patient_forecast() -> Dict[str, Any]:
         "confidence": "Unknown",
     }
 
-    # Try Forecast Hub first
-    if "forecast_hub_demand" in st.session_state:
-        data = st.session_state["forecast_hub_demand"]
-        if data and "forecast" in data:
-            forecast = list(data["forecast"])[:7]
-            if forecast:
-                result["has_forecast"] = True
-                result["daily_patients"] = [round(p) for p in forecast]
-                result["total_week"] = sum(result["daily_patients"])
-                result["avg_daily"] = round(np.mean(forecast))
+    # Priority 1: Check forecast_hub_demand (from Page 10)
+    hub_demand = st.session_state.get("forecast_hub_demand")
+    if hub_demand and isinstance(hub_demand, dict):
+        forecasts = hub_demand.get("forecast", [])
+        if forecasts and len(forecasts) > 0:
+            result["has_forecast"] = True
+            result["source"] = hub_demand.get("model", "Forecast Hub")
+            result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
+            result["dates"] = hub_demand.get("dates", [])
+            result["horizon"] = len(result["forecasts"])
 
-                # Find peak and low days
-                for i, p in enumerate(forecast):
-                    if p > result["peak_patients"]:
-                        result["peak_patients"] = round(p)
-                        result["peak_day"] = i
-                    if p < result["low_patients"]:
-                        result["low_patients"] = round(p)
-                        result["low_day"] = i
-
-                # Determine trend
-                if len(forecast) >= 3:
-                    first_half = np.mean(forecast[:len(forecast)//2])
-                    second_half = np.mean(forecast[len(forecast)//2:])
-                    if second_half > first_half * 1.1:
-                        result["trend"] = "increasing"
-                    elif second_half < first_half * 0.9:
-                        result["trend"] = "decreasing"
-
-                # Get confidence level (translate RPIW to plain language)
-                rpiw = st.session_state.get("forecast_rpiw")
-                if rpiw:
-                    if rpiw < 15:
-                        result["confidence"] = "High"
-                    elif rpiw < 30:
-                        result["confidence"] = "Medium"
-                    else:
-                        result["confidence"] = "Low"
-
-    # Fallback to ML models
+    # Priority 2: Check ML models from Modeling Hub
     if not result["has_forecast"]:
-        for model in ["XGBoost", "LSTM", "ANN", "ARIMA", "SARIMAX"]:
-            key = f"ml_mh_results_{model}" if model in ["XGBoost", "LSTM", "ANN"] else f"{model.lower()}_mh_results"
-            if key in st.session_state:
-                data = st.session_state[key]
-                if data and "per_h" in data:
-                    per_h = data["per_h"]
-                    if per_h:
-                        forecast = []
-                        for h in range(1, 8):
-                            if h in per_h and "y_test_pred" in per_h[h]:
-                                pred = per_h[h]["y_test_pred"]
-                                if hasattr(pred, "__len__") and len(pred) > 0:
-                                    forecast.append(float(pred[-1]))
-
-                        if forecast:
+        for model in ["XGBoost", "LSTM", "ANN"]:
+            key = f"ml_mh_results_{model}"
+            ml_results = st.session_state.get(key)
+            if ml_results and isinstance(ml_results, dict):
+                per_h = ml_results.get("per_h", {})
+                if per_h:
+                    try:
+                        horizons = sorted([int(h) for h in per_h.keys()])
+                        forecasts = []
+                        for h in horizons[:7]:
+                            h_data = per_h.get(h, {})
+                            pred = h_data.get("y_test_pred") or h_data.get("forecast") or h_data.get("predictions")
+                            if pred is not None:
+                                arr = pred.values if hasattr(pred, 'values') else np.array(pred)
+                                if len(arr) > 0:
+                                    forecasts.append(max(0, float(arr[-1])))
+                        if forecasts:
                             result["has_forecast"] = True
-                            result["daily_patients"] = [round(p) for p in forecast[:7]]
-                            result["total_week"] = sum(result["daily_patients"])
-                            result["avg_daily"] = round(np.mean(forecast[:7]))
-                            result["confidence"] = "Medium"
+                            result["source"] = f"ML ({model})"
+                            result["forecasts"] = forecasts
+                            result["horizon"] = len(forecasts)
                             break
+                    except Exception:
+                        continue
+
+    # Priority 3: Check ARIMA
+    if not result["has_forecast"]:
+        arima = st.session_state.get("arima_mh_results")
+        if arima and isinstance(arima, dict):
+            per_h = arima.get("per_h", {})
+            if per_h:
+                try:
+                    horizons = sorted([int(h) for h in per_h.keys()])
+                    forecasts = []
+                    for h in horizons[:7]:
+                        fc = per_h.get(h, {}).get("forecast")
+                        if fc is not None:
+                            arr = fc.values if hasattr(fc, 'values') else np.array(fc)
+                            if len(arr) > 0:
+                                forecasts.append(max(0, float(arr[-1])))
+                    if forecasts:
+                        result["has_forecast"] = True
+                        result["source"] = "ARIMA"
+                        result["forecasts"] = forecasts
+                        result["horizon"] = len(forecasts)
+                except Exception:
+                    pass
+
+    # Calculate statistics if forecast available
+    if result["has_forecast"] and result["forecasts"]:
+        forecasts = result["forecasts"]
+        result["total_week"] = int(sum(forecasts))
+        result["avg_daily"] = int(np.mean(forecasts))
+
+        for i, p in enumerate(forecasts):
+            if p > result["peak_patients"]:
+                result["peak_patients"] = int(p)
+                result["peak_day"] = i
+            if p < result["low_patients"]:
+                result["low_patients"] = int(p)
+                result["low_day"] = i
+
+        # Determine trend
+        if len(forecasts) >= 3:
+            first_half = np.mean(forecasts[:len(forecasts)//2])
+            second_half = np.mean(forecasts[len(forecasts)//2:])
+            if second_half > first_half * 1.1:
+                result["trend"] = "increasing"
+            elif second_half < first_half * 0.9:
+                result["trend"] = "decreasing"
+
+        # Get confidence from RPIW if available
+        rpiw = st.session_state.get("forecast_rpiw")
+        if rpiw is not None:
+            try:
+                rpiw_val = float(rpiw)
+                if rpiw_val < 15:
+                    result["confidence"] = "High"
+                elif rpiw_val < 30:
+                    result["confidence"] = "Medium"
+                else:
+                    result["confidence"] = "Low"
+            except:
+                pass
+
+        # Generate dates if not available
+        if not result["dates"]:
+            today = datetime.now().date()
+            result["dates"] = [(today + timedelta(days=i+1)).strftime("%a %m/%d") for i in range(result["horizon"])]
 
     return result
 
 
-def get_staffing_insights() -> Dict[str, Any]:
-    """Extract staffing optimization results in plain terms."""
+def get_staff_insights() -> Dict[str, Any]:
+    """
+    Extract staffing data from Page 11 session state.
+    Reads: staff_stats, cost_params, optimized_results, staff_data_loaded
+    """
     result = {
         "has_data": False,
-        "total_staff_needed": 0,
-        "shifts_covered": 0,
-        "shifts_understaffed": 0,
-        "overtime_hours": 0,
-        "total_labor_cost": 0,
+        "data_loaded": False,
+        "optimization_done": False,
+        # Current stats
+        "avg_doctors": 0,
+        "avg_nurses": 0,
+        "avg_support": 0,
+        "avg_utilization": 0,
+        "total_overtime": 0,
+        "shortage_days": 0,
+        # Financial
+        "daily_labor_cost": 0,
+        "weekly_labor_cost": 0,
         "coverage_percent": 0,
-        "cost_per_patient": 0,
+        # Optimized (if available)
+        "opt_doctors": 0,
+        "opt_nurses": 0,
+        "opt_support": 0,
+        "opt_weekly_cost": 0,
+        "weekly_savings": 0,
         "recommendations": [],
     }
 
-    opt_result = st.session_state.get("optimization_result")
-    if opt_result:
-        result["has_data"] = True
+    # Check if data is loaded
+    result["data_loaded"] = st.session_state.get("staff_data_loaded", False)
+    result["optimization_done"] = st.session_state.get("optimization_done", False)
 
-        if hasattr(opt_result, "total_regular_cost"):
-            result["total_labor_cost"] = (
-                getattr(opt_result, "total_regular_cost", 0) +
-                getattr(opt_result, "total_overtime_cost", 0)
-            )
-            result["coverage_percent"] = getattr(opt_result, "coverage_rate", 0)
-            result["shifts_understaffed"] = getattr(opt_result, "understaffed_periods", 0)
+    if not result["data_loaded"]:
+        return result
 
-            # Get schedule details
-            schedule = getattr(opt_result, "schedule_df", None)
-            if schedule is not None and not schedule.empty:
-                staff_cols = [c for c in schedule.columns if c not in ["Date", "Hour", "Period", "Demand"]]
-                if staff_cols:
-                    result["total_staff_needed"] = int(schedule[staff_cols].sum().sum())
-                    result["shifts_covered"] = len(schedule) - result["shifts_understaffed"]
+    result["has_data"] = True
 
-        elif isinstance(opt_result, dict):
-            result["total_labor_cost"] = opt_result.get("total_cost", 0)
-            result["coverage_percent"] = opt_result.get("coverage_rate", 0)
+    # Get staff stats from Page 11
+    staff_stats = st.session_state.get("staff_stats", {})
+    cost_params = st.session_state.get("cost_params", {})
 
-        # Generate recommendations
-        if result["coverage_percent"] < 95:
-            result["recommendations"].append({
-                "priority": "high",
-                "text": f"Coverage is at {result['coverage_percent']:.0f}% - consider adding {max(1, result['shifts_understaffed'])} more staff"
-            })
+    # Current values - ensure non-negative
+    result["avg_doctors"] = max(0, staff_stats.get("avg_doctors", 0))
+    result["avg_nurses"] = max(0, staff_stats.get("avg_nurses", 0))
+    result["avg_support"] = max(0, staff_stats.get("avg_support", 0))
+    result["avg_utilization"] = max(0, min(100, staff_stats.get("avg_utilization", 0)))
+    result["total_overtime"] = max(0, staff_stats.get("total_overtime", 0))
+    result["shortage_days"] = max(0, staff_stats.get("shortage_days", 0))
 
-        if result["shifts_understaffed"] > 5:
-            result["recommendations"].append({
-                "priority": "urgent",
-                "text": f"{result['shifts_understaffed']} shifts are understaffed - urgent action needed"
-            })
+    # Calculate costs
+    shift_hours = cost_params.get("shift_hours", 8)
+    doc_hourly = cost_params.get("doctor_hourly", 150)
+    nurse_hourly = cost_params.get("nurse_hourly", 50)
+    support_hourly = cost_params.get("support_hourly", 25)
+
+    daily_cost = (
+        result["avg_doctors"] * doc_hourly * shift_hours +
+        result["avg_nurses"] * nurse_hourly * shift_hours +
+        result["avg_support"] * support_hourly * shift_hours
+    )
+    result["daily_labor_cost"] = daily_cost
+    result["weekly_labor_cost"] = daily_cost * 7
+
+    # Coverage estimate based on utilization
+    result["coverage_percent"] = result["avg_utilization"]
+
+    # Check for optimization results
+    opt_results = st.session_state.get("optimized_results")
+    if opt_results and isinstance(opt_results, dict) and opt_results.get("success", False):
+        result["opt_doctors"] = opt_results.get("avg_opt_doctors", 0)
+        result["opt_nurses"] = opt_results.get("avg_opt_nurses", 0)
+        result["opt_support"] = opt_results.get("avg_opt_support", 0)
+        result["opt_weekly_cost"] = opt_results.get("optimized_weekly_cost", 0)
+        result["weekly_savings"] = opt_results.get("weekly_savings", 0)
+
+    # Generate recommendations
+    if result["avg_utilization"] < 80:
+        result["recommendations"].append({
+            "priority": "high",
+            "text": f"Staff utilization is {result['avg_utilization']:.0f}% - consider optimizing schedules"
+        })
+
+    if result["shortage_days"] > 5:
+        result["recommendations"].append({
+            "priority": "urgent",
+            "text": f"{result['shortage_days']} shortage days detected - urgent staffing action needed"
+        })
+
+    if result["total_overtime"] > 100:
+        result["recommendations"].append({
+            "priority": "important",
+            "text": f"High overtime ({result['total_overtime']:.0f}h) - review staffing levels"
+        })
 
     return result
 
 
 def get_inventory_insights() -> Dict[str, Any]:
-    """Extract inventory status in plain terms."""
+    """
+    Extract inventory data from Page 12 session state.
+    Reads: inventory_stats, inv_cost_params, inv_optimized_results, inventory_data_loaded
+    """
     result = {
         "has_data": False,
-        "items_tracked": 0,
+        "data_loaded": False,
+        "optimization_done": False,
+        # Current stats
+        "avg_gloves_usage": 0,
+        "avg_ppe_usage": 0,
+        "avg_medication_usage": 0,
+        "avg_stockout_risk": 0,
+        "restock_events": 0,
+        "service_level": 100,
+        # Financial
+        "daily_inventory_cost": 0,
+        "weekly_inventory_cost": 0,
+        # Counts
+        "items_tracked": 3,  # Gloves, PPE, Medications
         "items_ok": 0,
         "items_low": 0,
         "items_critical": 0,
+        # Optimized (if available)
+        "opt_weekly_cost": 0,
+        "weekly_savings": 0,
         "reorder_needed": [],
-        "total_inventory_cost": 0,
-        "potential_savings": 0,
-        "stockout_risk": "Low",
     }
 
-    items = st.session_state.get("inventory_items", [])
-    current_inv = st.session_state.get("current_inventory", {})
-    eoq_results = st.session_state.get("eoq_results")
-    milp_results = st.session_state.get("milp_results")
+    # Check if data is loaded
+    result["data_loaded"] = st.session_state.get("inventory_data_loaded", False)
+    result["optimization_done"] = st.session_state.get("inv_optimization_done", False)
 
-    if items:
-        result["has_data"] = True
-        result["items_tracked"] = len(items)
+    if not result["data_loaded"]:
+        return result
 
-        # Get reorder points
-        reorder_points = {}
-        if milp_results and hasattr(milp_results, "reorder_points"):
-            reorder_points = milp_results.reorder_points
-        elif eoq_results:
-            for r in eoq_results:
-                reorder_points[r.item_id] = r.reorder_point
+    result["has_data"] = True
 
-        # Check each item status
-        for item in items:
-            current = current_inv.get(item.item_id, 0)
-            rop = reorder_points.get(item.item_id, 0)
+    # Get inventory stats from Page 12
+    inv_stats = st.session_state.get("inventory_stats", {})
+    cost_params = st.session_state.get("inv_cost_params", {})
 
-            if rop > 0:
-                if current <= rop * 0.5:
-                    result["items_critical"] += 1
-                    result["reorder_needed"].append({
-                        "name": item.name,
-                        "current": current,
-                        "needed": round(rop * 2),
-                        "urgency": "CRITICAL"
-                    })
-                elif current <= rop:
-                    result["items_low"] += 1
-                    result["reorder_needed"].append({
-                        "name": item.name,
-                        "current": current,
-                        "needed": round(rop * 1.5),
-                        "urgency": "LOW"
-                    })
-                else:
-                    result["items_ok"] += 1
-            else:
-                result["items_ok"] += 1
+    # Current values - ensure non-negative
+    result["avg_gloves_usage"] = max(0, inv_stats.get("avg_gloves_usage", 0))
+    result["avg_ppe_usage"] = max(0, inv_stats.get("avg_ppe_usage", 0))
+    result["avg_medication_usage"] = max(0, inv_stats.get("avg_medication_usage", 0))
+    result["avg_stockout_risk"] = max(0, min(100, inv_stats.get("avg_stockout_risk", 0)))
+    result["restock_events"] = max(0, inv_stats.get("restock_events", 0))
+    result["service_level"] = 100 - result["avg_stockout_risk"]
 
-        # Get costs
-        if eoq_results:
-            result["total_inventory_cost"] = sum(r.total_annual_cost for r in eoq_results)
+    # Calculate costs
+    gloves_cost = result["avg_gloves_usage"] * cost_params.get("gloves_unit_cost", 15)
+    ppe_cost = result["avg_ppe_usage"] * cost_params.get("ppe_unit_cost", 45)
+    med_cost = result["avg_medication_usage"] * cost_params.get("medication_unit_cost", 8)
 
-        if milp_results and hasattr(milp_results, "total_cost"):
-            result["potential_savings"] = max(0, result["total_inventory_cost"] - milp_results.total_cost * 12)
+    result["daily_inventory_cost"] = gloves_cost + ppe_cost + med_cost
+    result["weekly_inventory_cost"] = result["daily_inventory_cost"] * 7
 
-        # Overall risk
-        if result["items_critical"] > 0:
-            result["stockout_risk"] = "High"
-        elif result["items_low"] > 2:
-            result["stockout_risk"] = "Medium"
+    # Determine item status based on stockout risk
+    if result["avg_stockout_risk"] > 10:
+        result["items_critical"] = 1
+        result["items_low"] = 1
+        result["items_ok"] = 1
+    elif result["avg_stockout_risk"] > 5:
+        result["items_critical"] = 0
+        result["items_low"] = 2
+        result["items_ok"] = 1
+    else:
+        result["items_critical"] = 0
+        result["items_low"] = 0
+        result["items_ok"] = 3
+
+    # Check for optimization results
+    opt_results = st.session_state.get("inv_optimized_results")
+    if opt_results and isinstance(opt_results, dict) and opt_results.get("success", False):
+        result["opt_weekly_cost"] = opt_results.get("optimized_weekly_cost", 0)
+        result["weekly_savings"] = opt_results.get("weekly_savings", 0)
+
+    # Generate reorder alerts if stockout risk is high
+    if result["avg_stockout_risk"] > 10:
+        result["reorder_needed"].append({
+            "name": "Critical Items",
+            "current": "Low",
+            "needed": "Restock ASAP",
+            "urgency": "CRITICAL"
+        })
 
     return result
 
 
-def calculate_financial_impact() -> Dict[str, Any]:
-    """Calculate financial savings and ROI from using the system."""
+def calculate_financial_impact(forecast: Dict, staffing: Dict, inventory: Dict) -> Dict[str, Any]:
+    """Calculate total financial impact from all optimizations."""
     result = {
         "staffing_savings": 0,
         "inventory_savings": 0,
@@ -535,40 +774,37 @@ def calculate_financial_impact() -> Dict[str, Any]:
         "breakdown": [],
     }
 
-    # Staffing savings calculation
-    staffing = get_staffing_insights()
-    if staffing["has_data"]:
-        # Assume 15% efficiency gain from optimized scheduling
-        baseline_cost = staffing["total_labor_cost"] / 0.85  # What it would cost without optimization
-        result["staffing_savings"] = baseline_cost - staffing["total_labor_cost"]
+    # Staffing savings
+    if staffing["optimization_done"] and staffing["weekly_savings"] > 0:
+        monthly_staff_savings = staffing["weekly_savings"] * 4.3
+        result["staffing_savings"] = monthly_staff_savings
         result["breakdown"].append({
-            "category": "Staff Scheduling Optimization",
-            "savings": result["staffing_savings"],
-            "description": "Reduced overtime and better shift allocation"
+            "category": "Staff Scheduling",
+            "savings": monthly_staff_savings,
+            "description": "Optimized staff allocation based on forecast"
         })
 
     # Inventory savings
-    inventory = get_inventory_insights()
-    if inventory["has_data"] and inventory["potential_savings"] > 0:
-        result["inventory_savings"] = inventory["potential_savings"] / 12  # Monthly
+    if inventory["optimization_done"] and inventory["weekly_savings"] > 0:
+        monthly_inv_savings = inventory["weekly_savings"] * 4.3
+        result["inventory_savings"] = monthly_inv_savings
         result["breakdown"].append({
-            "category": "Inventory Optimization",
-            "savings": result["inventory_savings"],
-            "description": "Optimal order quantities and reduced holding costs"
+            "category": "Inventory Management",
+            "savings": monthly_inv_savings,
+            "description": "Optimized ordering and reduced stockouts"
         })
 
-    # Efficiency gains from accurate forecasting
-    forecast = get_weekly_patient_forecast()
+    # Efficiency gains from forecasting
     if forecast["has_forecast"]:
-        # Estimate: Better forecasting saves ~5% in resource allocation
         weekly_patients = forecast["total_week"]
-        avg_cost_per_patient = 150  # Rough estimate
+        avg_cost_per_patient = 150
         monthly_patients = weekly_patients * 4.3
-        result["efficiency_gains"] = monthly_patients * avg_cost_per_patient * 0.05
+        efficiency = monthly_patients * avg_cost_per_patient * 0.05  # 5% efficiency gain
+        result["efficiency_gains"] = efficiency
         result["breakdown"].append({
-            "category": "Demand Forecasting Accuracy",
-            "savings": result["efficiency_gains"],
-            "description": "Better resource preparation and reduced waste"
+            "category": "Forecast Accuracy",
+            "savings": efficiency,
+            "description": "Better resource planning from accurate forecasts"
         })
 
     result["total_monthly_savings"] = (
@@ -578,7 +814,7 @@ def calculate_financial_impact() -> Dict[str, Any]:
     )
     result["annual_savings"] = result["total_monthly_savings"] * 12
 
-    # Assume system costs ~$500/month
+    # ROI calculation (assume $500/month system cost)
     system_cost = 500
     if result["total_monthly_savings"] > 0:
         result["roi_percent"] = ((result["total_monthly_savings"] - system_cost) / system_cost) * 100
@@ -586,93 +822,111 @@ def calculate_financial_impact() -> Dict[str, Any]:
     return result
 
 
-def generate_action_items() -> List[Dict[str, Any]]:
-    """Generate prioritized action items for hospital manager."""
+def generate_action_items(forecast: Dict, staffing: Dict, inventory: Dict) -> List[Dict[str, Any]]:
+    """Generate prioritized action items based on current data."""
     actions = []
 
-    forecast = get_weekly_patient_forecast()
-    staffing = get_staffing_insights()
-    inventory = get_inventory_insights()
-
-    # Forecast-based actions
-    if forecast["has_forecast"]:
+    # Forecast actions
+    if not forecast["has_forecast"]:
+        actions.append({
+            "priority": "important",
+            "icon": "📊",
+            "title": "No Patient Forecast Available",
+            "description": "Go to Modeling Hub (Page 08) to train models, then Forecast Hub (Page 10) to generate predictions.",
+            "category": "System"
+        })
+    else:
         if forecast["trend"] == "increasing":
             actions.append({
                 "priority": "important",
                 "icon": "📈",
                 "title": "Patient Volume Increasing",
-                "description": f"Expect {forecast['peak_patients']} patients on peak day. Consider alerting additional on-call staff.",
-                "category": "Staffing"
+                "description": f"Peak expected: {forecast['peak_patients']} patients. Prepare additional resources.",
+                "category": "Planning"
             })
 
         if forecast["confidence"] == "Low":
             actions.append({
                 "priority": "normal",
                 "icon": "🔄",
-                "title": "Forecast Confidence is Low",
-                "description": "Predictions have wider uncertainty. Prepare contingency plans for both high and low scenarios.",
+                "title": "Low Forecast Confidence",
+                "description": "Consider training more models or using longer historical data.",
                 "category": "Planning"
             })
-    else:
-        actions.append({
-            "priority": "important",
-            "icon": "📊",
-            "title": "No Patient Forecast Available",
-            "description": "Run the forecasting models in Modeling Hub to enable data-driven planning.",
-            "category": "System"
-        })
 
     # Staffing actions
-    if staffing["has_data"]:
-        if staffing["shifts_understaffed"] > 0:
-            actions.append({
-                "priority": "urgent",
-                "icon": "👥",
-                "title": f"{staffing['shifts_understaffed']} Shifts Understaffed",
-                "description": "Some periods don't have adequate coverage. Review schedule and assign additional staff.",
-                "category": "Staffing"
-            })
-
-        if staffing["coverage_percent"] < 90:
+    if not staffing["data_loaded"]:
+        actions.append({
+            "priority": "normal",
+            "icon": "👥",
+            "title": "Load Staff Data",
+            "description": "Go to Staff Scheduling (Page 11) to load and analyze staffing data.",
+            "category": "System"
+        })
+    else:
+        if staffing["shortage_days"] > 0:
             actions.append({
                 "priority": "urgent",
                 "icon": "⚠️",
-                "title": f"Staff Coverage Only {staffing['coverage_percent']:.0f}%",
-                "description": "Target is 95%+ coverage. Consider hiring temporary staff or adjusting shifts.",
+                "title": f"{staffing['shortage_days']} Shortage Days",
+                "description": "Some periods lack adequate coverage. Review and adjust schedules.",
                 "category": "Staffing"
             })
-    else:
-        actions.append({
-            "priority": "normal",
-            "icon": "📋",
-            "title": "Run Staff Optimization",
-            "description": "Go to Staff Scheduling page to optimize your workforce allocation based on patient forecast.",
-            "category": "System"
-        })
+
+        if staffing["avg_utilization"] < 80:
+            actions.append({
+                "priority": "important",
+                "icon": "📉",
+                "title": f"Low Utilization ({staffing['avg_utilization']:.0f}%)",
+                "description": "Staff utilization below target. Consider schedule optimization.",
+                "category": "Staffing"
+            })
+
+        if not staffing["optimization_done"]:
+            actions.append({
+                "priority": "normal",
+                "icon": "🚀",
+                "title": "Run Staff Optimization",
+                "description": "Apply forecast-based optimization in Staff Scheduling page.",
+                "category": "System"
+            })
 
     # Inventory actions
-    if inventory["has_data"]:
+    if not inventory["data_loaded"]:
+        actions.append({
+            "priority": "normal",
+            "icon": "📦",
+            "title": "Load Inventory Data",
+            "description": "Go to Inventory Management (Page 12) to load and analyze inventory.",
+            "category": "System"
+        })
+    else:
         if inventory["items_critical"] > 0:
-            for item in inventory["reorder_needed"]:
-                if item["urgency"] == "CRITICAL":
-                    actions.append({
-                        "priority": "urgent",
-                        "icon": "🚨",
-                        "title": f"CRITICAL: {item['name']} Running Out",
-                        "description": f"Only {item['current']} units left. Order {item['needed']} units immediately.",
-                        "category": "Inventory"
-                    })
+            actions.append({
+                "priority": "urgent",
+                "icon": "🚨",
+                "title": f"{inventory['items_critical']} Critical Items",
+                "description": "Some inventory items at critical levels. Reorder immediately.",
+                "category": "Inventory"
+            })
 
-        if inventory["items_low"] > 0:
-            low_items = [i["name"] for i in inventory["reorder_needed"] if i["urgency"] == "LOW"]
-            if low_items:
-                actions.append({
-                    "priority": "important",
-                    "icon": "📦",
-                    "title": f"{len(low_items)} Items Need Reordering",
-                    "description": f"Low stock: {', '.join(low_items[:3])}{'...' if len(low_items) > 3 else ''}",
-                    "category": "Inventory"
-                })
+        if inventory["avg_stockout_risk"] > 5:
+            actions.append({
+                "priority": "important",
+                "icon": "📦",
+                "title": f"Stockout Risk: {inventory['avg_stockout_risk']:.1f}%",
+                "description": "Monitor inventory levels closely and consider increasing safety stock.",
+                "category": "Inventory"
+            })
+
+        if not inventory["optimization_done"]:
+            actions.append({
+                "priority": "normal",
+                "icon": "🚀",
+                "title": "Run Inventory Optimization",
+                "description": "Apply forecast-based optimization in Inventory Management page.",
+                "category": "System"
+            })
 
     # Sort by priority
     priority_order = {"urgent": 0, "important": 1, "normal": 2}
@@ -682,16 +936,17 @@ def generate_action_items() -> List[Dict[str, Any]]:
 
 
 # =============================================================================
-# HEADER
+# HERO HEADER
 # =============================================================================
 st.markdown(
     f"""
-    <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
-      <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🏥</div>
-      <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 0.5rem;'>Hospital Command Center</h1>
-      <p class='hf-feature-description' style='font-size: 1.1rem; max-width: 600px; margin: 0 auto;'>
-        Your weekly operations dashboard<br>
-        <span style='color: #94a3b8; font-size: 0.9rem;'>Plan staff, supplies, and resources based on predicted patient volumes</span>
+    <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
+      <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+        <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🏥</div>
+        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Hospital Command Center</h1>
+      </div>
+      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
+        Unified dashboard for operational insights • Integrates forecasts, staffing, and inventory data
       </p>
     </div>
     """,
@@ -710,425 +965,183 @@ st.markdown(f"""
 
 
 # =============================================================================
-# EXECUTIVE SUMMARY ROW
+# GET ALL DATA
 # =============================================================================
-forecast = get_weekly_patient_forecast()
-staffing = get_staffing_insights()
+forecast = get_forecast_data()
+staffing = get_staff_insights()
 inventory = get_inventory_insights()
-financial = calculate_financial_impact()
+financial = calculate_financial_impact(forecast, staffing, inventory)
+actions = generate_action_items(forecast, staffing, inventory)
 
+
+# =============================================================================
+# DATA STATUS BAR
+# =============================================================================
 st.markdown("""
 <div class="section-header">
-    <span class="section-icon">📊</span>
-    <span class="section-title">This Week at a Glance</span>
+    <span class="section-icon">📡</span>
+    <span class="section-title">Data Status</span>
 </div>
 """, unsafe_allow_html=True)
 
-exec_cols = st.columns(5)
+status_cols = st.columns(4)
 
-with exec_cols[0]:
-    patients = forecast["total_week"] if forecast["has_forecast"] else "—"
-    trend_icon = "📈" if forecast["trend"] == "increasing" else ("📉" if forecast["trend"] == "decreasing" else "➡️")
+with status_cols[0]:
+    fc_status = "✅ Available" if forecast["has_forecast"] else "❌ Not Available"
+    fc_class = "status-good" if forecast["has_forecast"] else "status-alert"
+    fc_detail = f"Source: {forecast['source']}" if forecast["has_forecast"] else "Run Page 10"
     st.markdown(f"""
-    <div class="exec-summary-card" style="--accent-color: #3b82f6; --accent-end: #60a5fa;">
-        <div class="card-icon">🏥</div>
-        <div class="card-value">{patients}</div>
-        <div class="card-label">Expected Patients</div>
-        <div class="card-sublabel">{trend_icon} {forecast["trend"].title()} trend</div>
+    <div class="data-status-box">
+        <div style="font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">🔮 Forecast</div>
+        <span class="{fc_class}">{fc_status}</span>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">{fc_detail}</div>
     </div>
     """, unsafe_allow_html=True)
 
-with exec_cols[1]:
-    avg = forecast["avg_daily"] if forecast["has_forecast"] else "—"
-    conf_class = "status-good" if forecast["confidence"] == "High" else ("status-warning" if forecast["confidence"] == "Medium" else "status-alert")
+with status_cols[1]:
+    st_status = "✅ Loaded" if staffing["data_loaded"] else "❌ Not Loaded"
+    st_class = "status-good" if staffing["data_loaded"] else "status-alert"
+    st_detail = f"Utilization: {staffing['avg_utilization']:.0f}%" if staffing["data_loaded"] else "Load in Page 11"
     st.markdown(f"""
-    <div class="exec-summary-card" style="--accent-color: #8b5cf6; --accent-end: #a78bfa;">
-        <div class="card-icon">📊</div>
-        <div class="card-value">{avg}</div>
-        <div class="card-label">Avg Daily Patients</div>
-        <div class="card-sublabel"><span class="{conf_class}">{forecast["confidence"]} Confidence</span></div>
+    <div class="data-status-box">
+        <div style="font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">👥 Staff Data</div>
+        <span class="{st_class}">{st_status}</span>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">{st_detail}</div>
     </div>
     """, unsafe_allow_html=True)
 
-with exec_cols[2]:
-    coverage = f"{staffing['coverage_percent']:.0f}%" if staffing["has_data"] else "—"
-    cov_class = "status-good" if staffing["coverage_percent"] >= 95 else ("status-warning" if staffing["coverage_percent"] >= 80 else "status-alert")
+with status_cols[2]:
+    inv_status = "✅ Loaded" if inventory["data_loaded"] else "❌ Not Loaded"
+    inv_class = "status-good" if inventory["data_loaded"] else "status-alert"
+    inv_detail = f"Service: {inventory['service_level']:.0f}%" if inventory["data_loaded"] else "Load in Page 12"
     st.markdown(f"""
-    <div class="exec-summary-card" style="--accent-color: #22c55e; --accent-end: #4ade80;">
-        <div class="card-icon">👥</div>
-        <div class="card-value">{coverage}</div>
-        <div class="card-label">Staff Coverage</div>
-        <div class="card-sublabel"><span class="{cov_class if staffing['has_data'] else ''}">{"✅ Good" if staffing["coverage_percent"] >= 95 else ("⚠️ Needs attention" if staffing["has_data"] else "Not configured")}</span></div>
+    <div class="data-status-box">
+        <div style="font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">📦 Inventory Data</div>
+        <span class="{inv_class}">{inv_status}</span>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">{inv_detail}</div>
     </div>
     """, unsafe_allow_html=True)
 
-with exec_cols[3]:
-    supply_status = "✅ OK" if inventory["items_critical"] == 0 and inventory["items_low"] <= 1 else (f"⚠️ {inventory['items_low']} Low" if inventory["items_critical"] == 0 else f"🚨 {inventory['items_critical']} Critical")
-    supply_class = "status-good" if inventory["items_critical"] == 0 and inventory["items_low"] <= 1 else ("status-warning" if inventory["items_critical"] == 0 else "status-alert")
+with status_cols[3]:
+    opt_count = sum([staffing["optimization_done"], inventory["optimization_done"]])
+    opt_status = f"✅ {opt_count}/2 Complete" if opt_count > 0 else "⚠️ None Run"
+    opt_class = "status-good" if opt_count == 2 else "status-warning" if opt_count == 1 else "status-alert"
     st.markdown(f"""
-    <div class="exec-summary-card" style="--accent-color: #f59e0b; --accent-end: #fbbf24;">
-        <div class="card-icon">📦</div>
-        <div class="card-value">{inventory["items_tracked"]}</div>
-        <div class="card-label">Supply Items</div>
-        <div class="card-sublabel"><span class="{supply_class if inventory['has_data'] else ''}">{supply_status if inventory["has_data"] else "Not configured"}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with exec_cols[4]:
-    savings = f"${financial['total_monthly_savings']:,.0f}" if financial["total_monthly_savings"] > 0 else "—"
-    st.markdown(f"""
-    <div class="exec-summary-card" style="--accent-color: #10b981; --accent-end: #34d399;">
-        <div class="card-icon">💰</div>
-        <div class="card-value" style="color: #22c55e;">{savings}</div>
-        <div class="card-label">Monthly Savings</div>
-        <div class="card-sublabel">From optimization</div>
+    <div class="data-status-box">
+        <div style="font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">🚀 Optimizations</div>
+        <span class="{opt_class}">{opt_status}</span>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">Staff & Inventory</div>
     </div>
     """, unsafe_allow_html=True)
 
 
 # =============================================================================
-# 7-DAY PATIENT FORECAST
+# MAIN TABS
 # =============================================================================
-st.markdown("---")
-st.markdown("""
-<div class="section-header">
-    <span class="section-icon">📅</span>
-    <span class="section-title">7-Day Patient Forecast</span>
-</div>
-""", unsafe_allow_html=True)
-
-if forecast["has_forecast"]:
-    st.markdown("""
-    <div class="insight-box">
-        <div class="insight-title">💡 What This Means For You</div>
-        <div class="insight-content">
-            Plan your staff schedules and supply orders based on these predicted patient volumes.
-            Higher patient days need more nurses on duty and adequate supplies ready.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Day cards
-    day_cols = st.columns(7)
-    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-    for i, col in enumerate(day_cols):
-        with col:
-            if i < len(forecast["daily_patients"]):
-                patients = forecast["daily_patients"][i]
-                day_date = today + timedelta(days=i)
-                is_today = i == 0
-                is_peak = i == forecast["peak_day"]
-
-                card_class = "today" if is_today else ("high-volume" if is_peak else "")
-
-                st.markdown(f"""
-                <div class="day-card {card_class}">
-                    <div class="day-name">{day_names[day_date.weekday()]}</div>
-                    <div class="day-date">{day_date.strftime('%b %d')}</div>
-                    <div class="day-patients">{patients}</div>
-                    <div class="day-label">patients</div>
-                    {"<span class='status-warning' style='font-size: 0.7rem;'>Peak Day</span>" if is_peak else ""}
-                </div>
-                """, unsafe_allow_html=True)
-
-    # Weekly summary chart
-    st.markdown("#### Weekly Volume Distribution")
-
-    fig = go.Figure()
-
-    dates = [(today + timedelta(days=i)).strftime('%a\n%b %d') for i in range(len(forecast["daily_patients"]))]
-    colors = ['#f59e0b' if i == forecast["peak_day"] else '#3b82f6' for i in range(len(forecast["daily_patients"]))]
-
-    fig.add_trace(go.Bar(
-        x=dates,
-        y=forecast["daily_patients"],
-        marker_color=colors,
-        text=forecast["daily_patients"],
-        textposition='auto',
-        hovertemplate='%{x}<br>%{y} patients<extra></extra>'
-    ))
-
-    # Add average line
-    fig.add_hline(
-        y=forecast["avg_daily"],
-        line_dash="dash",
-        line_color="#94a3b8",
-        annotation_text=f"Avg: {forecast['avg_daily']}"
-    )
-
-    fig.update_layout(
-        xaxis_title="Day",
-        yaxis_title="Expected Patients",
-        template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        height=300,
-        showlegend=False,
-        margin=dict(l=40, r=40, t=20, b=40)
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.warning("""
-    **📊 No Patient Forecast Available**
-
-    To see predicted patient volumes:
-    1. Go to **Modeling Hub** (page 08) and train a forecasting model
-    2. Then visit **Forecast Hub** (page 10) to generate predictions
-    3. Return here to see your weekly planning dashboard
-    """)
-
-
-# =============================================================================
-# ACTION ITEMS
-# =============================================================================
-st.markdown("---")
-st.markdown("""
-<div class="section-header">
-    <span class="section-icon">✅</span>
-    <span class="section-title">Action Items for This Week</span>
-</div>
-""", unsafe_allow_html=True)
-
-actions = generate_action_items()
-
-if actions:
-    col1, col2 = st.columns(2)
-
-    for idx, action in enumerate(actions[:6]):  # Show max 6 actions
-        with col1 if idx % 2 == 0 else col2:
-            priority_class = f"action-{action['priority']}"
-            st.markdown(f"""
-            <div class="action-card {priority_class}">
-                <div class="action-icon">{action['icon']}</div>
-                <div class="action-content">
-                    <div class="action-title">{action['title']}</div>
-                    <div class="action-description">{action['description']}</div>
-                    <div style="margin-top: 0.5rem;">
-                        <span style="background: rgba(100, 116, 139, 0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; color: #94a3b8;">{action['category']}</span>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-else:
-    st.success("✅ All systems running smoothly! No urgent actions required.")
-
-
-# =============================================================================
-# DETAILED TABS
-# =============================================================================
-st.markdown("---")
-
-tab_staff, tab_supplies, tab_financial, tab_weekly = st.tabs([
-    "👥 Staffing Plan",
-    "📦 Supply Status",
-    "💰 Financial Impact",
-    "📋 Weekly Report"
+tab_overview, tab_forecast, tab_staff, tab_inventory, tab_actions = st.tabs([
+    "📊 Executive Summary",
+    "🔮 Patient Forecast",
+    "👥 Staffing Overview",
+    "📦 Inventory Status",
+    "✅ Action Items"
 ])
 
 
 # =============================================================================
-# TAB 1: STAFFING PLAN
+# TAB 1: EXECUTIVE SUMMARY
 # =============================================================================
-with tab_staff:
+with tab_overview:
     st.markdown("""
     <div class="section-header">
-        <span class="section-icon">👥</span>
-        <span class="section-title">Staffing Recommendations</span>
+        <span class="section-icon">📊</span>
+        <span class="section-title">This Week at a Glance</span>
     </div>
     """, unsafe_allow_html=True)
 
-    if staffing["has_data"]:
-        # KPI cards
-        staff_cols = st.columns(4)
+    # KPI Cards Row
+    kpi_cols = st.columns(5)
 
-        with staff_cols[0]:
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: #3b82f6;">
-                <div class="card-icon">👥</div>
-                <div class="card-value">{staffing['total_staff_needed']}</div>
-                <div class="card-label">Total Staff Hours</div>
-                <div class="card-sublabel">This week</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with staff_cols[1]:
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: #22c55e;">
-                <div class="card-icon">✅</div>
-                <div class="card-value">{staffing['shifts_covered']}</div>
-                <div class="card-label">Shifts Covered</div>
-                <div class="card-sublabel">Properly staffed</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with staff_cols[2]:
-            under_color = "#22c55e" if staffing['shifts_understaffed'] == 0 else "#ef4444"
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: {under_color};">
-                <div class="card-icon">{"✅" if staffing['shifts_understaffed'] == 0 else "⚠️"}</div>
-                <div class="card-value" style="color: {under_color};">{staffing['shifts_understaffed']}</div>
-                <div class="card-label">Gaps to Fill</div>
-                <div class="card-sublabel">Understaffed periods</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with staff_cols[3]:
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: #f59e0b;">
-                <div class="card-icon">💰</div>
-                <div class="card-value">${staffing['total_labor_cost']:,.0f}</div>
-                <div class="card-label">Labor Cost</div>
-                <div class="card-sublabel">Optimized schedule</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Recommendations
-        if staffing["recommendations"]:
-            st.markdown("#### 💡 Recommendations")
-            for rec in staffing["recommendations"]:
-                priority_class = "action-urgent" if rec["priority"] == "urgent" else "action-important"
-                st.markdown(f"""
-                <div class="action-card {priority_class}">
-                    <div class="action-icon">{"🚨" if rec["priority"] == "urgent" else "⚠️"}</div>
-                    <div class="action-content">
-                        <div class="action-description">{rec['text']}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # Link to detailed scheduling
-        st.markdown("---")
-        st.info("📋 **Need to adjust the schedule?** Go to **Staff Scheduling Optimization** (page 11) to modify staff assignments.")
-
-    else:
-        st.info("""
-        **👥 Staff Scheduling Not Configured**
-
-        To optimize your staffing:
-        1. First, generate a patient forecast in **Modeling Hub**
-        2. Then go to **Staff Scheduling Optimization** (page 11)
-        3. Configure your staff types and run optimization
-        4. Return here to see staffing recommendations
-        """)
-
-
-# =============================================================================
-# TAB 2: SUPPLY STATUS
-# =============================================================================
-with tab_supplies:
-    st.markdown("""
-    <div class="section-header">
-        <span class="section-icon">📦</span>
-        <span class="section-title">Supply & Inventory Status</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if inventory["has_data"]:
-        # Status overview
-        inv_cols = st.columns(4)
-
-        with inv_cols[0]:
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: #3b82f6;">
-                <div class="card-icon">📋</div>
-                <div class="card-value">{inventory['items_tracked']}</div>
-                <div class="card-label">Items Tracked</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with inv_cols[1]:
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: #22c55e;">
-                <div class="card-icon">✅</div>
-                <div class="card-value" style="color: #22c55e;">{inventory['items_ok']}</div>
-                <div class="card-label">Stocked OK</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with inv_cols[2]:
-            low_color = "#f59e0b" if inventory['items_low'] > 0 else "#22c55e"
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: {low_color};">
-                <div class="card-icon">{"⚠️" if inventory['items_low'] > 0 else "✅"}</div>
-                <div class="card-value" style="color: {low_color};">{inventory['items_low']}</div>
-                <div class="card-label">Running Low</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with inv_cols[3]:
-            crit_color = "#ef4444" if inventory['items_critical'] > 0 else "#22c55e"
-            st.markdown(f"""
-            <div class="exec-summary-card" style="--accent-color: {crit_color};">
-                <div class="card-icon">{"🚨" if inventory['items_critical'] > 0 else "✅"}</div>
-                <div class="card-value" style="color: {crit_color};">{inventory['items_critical']}</div>
-                <div class="card-label">Critical</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Reorder alerts
-        if inventory["reorder_needed"]:
-            st.markdown("#### 🚨 Items Needing Reorder")
-
-            for item in inventory["reorder_needed"]:
-                urgency_class = "action-urgent" if item["urgency"] == "CRITICAL" else "action-important"
-                icon = "🚨" if item["urgency"] == "CRITICAL" else "⚠️"
-
-                st.markdown(f"""
-                <div class="action-card {urgency_class}">
-                    <div class="action-icon">{icon}</div>
-                    <div class="action-content">
-                        <div class="action-title">{item['name']}</div>
-                        <div class="action-description">
-                            Current stock: <strong>{item['current']}</strong> units |
-                            Recommended order: <strong>{item['needed']}</strong> units
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.success("✅ All inventory levels are healthy. No immediate reorders needed.")
-
-        st.markdown("---")
-        st.info("📦 **Need to manage inventory?** Go to **Inventory Management** (page 12) for detailed EOQ analysis and order scheduling.")
-
-    else:
-        st.info("""
-        **📦 Inventory Not Configured**
-
-        To track your supplies:
-        1. Go to **Inventory Management Optimization** (page 12)
-        2. Load your inventory data or configure items
-        3. Run EOQ/MILP optimization
-        4. Return here to see supply status
-        """)
-
-
-# =============================================================================
-# TAB 3: FINANCIAL IMPACT
-# =============================================================================
-with tab_financial:
-    st.markdown("""
-    <div class="section-header">
-        <span class="section-icon">💰</span>
-        <span class="section-title">Financial Impact & Savings</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="insight-box">
-        <div class="insight-title">💡 How This System Saves Money</div>
-        <div class="insight-content">
-            By accurately predicting patient volumes, you can optimize staff schedules (avoiding overtime),
-            order supplies more efficiently (reducing waste), and prepare resources proactively (improving patient outcomes).
+    with kpi_cols[0]:
+        patients = forecast["total_week"] if forecast["has_forecast"] else "—"
+        trend_icon = "📈" if forecast["trend"] == "increasing" else ("📉" if forecast["trend"] == "decreasing" else "➡️")
+        st.markdown(f"""
+        <div class="cmd-kpi-card" style="--accent-color: #3b82f6; --accent-end: #60a5fa;">
+            <div class="cmd-kpi-icon">🏥</div>
+            <div class="cmd-kpi-value">{patients}</div>
+            <div class="cmd-kpi-label">Expected Patients</div>
+            <div class="cmd-kpi-sublabel">{trend_icon} {forecast["trend"].title()} trend</div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
+    with kpi_cols[1]:
+        avg = forecast["avg_daily"] if forecast["has_forecast"] else "—"
+        conf_class = "status-good" if forecast["confidence"] == "High" else ("status-warning" if forecast["confidence"] == "Medium" else "status-alert")
+        st.markdown(f"""
+        <div class="cmd-kpi-card" style="--accent-color: #8b5cf6; --accent-end: #a78bfa;">
+            <div class="cmd-kpi-icon">📊</div>
+            <div class="cmd-kpi-value">{avg}</div>
+            <div class="cmd-kpi-label">Avg Daily Patients</div>
+            <div class="cmd-kpi-sublabel"><span class="{conf_class}">{forecast["confidence"]} Confidence</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with kpi_cols[2]:
+        util = f"{staffing['avg_utilization']:.0f}%" if staffing["has_data"] else "—"
+        util_class = "status-good" if staffing["avg_utilization"] >= 80 else ("status-warning" if staffing["avg_utilization"] >= 60 else "status-alert")
+        util_text = "✅ Good" if staffing["avg_utilization"] >= 80 else ("⚠️ Low" if staffing["has_data"] else "Not loaded")
+        st.markdown(f"""
+        <div class="cmd-kpi-card" style="--accent-color: #22c55e; --accent-end: #4ade80;">
+            <div class="cmd-kpi-icon">👥</div>
+            <div class="cmd-kpi-value">{util}</div>
+            <div class="cmd-kpi-label">Staff Utilization</div>
+            <div class="cmd-kpi-sublabel"><span class="{util_class if staffing['has_data'] else ''}">{util_text}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with kpi_cols[3]:
+        if inventory["has_data"]:
+            if inventory["items_critical"] > 0:
+                supply_status = f"🚨 {inventory['items_critical']} Critical"
+                supply_class = "status-alert"
+            elif inventory["items_low"] > 0:
+                supply_status = f"⚠️ {inventory['items_low']} Low"
+                supply_class = "status-warning"
+            else:
+                supply_status = "✅ All OK"
+                supply_class = "status-good"
+        else:
+            supply_status = "Not loaded"
+            supply_class = ""
+        st.markdown(f"""
+        <div class="cmd-kpi-card" style="--accent-color: #f59e0b; --accent-end: #fbbf24;">
+            <div class="cmd-kpi-icon">📦</div>
+            <div class="cmd-kpi-value">{inventory["items_tracked"]}</div>
+            <div class="cmd-kpi-label">Supply Items</div>
+            <div class="cmd-kpi-sublabel"><span class="{supply_class}">{supply_status}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with kpi_cols[4]:
+        savings = f"${financial['total_monthly_savings']:,.0f}" if financial["total_monthly_savings"] > 0 else "—"
+        st.markdown(f"""
+        <div class="cmd-kpi-card" style="--accent-color: #10b981; --accent-end: #34d399;">
+            <div class="cmd-kpi-icon">💰</div>
+            <div class="cmd-kpi-value" style="color: #22c55e;">{savings}</div>
+            <div class="cmd-kpi-label">Monthly Savings</div>
+            <div class="cmd-kpi-sublabel">From optimization</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Financial Impact Section
     if financial["total_monthly_savings"] > 0:
-        # Big savings display
+        st.markdown("---")
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-icon">💰</span>
+            <span class="section-title">Financial Impact</span>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown(f"""
         <div class="savings-card">
             <div class="savings-label">ESTIMATED MONTHLY SAVINGS</div>
@@ -1139,182 +1152,375 @@ with tab_financial:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("#### Savings Breakdown")
-
-        # Breakdown chart
         if financial["breakdown"]:
-            categories = [b["category"] for b in financial["breakdown"]]
-            values = [b["savings"] for b in financial["breakdown"]]
+            fin_cols = st.columns(len(financial["breakdown"]))
+            for idx, item in enumerate(financial["breakdown"]):
+                with fin_cols[idx]:
+                    st.markdown(f"""
+                    <div class="action-card action-normal">
+                        <div class="action-icon">💵</div>
+                        <div class="action-content">
+                            <div class="action-title">{item['category']}</div>
+                            <div class="action-description">${item['savings']:,.0f}/month</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            fig = go.Figure(data=[go.Pie(
-                labels=categories,
-                values=values,
-                hole=0.4,
-                marker_colors=['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6']
-            )])
 
-            fig.update_layout(
-                template="plotly_dark",
-                paper_bgcolor='rgba(0,0,0,0)',
-                height=300,
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2)
-            )
+# =============================================================================
+# TAB 2: PATIENT FORECAST
+# =============================================================================
+with tab_forecast:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-icon">🔮</span>
+        <span class="section-title">7-Day Patient Forecast</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-            st.plotly_chart(fig, use_container_width=True)
+    if forecast["has_forecast"]:
+        st.success(f"**Forecast Source:** {forecast['source']} | **Confidence:** {forecast['confidence']}")
 
-            # Detail cards
-            for breakdown in financial["breakdown"]:
+        # Day cards
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        num_days = min(7, len(forecast["forecasts"]))
+        day_cols = st.columns(num_days)
+
+        for i in range(num_days):
+            with day_cols[i]:
+                patients = forecast["forecasts"][i]
+                day_date = today + timedelta(days=i+1)
+                is_peak = i == forecast["peak_day"]
+
+                card_class = "high-volume" if is_peak else ""
+                peak_badge = "<span class='status-warning' style='font-size: 0.7rem;'>Peak Day</span>" if is_peak else ""
+
                 st.markdown(f"""
-                <div class="action-card action-normal">
-                    <div class="action-icon">💵</div>
+                <div class="day-card {card_class}">
+                    <div class="day-name">{day_names[day_date.weekday()]}</div>
+                    <div class="day-date">{day_date.strftime('%b %d')}</div>
+                    <div class="day-patients">{int(patients)}</div>
+                    <div class="day-label">patients</div>
+                    {peak_badge}
+                </div>
+                """, unsafe_allow_html=True)
+
+        # Chart
+        st.markdown("#### Weekly Volume Distribution")
+
+        fig = go.Figure()
+        dates = [(today + timedelta(days=i+1)).strftime('%a\n%b %d') for i in range(len(forecast["forecasts"]))]
+        colors = ['#f59e0b' if i == forecast["peak_day"] else '#3b82f6' for i in range(len(forecast["forecasts"]))]
+
+        fig.add_trace(go.Bar(
+            x=dates,
+            y=forecast["forecasts"],
+            marker_color=colors,
+            text=[int(p) for p in forecast["forecasts"]],
+            textposition='auto',
+        ))
+
+        fig.add_hline(
+            y=forecast["avg_daily"],
+            line_dash="dash",
+            line_color="#94a3b8",
+            annotation_text=f"Avg: {forecast['avg_daily']}"
+        )
+
+        fig.update_layout(
+            xaxis_title="Day",
+            yaxis_title="Expected Patients",
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=350,
+            showlegend=False,
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.warning("""
+        **📊 No Patient Forecast Available**
+
+        To see predicted patient volumes:
+        1. Go to **Modeling Hub** (Page 08) and train a forecasting model
+        2. Visit **Forecast Hub** (Page 10) to generate predictions
+        3. Return here to see your weekly planning dashboard
+        """)
+
+
+# =============================================================================
+# TAB 3: STAFFING OVERVIEW
+# =============================================================================
+with tab_staff:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-icon">👥</span>
+        <span class="section-title">Staffing Overview</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if staffing["has_data"]:
+        # Current Stats
+        staff_cols = st.columns(4)
+
+        with staff_cols[0]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #3b82f6;">
+                <div class="cmd-kpi-icon">👨‍⚕️</div>
+                <div class="cmd-kpi-value">{staffing['avg_doctors']:.0f}</div>
+                <div class="cmd-kpi-label">Avg Doctors/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with staff_cols[1]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #22c55e;">
+                <div class="cmd-kpi-icon">👩‍⚕️</div>
+                <div class="cmd-kpi-value">{staffing['avg_nurses']:.0f}</div>
+                <div class="cmd-kpi-label">Avg Nurses/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with staff_cols[2]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #f97316;">
+                <div class="cmd-kpi-icon">🏥</div>
+                <div class="cmd-kpi-value">{staffing['avg_support']:.0f}</div>
+                <div class="cmd-kpi-label">Avg Support/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with staff_cols[3]:
+            util_color = "#22c55e" if staffing['avg_utilization'] >= 80 else "#f59e0b"
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: {util_color};">
+                <div class="cmd-kpi-icon">📊</div>
+                <div class="cmd-kpi-value" style="color: {util_color};">{staffing['avg_utilization']:.0f}%</div>
+                <div class="cmd-kpi-label">Utilization</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Financial
+        st.markdown("#### 💰 Labor Costs")
+        cost_cols = st.columns(3)
+
+        with cost_cols[0]:
+            st.metric("Daily Labor Cost", f"${staffing['daily_labor_cost']:,.0f}")
+        with cost_cols[1]:
+            st.metric("Weekly Labor Cost", f"${staffing['weekly_labor_cost']:,.0f}")
+        with cost_cols[2]:
+            if staffing["optimization_done"] and staffing["weekly_savings"] > 0:
+                st.metric("Weekly Savings", f"${staffing['weekly_savings']:,.0f}", delta="Optimized")
+            else:
+                st.metric("Optimization", "Not Run", delta="Go to Page 11")
+
+        # Recommendations
+        if staffing["recommendations"]:
+            st.markdown("#### 💡 Recommendations")
+            for rec in staffing["recommendations"]:
+                priority_class = "action-urgent" if rec["priority"] == "urgent" else "action-important"
+                icon = "🚨" if rec["priority"] == "urgent" else "⚠️"
+                st.markdown(f"""
+                <div class="action-card {priority_class}">
+                    <div class="action-icon">{icon}</div>
                     <div class="action-content">
-                        <div class="action-title">{breakdown['category']}: ${breakdown['savings']:,.0f}/month</div>
-                        <div class="action-description">{breakdown['description']}</div>
+                        <div class="action-description">{rec['text']}</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-        # ROI
-        if financial["roi_percent"] > 0:
-            st.markdown(f"""
-            <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px; padding: 1rem; text-align: center; margin-top: 1rem;">
-                <div style="color: #94a3b8; font-size: 0.9rem;">Return on Investment</div>
-                <div style="color: #22c55e; font-size: 2rem; font-weight: 700;">{financial['roi_percent']:.0f}%</div>
-                <div style="color: #64748b; font-size: 0.8rem;">System pays for itself {12 / max(1, financial['roi_percent'] / 100):.1f}x per year</div>
-            </div>
-            """, unsafe_allow_html=True)
-
     else:
         st.info("""
-        **💰 Financial Impact Calculation**
+        **👥 Staff Data Not Loaded**
 
-        To see your potential savings:
-        1. Run patient forecasting models
-        2. Optimize staff scheduling
-        3. Configure inventory management
-
-        The system will calculate your savings from:
-        - Reduced overtime costs
-        - Optimized inventory ordering
-        - Better resource utilization
+        To see staffing insights:
+        1. Go to **Staff Scheduling Optimization** (Page 11)
+        2. Click "Load Staff Data" to fetch from Supabase
+        3. Return here to see staffing overview
         """)
 
 
 # =============================================================================
-# TAB 4: WEEKLY REPORT
+# TAB 4: INVENTORY STATUS
 # =============================================================================
-with tab_weekly:
+with tab_inventory:
     st.markdown("""
     <div class="section-header">
-        <span class="section-icon">📋</span>
-        <span class="section-title">Weekly Operations Summary</span>
+        <span class="section-icon">📦</span>
+        <span class="section-title">Inventory Status</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Generate report content
-    report_date = today.strftime("%B %d, %Y")
-
-    st.markdown(f"### Week of {report_date}")
-
-    # Patient Volume Section
-    st.markdown("#### 🏥 Patient Volume Outlook")
-    if forecast["has_forecast"]:
-        st.markdown(f"""
-        - **Total expected patients this week:** {forecast['total_week']}
-        - **Average daily patients:** {forecast['avg_daily']}
-        - **Peak day:** {day_names[(today + timedelta(days=forecast['peak_day'])).weekday()]} with {forecast['peak_patients']} patients
-        - **Forecast confidence:** {forecast['confidence']}
-        - **Volume trend:** {forecast['trend'].title()}
-        """)
-    else:
-        st.markdown("*No forecast data available. Run forecasting models to enable predictions.*")
-
-    # Staffing Section
-    st.markdown("#### 👥 Staffing Status")
-    if staffing["has_data"]:
-        st.markdown(f"""
-        - **Staff coverage rate:** {staffing['coverage_percent']:.1f}%
-        - **Total staff hours needed:** {staffing['total_staff_needed']}
-        - **Understaffed periods:** {staffing['shifts_understaffed']}
-        - **Projected labor cost:** ${staffing['total_labor_cost']:,.0f}
-        """)
-    else:
-        st.markdown("*Run staff scheduling optimization to see staffing plan.*")
-
-    # Inventory Section
-    st.markdown("#### 📦 Supply Status")
     if inventory["has_data"]:
-        st.markdown(f"""
-        - **Items tracked:** {inventory['items_tracked']}
-        - **Items in good stock:** {inventory['items_ok']}
-        - **Items running low:** {inventory['items_low']}
-        - **Critical items:** {inventory['items_critical']}
-        - **Stockout risk level:** {inventory['stockout_risk']}
+        # Status Overview
+        inv_cols = st.columns(4)
+
+        with inv_cols[0]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #a855f7;">
+                <div class="cmd-kpi-icon">🧤</div>
+                <div class="cmd-kpi-value">{inventory['avg_gloves_usage']:.0f}</div>
+                <div class="cmd-kpi-label">Gloves/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with inv_cols[1]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #3b82f6;">
+                <div class="cmd-kpi-icon">🛡️</div>
+                <div class="cmd-kpi-value">{inventory['avg_ppe_usage']:.0f}</div>
+                <div class="cmd-kpi-label">PPE Sets/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with inv_cols[2]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #22c55e;">
+                <div class="cmd-kpi-icon">💊</div>
+                <div class="cmd-kpi-value">{inventory['avg_medication_usage']:.0f}</div>
+                <div class="cmd-kpi-label">Medications/Day</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with inv_cols[3]:
+            risk_color = "#ef4444" if inventory['avg_stockout_risk'] > 10 else "#f59e0b" if inventory['avg_stockout_risk'] > 5 else "#22c55e"
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: {risk_color};">
+                <div class="cmd-kpi-icon">⚠️</div>
+                <div class="cmd-kpi-value" style="color: {risk_color};">{inventory['avg_stockout_risk']:.1f}%</div>
+                <div class="cmd-kpi-label">Stockout Risk</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Service Level Gauge
+        st.markdown("#### 📊 Service Level")
+
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=inventory["service_level"],
+            title={'text': "Service Level"},
+            number={'suffix': '%'},
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "#22c55e" if inventory["service_level"] >= 95 else "#f59e0b"},
+                'steps': [
+                    {'range': [0, 90], 'color': "rgba(239,68,68,0.2)"},
+                    {'range': [90, 95], 'color': "rgba(234,179,8,0.2)"},
+                    {'range': [95, 100], 'color': "rgba(34,197,94,0.2)"},
+                ],
+                'threshold': {'line': {'color': "white", 'width': 2}, 'thickness': 0.75, 'value': 98}
+            }
+        ))
+        fig.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Cost metrics
+        cost_cols = st.columns(3)
+        with cost_cols[0]:
+            st.metric("Daily Inventory Cost", f"${inventory['daily_inventory_cost']:,.0f}")
+        with cost_cols[1]:
+            st.metric("Weekly Inventory Cost", f"${inventory['weekly_inventory_cost']:,.0f}")
+        with cost_cols[2]:
+            if inventory["optimization_done"] and inventory["weekly_savings"] > 0:
+                st.metric("Weekly Savings", f"${inventory['weekly_savings']:,.0f}", delta="Optimized")
+            else:
+                st.metric("Optimization", "Not Run", delta="Go to Page 12")
+
+    else:
+        st.info("""
+        **📦 Inventory Data Not Loaded**
+
+        To see inventory insights:
+        1. Go to **Inventory Management Optimization** (Page 12)
+        2. Click "Load Inventory Data" to fetch from Supabase
+        3. Return here to see inventory overview
         """)
 
-        if inventory["reorder_needed"]:
-            st.markdown("**Items to reorder:**")
-            for item in inventory["reorder_needed"]:
-                st.markdown(f"- {item['name']}: Order {item['needed']} units ({item['urgency']})")
-    else:
-        st.markdown("*Configure inventory management to track supplies.*")
 
-    # Financial Section
-    st.markdown("#### 💰 Financial Summary")
-    if financial["total_monthly_savings"] > 0:
-        st.markdown(f"""
-        - **Estimated monthly savings:** ${financial['total_monthly_savings']:,.0f}
-        - **Projected annual savings:** ${financial['annual_savings']:,.0f}
-        - **ROI:** {financial['roi_percent']:.0f}%
-        """)
-    else:
-        st.markdown("*Complete system setup to calculate financial impact.*")
+# =============================================================================
+# TAB 5: ACTION ITEMS
+# =============================================================================
+with tab_actions:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-icon">✅</span>
+        <span class="section-title">Action Items for This Week</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Export option
+    if actions:
+        # Count by priority
+        urgent_count = sum(1 for a in actions if a["priority"] == "urgent")
+        important_count = sum(1 for a in actions if a["priority"] == "important")
+        normal_count = sum(1 for a in actions if a["priority"] == "normal")
+
+        summary_cols = st.columns(3)
+        with summary_cols[0]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #ef4444;">
+                <div class="cmd-kpi-value" style="color: #ef4444;">{urgent_count}</div>
+                <div class="cmd-kpi-label">Urgent</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with summary_cols[1]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #f59e0b;">
+                <div class="cmd-kpi-value" style="color: #f59e0b;">{important_count}</div>
+                <div class="cmd-kpi-label">Important</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with summary_cols[2]:
+            st.markdown(f"""
+            <div class="cmd-kpi-card" style="--accent-color: #3b82f6;">
+                <div class="cmd-kpi-value" style="color: #3b82f6;">{normal_count}</div>
+                <div class="cmd-kpi-label">Normal</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # Action cards
+        col1, col2 = st.columns(2)
+
+        for idx, action in enumerate(actions[:8]):
+            with col1 if idx % 2 == 0 else col2:
+                priority_class = f"action-{action['priority']}"
+                st.markdown(f"""
+                <div class="action-card {priority_class}">
+                    <div class="action-icon">{action['icon']}</div>
+                    <div class="action-content">
+                        <div class="action-title">{action['title']}</div>
+                        <div class="action-description">{action['description']}</div>
+                        <div style="margin-top: 0.5rem;">
+                            <span style="background: rgba(100, 116, 139, 0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; color: #94a3b8;">{action['category']}</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.success("✅ All systems running smoothly! No urgent actions required.")
+
+
+# =============================================================================
+# SIDEBAR - Data Status
+# =============================================================================
+with st.sidebar:
     st.markdown("---")
+    st.markdown("### 📊 Quick Status")
 
-    # Create downloadable report
-    report_text = f"""
-WEEKLY OPERATIONS REPORT
-========================
-Hospital Command Center - HealthForecast AI
-Generated: {today.strftime('%Y-%m-%d %H:%M')}
+    st.markdown(f"**Forecast:** {'✅' if forecast['has_forecast'] else '❌'} {forecast['source'] if forecast['has_forecast'] else 'Not available'}")
+    st.markdown(f"**Staff Data:** {'✅ Loaded' if staffing['data_loaded'] else '❌ Not loaded'}")
+    st.markdown(f"**Inventory Data:** {'✅ Loaded' if inventory['data_loaded'] else '❌ Not loaded'}")
+    st.markdown(f"**Staff Optimized:** {'✅' if staffing['optimization_done'] else '❌'}")
+    st.markdown(f"**Inventory Optimized:** {'✅' if inventory['optimization_done'] else '❌'}")
 
-PATIENT VOLUME
---------------
-Total Expected: {forecast['total_week'] if forecast['has_forecast'] else 'N/A'}
-Daily Average: {forecast['avg_daily'] if forecast['has_forecast'] else 'N/A'}
-Peak Day: {day_names[(today + timedelta(days=forecast['peak_day'])).weekday()] if forecast['has_forecast'] and forecast['peak_day'] is not None else 'N/A'}
-Confidence: {forecast['confidence']}
-
-STAFFING
---------
-Coverage Rate: {staffing['coverage_percent']:.1f}%
-Staff Hours: {staffing['total_staff_needed']}
-Gaps to Fill: {staffing['shifts_understaffed']}
-Labor Cost: ${staffing['total_labor_cost']:,.0f}
-
-INVENTORY
----------
-Items Tracked: {inventory['items_tracked']}
-Items OK: {inventory['items_ok']}
-Low Stock: {inventory['items_low']}
-Critical: {inventory['items_critical']}
-
-FINANCIAL IMPACT
-----------------
-Monthly Savings: ${financial['total_monthly_savings']:,.0f}
-Annual Projection: ${financial['annual_savings']:,.0f}
-    """
-
-    st.download_button(
-        "📥 Download Weekly Report",
-        data=report_text,
-        file_name=f"hospital_weekly_report_{today.strftime('%Y%m%d')}.txt",
-        mime="text/plain",
-        use_container_width=True
-    )
+    if financial["total_monthly_savings"] > 0:
+        st.markdown("---")
+        st.markdown("### 💰 Savings")
+        st.markdown(f"**Monthly:** ${financial['total_monthly_savings']:,.0f}")
+        st.markdown(f"**Annual:** ${financial['annual_savings']:,.0f}")
 
 
 # =============================================================================
@@ -1324,7 +1530,6 @@ st.divider()
 st.markdown("""
 <div style='text-align: center; color: #64748b; font-size: 0.85rem;'>
     <strong>Hospital Command Center</strong> | HealthForecast AI<br>
-    <em>Data-driven decisions for better patient care</em><br>
-    <span style='font-size: 0.75rem;'>Questions? Contact your IT administrator</span>
+    <em>Data-driven decisions for better patient care</em>
 </div>
 """, unsafe_allow_html=True)
