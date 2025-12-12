@@ -1085,10 +1085,17 @@ def get_metrics_from_df(metrics_df: pd.DataFrame, horizon: int) -> Dict[str, flo
     return {}
 
 
-def save_forecast_to_session(forecast_data: Dict, model_name: str):
-    """Save forecast data to session state for use by Staff Scheduling."""
+def save_forecast_to_session(forecast_data: Dict, model_name: str, horizons: List[int] = None, forecast_days: int = 7):
+    """
+    Save comprehensive forecast data to session state for use by Staff Scheduling,
+    Inventory Management, and Decision Command Center.
+
+    This is the SINGLE SOURCE OF TRUTH for forecast data across all pages.
+    """
     if not forecast_data:
         return
+
+    from datetime import datetime, timedelta
 
     safe_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
 
@@ -1101,19 +1108,89 @@ def save_forecast_to_session(forecast_data: Dict, model_name: str):
         except:
             pass
 
-    # Get forecast values (first horizon column)
+    # Get forecast matrix
     F = forecast_data.get("F")
-    forecast_values = list(F[:, 0]) if F is not None and F.shape[1] > 0 else []
+    L = forecast_data.get("L")
+    U = forecast_data.get("U")
 
+    # Get the last row forecasts for each horizon (future predictions)
+    forecast_values = []
+    lower_bounds = []
+    upper_bounds = []
+
+    if F is not None and len(F) > 0:
+        num_horizons = min(forecast_days, F.shape[1]) if F.shape[1] > 0 else 0
+        last_idx = len(F) - 1
+
+        for h_idx in range(num_horizons):
+            # Get forecast value
+            fv = float(F[last_idx, h_idx]) if not np.isnan(F[last_idx, h_idx]) else 0
+            forecast_values.append(max(0, fv))  # Ensure non-negative
+
+            # Get confidence intervals
+            if L is not None and not np.isnan(L[last_idx, h_idx]):
+                lower_bounds.append(max(0, float(L[last_idx, h_idx])))
+            else:
+                lower_bounds.append(max(0, fv * 0.9))
+
+            if U is not None and not np.isnan(U[last_idx, h_idx]):
+                upper_bounds.append(max(0, float(U[last_idx, h_idx])))
+            else:
+                upper_bounds.append(max(0, fv * 1.1))
+
+    # Generate future dates for the forecast horizon
+    today = datetime.now().date()
+    future_dates = [(today + timedelta(days=i+1)).strftime("%a %m/%d") for i in range(len(forecast_values))]
+
+    # Determine model type
+    model_type = "Statistical" if model_name in ["ARIMA", "SARIMAX"] else "ML"
+
+    # Get metrics if available
+    metrics_df = forecast_data.get("metrics_df")
+    avg_accuracy = None
+    avg_mape = None
+    if metrics_df is not None and not metrics_df.empty:
+        acc_col = next((c for c in metrics_df.columns if "Acc" in c or "Accuracy" in c), None)
+        mape_col = next((c for c in metrics_df.columns if "MAPE" in c), None)
+        if acc_col:
+            avg_accuracy = float(metrics_df[acc_col].mean())
+        if mape_col:
+            avg_mape = float(metrics_df[mape_col].mean())
+
+    # Store comprehensive forecast data - SINGLE SOURCE OF TRUTH
     st.session_state["forecast_hub_results"] = {
         "model_name": model_name,
         "forecast_data": forecast_data,
+        "timestamp": datetime.now().isoformat(),
     }
 
+    # Primary forecast data for Pages 11, 12, 13
     st.session_state["forecast_hub_demand"] = {
         "model": model_name,
+        "model_type": model_type,
         "forecast": forecast_values,
-        "dates": dates,
+        "lower_bounds": lower_bounds,
+        "upper_bounds": upper_bounds,
+        "dates": future_dates,
+        "historical_dates": dates,
+        "horizon": len(forecast_values),
+        "avg_accuracy": avg_accuracy,
+        "avg_mape": avg_mape,
+        "timestamp": datetime.now().isoformat(),
+        "source": "Forecast Hub (Page 10)",
+    }
+
+    # Also store in a dedicated key for active forecast tracking
+    st.session_state["active_forecast"] = {
+        "model": model_name,
+        "model_type": model_type,
+        "forecasts": forecast_values,
+        "lower": lower_bounds,
+        "upper": upper_bounds,
+        "dates": future_dates,
+        "horizon": len(forecast_values),
+        "accuracy": avg_accuracy,
+        "updated_at": datetime.now().isoformat(),
     }
 
 
@@ -1797,8 +1874,8 @@ with tab_forecast:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # Save to session state for staff scheduling
-        save_forecast_to_session(forecast_data, selected_model_name)
+        # Save to session state for staff scheduling, inventory, and command center
+        save_forecast_to_session(forecast_data, selected_model_name, horizons=horizons, forecast_days=forecast_days)
 
 # =============================================================================
 # TAB 3: MODEL COMPARISON

@@ -449,11 +449,17 @@ st.markdown(f"""
 def get_forecast_data() -> Dict[str, Any]:
     """
     Extract forecast data from session state.
-    Priority: forecast_hub_demand (Page 10) > ML models > ARIMA
+
+    PRIORITY ORDER (synced with Page 10 Forecast Hub):
+    1. forecast_hub_demand - Primary source from Forecast Hub (Page 10)
+    2. active_forecast - Alternative key from Forecast Hub
+    3. ML models (fallback)
+    4. ARIMA (fallback)
     """
     result = {
         "has_forecast": False,
         "source": None,
+        "model_type": None,
         "forecasts": [],
         "dates": [],
         "horizon": 0,
@@ -465,20 +471,43 @@ def get_forecast_data() -> Dict[str, Any]:
         "low_patients": float('inf'),
         "trend": "stable",
         "confidence": "Unknown",
+        "accuracy": None,
+        "timestamp": None,
+        "synced_with_page10": False,
     }
 
-    # Priority 1: Check forecast_hub_demand (from Page 10)
+    # PRIORITY 1: Check forecast_hub_demand (from Page 10 - Forecast Hub)
     hub_demand = st.session_state.get("forecast_hub_demand")
     if hub_demand and isinstance(hub_demand, dict):
         forecasts = hub_demand.get("forecast", [])
         if forecasts and len(forecasts) > 0:
             result["has_forecast"] = True
             result["source"] = hub_demand.get("model", "Forecast Hub")
+            result["model_type"] = hub_demand.get("model_type", "Unknown")
             result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
             result["dates"] = hub_demand.get("dates", [])
             result["horizon"] = len(result["forecasts"])
+            result["accuracy"] = hub_demand.get("avg_accuracy")
+            result["timestamp"] = hub_demand.get("timestamp")
+            result["synced_with_page10"] = True
 
-    # Priority 2: Check ML models from Modeling Hub
+    # PRIORITY 2: Check active_forecast (alternative from Page 10)
+    if not result["has_forecast"]:
+        active = st.session_state.get("active_forecast")
+        if active and isinstance(active, dict):
+            forecasts = active.get("forecasts", [])
+            if forecasts and len(forecasts) > 0:
+                result["has_forecast"] = True
+                result["source"] = active.get("model", "Active Forecast")
+                result["model_type"] = active.get("model_type", "Unknown")
+                result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
+                result["dates"] = active.get("dates", [])
+                result["horizon"] = len(result["forecasts"])
+                result["accuracy"] = active.get("accuracy")
+                result["timestamp"] = active.get("updated_at")
+                result["synced_with_page10"] = True
+
+    # PRIORITY 3: Check ML models from Modeling Hub (fallback)
     if not result["has_forecast"]:
         for model in ["XGBoost", "LSTM", "ANN"]:
             key = f"ml_mh_results_{model}"
@@ -499,13 +528,15 @@ def get_forecast_data() -> Dict[str, Any]:
                         if forecasts:
                             result["has_forecast"] = True
                             result["source"] = f"ML ({model})"
+                            result["model_type"] = "ML"
                             result["forecasts"] = forecasts
                             result["horizon"] = len(forecasts)
+                            result["synced_with_page10"] = False
                             break
                     except Exception:
                         continue
 
-    # Priority 3: Check ARIMA
+    # PRIORITY 4: Check ARIMA (fallback)
     if not result["has_forecast"]:
         arima = st.session_state.get("arima_mh_results")
         if arima and isinstance(arima, dict):
@@ -523,8 +554,10 @@ def get_forecast_data() -> Dict[str, Any]:
                     if forecasts:
                         result["has_forecast"] = True
                         result["source"] = "ARIMA"
+                        result["model_type"] = "Statistical"
                         result["forecasts"] = forecasts
                         result["horizon"] = len(forecasts)
+                        result["synced_with_page10"] = False
                 except Exception:
                     pass
 
@@ -975,6 +1008,60 @@ actions = generate_action_items(forecast, staffing, inventory)
 
 
 # =============================================================================
+# FORECAST SYNC STATUS - Synced with Page 10 (Forecast Hub)
+# =============================================================================
+sync_col1, sync_col2 = st.columns([3, 1])
+with sync_col1:
+    if forecast["has_forecast"]:
+        if forecast["synced_with_page10"]:
+            sync_icon = "✅"
+            sync_status = "Synced with Forecast Hub"
+            sync_color = "#22c55e"
+        else:
+            sync_icon = "⚠️"
+            sync_status = "Using Direct Model Results"
+            sync_color = "#eab308"
+
+        model_info = f"{forecast['source']}"
+        if forecast.get("model_type"):
+            model_info += f" ({forecast['model_type']})"
+        if forecast.get("accuracy"):
+            model_info += f" • Accuracy: {forecast['accuracy']:.1f}%"
+        if forecast.get("timestamp"):
+            model_info += f" • Updated: {forecast['timestamp'][:16]}"
+
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+                    border: 1px solid {sync_color}40; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="font-size: 1.5rem;">{sync_icon}</span>
+                <div>
+                    <div style="font-weight: 600; color: {sync_color};">{sync_status}</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8;">{model_info}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(15, 23, 42, 0.95));
+                    border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="font-size: 1.5rem;">❌</span>
+                <div>
+                    <div style="font-weight: 600; color: #ef4444;">No Forecast Data Available</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8;">Run models in Page 10 (Forecast Hub) to enable insights</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+with sync_col2:
+    if st.button("🔄 Refresh from Forecast Hub", type="secondary", use_container_width=True, key="refresh_forecast_cmd"):
+        st.rerun()
+
+
+# =============================================================================
 # DATA STATUS BAR
 # =============================================================================
 st.markdown("""
@@ -1179,7 +1266,11 @@ with tab_forecast:
     """, unsafe_allow_html=True)
 
     if forecast["has_forecast"]:
-        st.success(f"**Forecast Source:** {forecast['source']} | **Confidence:** {forecast['confidence']}")
+        # Show sync-aware success message
+        if forecast["synced_with_page10"]:
+            st.success(f"✅ **Synced with Forecast Hub** — {forecast['source']} | Confidence: {forecast['confidence']}")
+        else:
+            st.info(f"📊 Using direct model results: **{forecast['source']}** | Confidence: {forecast['confidence']}\n\n*Run forecasts in Page 10 for full sync.*")
 
         # Day cards
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -1247,6 +1338,8 @@ with tab_forecast:
         1. Go to **Modeling Hub** (Page 08) and train a forecasting model
         2. Visit **Forecast Hub** (Page 10) to generate predictions
         3. Return here to see your weekly planning dashboard
+
+        **Tip:** Use the "🔄 Refresh from Forecast Hub" button above to sync after running forecasts.
         """)
 
 

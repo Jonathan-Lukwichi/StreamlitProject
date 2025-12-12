@@ -455,34 +455,87 @@ def load_financial_data() -> Dict[str, Any]:
 
 
 def get_forecast_data() -> Dict[str, Any]:
-    """Extract forecast data from session state."""
-    result = {"has_forecast": False, "source": None, "forecasts": [], "horizon": 0, "dates": []}
+    """
+    Extract forecast data from session state.
 
-    # Try ML models
-    ml_results = st.session_state.get("ml_mh_results")
-    if ml_results and isinstance(ml_results, dict):
-        for model in ["XGBoost", "LSTM", "ANN"]:
-            if model in ml_results:
-                per_h = ml_results[model].get("per_h", {})
-                if per_h:
-                    try:
-                        horizons = sorted([int(h) for h in per_h.keys()])
-                        forecasts = []
-                        for h in horizons[:7]:
-                            pred = per_h.get(h, {}).get("predictions") or per_h.get(h, {}).get("forecast")
-                            if pred is not None:
-                                arr = pred.values if hasattr(pred, 'values') else np.array(pred)
-                                forecasts.append(float(arr[-1]) if len(arr) > 0 else 0)
-                        if forecasts:
-                            result["has_forecast"] = True
-                            result["source"] = f"ML ({model})"
-                            result["forecasts"] = forecasts
-                            result["horizon"] = len(forecasts)
-                            break
-                    except:
-                        continue
+    PRIORITY ORDER (synced with Page 10 Forecast Hub):
+    1. forecast_hub_demand - Primary source from Forecast Hub (Page 10)
+    2. active_forecast - Alternative key from Forecast Hub
+    3. ML models (fallback)
+    4. ARIMA (fallback)
+    """
+    result = {
+        "has_forecast": False,
+        "source": None,
+        "model_type": None,
+        "forecasts": [],
+        "horizon": 0,
+        "dates": [],
+        "accuracy": None,
+        "timestamp": None,
+        "synced_with_page10": False,
+    }
 
-    # Try ARIMA
+    # PRIORITY 1: Check forecast_hub_demand (from Page 10 - Forecast Hub)
+    hub_demand = st.session_state.get("forecast_hub_demand")
+    if hub_demand and isinstance(hub_demand, dict):
+        forecasts = hub_demand.get("forecast", [])
+        if forecasts and len(forecasts) > 0:
+            result["has_forecast"] = True
+            result["source"] = hub_demand.get("model", "Forecast Hub")
+            result["model_type"] = hub_demand.get("model_type", "Unknown")
+            result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
+            result["horizon"] = len(result["forecasts"])
+            result["dates"] = hub_demand.get("dates", [])
+            result["accuracy"] = hub_demand.get("avg_accuracy")
+            result["timestamp"] = hub_demand.get("timestamp")
+            result["synced_with_page10"] = True
+            return result
+
+    # PRIORITY 2: Check active_forecast (alternative from Page 10)
+    active = st.session_state.get("active_forecast")
+    if active and isinstance(active, dict):
+        forecasts = active.get("forecasts", [])
+        if forecasts and len(forecasts) > 0:
+            result["has_forecast"] = True
+            result["source"] = active.get("model", "Active Forecast")
+            result["model_type"] = active.get("model_type", "Unknown")
+            result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
+            result["horizon"] = len(result["forecasts"])
+            result["dates"] = active.get("dates", [])
+            result["accuracy"] = active.get("accuracy")
+            result["timestamp"] = active.get("updated_at")
+            result["synced_with_page10"] = True
+            return result
+
+    # PRIORITY 3: Try ML models directly (fallback)
+    for model in ["XGBoost", "LSTM", "ANN"]:
+        key = f"ml_mh_results_{model}"
+        ml_results = st.session_state.get(key)
+        if ml_results and isinstance(ml_results, dict):
+            per_h = ml_results.get("per_h", {})
+            if per_h:
+                try:
+                    horizons = sorted([int(h) for h in per_h.keys()])
+                    forecasts = []
+                    for h in horizons[:7]:
+                        h_data = per_h.get(h, {})
+                        pred = h_data.get("predictions") or h_data.get("forecast") or h_data.get("y_test_pred")
+                        if pred is not None:
+                            arr = pred.values if hasattr(pred, 'values') else np.array(pred)
+                            forecasts.append(max(0, float(arr[-1])) if len(arr) > 0 else 0)
+                    if forecasts:
+                        result["has_forecast"] = True
+                        result["source"] = f"ML ({model})"
+                        result["model_type"] = "ML"
+                        result["forecasts"] = forecasts
+                        result["horizon"] = len(forecasts)
+                        result["synced_with_page10"] = False
+                        break
+                except:
+                    continue
+
+    # PRIORITY 4: Try ARIMA (fallback)
     if not result["has_forecast"]:
         arima = st.session_state.get("arima_mh_results")
         if arima and isinstance(arima, dict):
@@ -495,16 +548,19 @@ def get_forecast_data() -> Dict[str, Any]:
                         fc = per_h.get(h, {}).get("forecast")
                         if fc is not None:
                             arr = fc.values if hasattr(fc, 'values') else np.array(fc)
-                            forecasts.append(float(arr[-1]) if len(arr) > 0 else 0)
+                            forecasts.append(max(0, float(arr[-1])) if len(arr) > 0 else 0)
                     if forecasts:
                         result["has_forecast"] = True
                         result["source"] = "ARIMA"
+                        result["model_type"] = "Statistical"
                         result["forecasts"] = forecasts
                         result["horizon"] = len(forecasts)
+                        result["synced_with_page10"] = False
                 except:
                     pass
 
-    if result["has_forecast"]:
+    # Generate dates if not provided
+    if result["has_forecast"] and not result["dates"]:
         today = datetime.now().date()
         result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, result["horizon"] + 1)]
 
@@ -512,7 +568,19 @@ def get_forecast_data() -> Dict[str, Any]:
 
 
 def calculate_optimization(forecast_data: Dict, inv_stats: Dict, cost_params: Dict) -> Dict[str, Any]:
-    """Calculate optimized inventory ordering based on forecast."""
+    """
+    Calculate optimized inventory ordering based on patient demand forecast.
+
+    Key Formulas:
+    1. Demand Forecast: total_demand = Σ(patients × usage_per_patient)
+    2. Safety Stock: safety_stock = total_demand × safety_factor (10%)
+    3. Optimal Order: Q* = total_demand + safety_stock
+    4. Holding Cost: H = (Q/2) × unit_cost × (annual_holding_rate / 365) × days
+       - Q/2 is average inventory level (assuming uniform demand)
+    5. Total Cost: TC = ordering_cost + holding_cost
+
+    Comparison uses consistent 7-day periods for weekly metrics.
+    """
     if not forecast_data["has_forecast"]:
         return {"success": False}
 
@@ -524,13 +592,21 @@ def calculate_optimization(forecast_data: Dict, inv_stats: Dict, cost_params: Di
     total_ordering_cost = 0
     total_holding_cost = 0
 
+    # Get holding cost percentage from cost_params (loaded from Supabase)
+    holding_cost_pct = cost_params.get("holding_cost_pct", 0.25)
+    ordering_cost_per_order = cost_params.get("ordering_cost", 50.0)
+
     for item_id, item_params in DEFAULT_INVENTORY_ITEMS.items():
         # Calculate demand based on patient forecast
-        total_demand = sum(p * item_params["usage_per_patient"] for p in patient_forecast)
-        safety_stock = total_demand * 0.1  # 10% buffer
+        # Formula: demand = Σ(daily_patients × usage_per_patient)
+        total_demand = sum(max(0, p) * item_params["usage_per_patient"] for p in patient_forecast)
+
+        # Safety stock = 10% buffer to prevent stockouts
+        safety_factor = 0.10
+        safety_stock = total_demand * safety_factor
         optimal_order = int(np.ceil(total_demand + safety_stock))
 
-        # Get unit cost
+        # Get unit cost from cost_params (Supabase) or fallback to defaults
         if item_id == "GLOVES":
             unit_cost = cost_params.get("gloves_unit_cost", item_params["unit_cost"])
         elif item_id == "PPE_SETS":
@@ -540,8 +616,13 @@ def calculate_optimization(forecast_data: Dict, inv_stats: Dict, cost_params: Di
         else:
             unit_cost = item_params["unit_cost"]
 
-        order_cost = cost_params.get("ordering_cost", item_params["ordering_cost"])
-        holding_cost = (optimal_order / 2) * unit_cost * (cost_params.get("holding_cost_pct", 0.25) / 365) * horizon
+        # One order per item for the forecast period
+        order_cost = ordering_cost_per_order
+
+        # Holding Cost Formula: H = (Q/2) × C × (h/365) × T
+        # Where: Q = order quantity, C = unit cost, h = annual holding rate, T = time period
+        # Q/2 represents average inventory (assumes uniform depletion)
+        holding_cost = (optimal_order / 2) * unit_cost * (holding_cost_pct / 365) * horizon
 
         total_ordering_cost += order_cost
         total_holding_cost += holding_cost
@@ -558,31 +639,110 @@ def calculate_optimization(forecast_data: Dict, inv_stats: Dict, cost_params: Di
 
     total_cost = total_ordering_cost + total_holding_cost
 
-    # Calculate current costs for comparison (based on fixed ordering)
+    # Calculate CURRENT costs for comparison using CONSISTENT cost parameters
+    # Use cost_params from Supabase for consistency (not hardcoded item params)
     current_daily_cost = 0
     for item_id, params in DEFAULT_FIXED_ORDER_PARAMS.items():
         item = DEFAULT_INVENTORY_ITEMS[item_id]
-        # Estimate daily ordering and holding costs
-        daily_holding = params["order_quantity"] / 2 * item["unit_cost"] * (item["holding_cost_pct"] / 365)
-        daily_ordering = item["ordering_cost"] / 7  # Assume weekly ordering
+
+        # Get consistent unit cost
+        if item_id == "GLOVES":
+            unit_cost = cost_params.get("gloves_unit_cost", item["unit_cost"])
+        elif item_id == "PPE_SETS":
+            unit_cost = cost_params.get("ppe_unit_cost", item["unit_cost"])
+        elif item_id == "MEDICATIONS":
+            unit_cost = cost_params.get("medication_unit_cost", item["unit_cost"])
+        else:
+            unit_cost = item["unit_cost"]
+
+        # Daily holding cost: (avg_inventory × unit_cost × annual_rate) / 365
+        daily_holding = (params["order_quantity"] / 2) * unit_cost * (holding_cost_pct / 365)
+
+        # Daily ordering cost: assume weekly ordering = ordering_cost / 7
+        daily_ordering = ordering_cost_per_order / 7
+
         current_daily_cost += daily_holding + daily_ordering
+
+    # Calculate optimized average daily cost
+    optimized_daily_cost = total_cost / horizon if horizon > 0 else 0
+
+    # Use consistent 7-day period for weekly comparisons
+    current_weekly_cost = current_daily_cost * 7
+    optimized_weekly_cost = optimized_daily_cost * 7
+    weekly_savings = current_weekly_cost - optimized_weekly_cost
 
     return {
         "success": True,
         "item_results": item_results,
-        "total_cost": total_cost,
+        "total_cost": total_cost,                      # Total for forecast horizon
         "ordering_cost": total_ordering_cost,
         "holding_cost": total_holding_cost,
-        "avg_daily_cost": total_cost / horizon,
-        "current_daily_cost": current_daily_cost,
-        "current_weekly_cost": current_daily_cost * 7,
-        "optimized_weekly_cost": total_cost,
-        "weekly_savings": (current_daily_cost * 7) - total_cost,
+        "avg_daily_cost": optimized_daily_cost,        # Average optimized daily cost
+        "current_daily_cost": current_daily_cost,      # Current average daily cost
+        "current_weekly_cost": current_weekly_cost,    # Current: daily × 7
+        "optimized_weekly_cost": optimized_weekly_cost,# Optimized: avg_daily × 7
+        "weekly_savings": weekly_savings,              # Consistent weekly comparison
         "horizon": horizon,
         "source": forecast_data["source"],
         "dates": forecast_data["dates"],
         "patient_forecast": patient_forecast,
     }
+
+
+# =============================================================================
+# FORECAST SYNC STATUS - Synced with Page 10 (Forecast Hub)
+# =============================================================================
+forecast_data = get_forecast_data()
+
+sync_col1, sync_col2 = st.columns([3, 1])
+with sync_col1:
+    if forecast_data["has_forecast"]:
+        if forecast_data["synced_with_page10"]:
+            sync_icon = "✅"
+            sync_status = "Synced with Forecast Hub"
+            sync_color = "#22c55e"
+        else:
+            sync_icon = "⚠️"
+            sync_status = "Using Direct Model Results"
+            sync_color = "#eab308"
+
+        model_info = f"{forecast_data['source']}"
+        if forecast_data.get("model_type"):
+            model_info += f" ({forecast_data['model_type']})"
+        if forecast_data.get("accuracy"):
+            model_info += f" • Accuracy: {forecast_data['accuracy']:.1f}%"
+        if forecast_data.get("timestamp"):
+            model_info += f" • Updated: {forecast_data['timestamp'][:16]}"
+
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+                    border: 1px solid {sync_color}40; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="font-size: 1.5rem;">{sync_icon}</span>
+                <div>
+                    <div style="font-weight: 600; color: {sync_color};">{sync_status}</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8;">{model_info}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(15, 23, 42, 0.95));
+                    border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span style="font-size: 1.5rem;">❌</span>
+                <div>
+                    <div style="font-weight: 600; color: #ef4444;">No Forecast Data Available</div>
+                    <div style="font-size: 0.85rem; color: #94a3b8;">Run models in Page 10 (Forecast Hub) to enable optimization</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+with sync_col2:
+    if st.button("🔄 Refresh from Forecast Hub", type="secondary", use_container_width=True, key="refresh_forecast_inv"):
+        st.rerun()
 
 
 # =============================================================================
@@ -915,6 +1075,7 @@ with tab2:
         cost_params = st.session_state.inv_cost_params
 
         # Calculate linked variables
+        # Daily Usage Cost = usage × unit_cost for each item
         daily_gloves_cost = inv_stats['avg_gloves_usage'] * cost_params['gloves_unit_cost']
         daily_ppe_cost = inv_stats['avg_ppe_usage'] * cost_params['ppe_unit_cost']
         daily_med_cost = inv_stats['avg_medication_usage'] * cost_params['medication_unit_cost']
@@ -922,11 +1083,18 @@ with tab2:
         weekly_inventory_cost = daily_inventory_cost * 7
         monthly_inventory_cost = daily_inventory_cost * 30
 
-        # Estimate holding cost
+        # Estimate holding cost using actual inventory levels and unit costs
+        # Formula: H = Σ(inventory_level × unit_cost × annual_rate / 365)
+        # This is the daily cost of holding inventory
+        daily_holding_cost = (
+            inv_stats['avg_gloves_level'] * cost_params['gloves_unit_cost'] * (cost_params['holding_cost_pct'] / 365) +
+            inv_stats['avg_ppe_level'] * cost_params['ppe_unit_cost'] * (cost_params['holding_cost_pct'] / 365) +
+            inv_stats['avg_medication_level'] * cost_params['medication_unit_cost'] * (cost_params['holding_cost_pct'] / 365)
+        )
         avg_total_inventory = inv_stats['avg_gloves_level'] + inv_stats['avg_ppe_level'] + inv_stats['avg_medication_level']
-        daily_holding_cost = avg_total_inventory * 10 * (cost_params['holding_cost_pct'] / 365)  # $10 avg unit cost
 
         # Estimate stockout cost
+        # Formula: stockout_events × penalty_per_stockout
         stockout_events = int(inv_stats['total_records'] * inv_stats['avg_stockout_risk'] / 100)
         total_stockout_cost = stockout_events * cost_params['stockout_penalty']
 
@@ -1120,10 +1288,16 @@ with tab3:
             st.warning("""
             ⚠️ **No forecast data available!**
 
-            Please run forecasting models in the **Modeling Hub (Page 08)** first, then return here.
+            Please run forecasting models in the **Forecast Hub (Page 10)** or **Modeling Hub (Page 08)** first, then return here.
+
+            **Tip:** Use the "🔄 Refresh from Forecast Hub" button above to sync after running forecasts.
             """)
         else:
-            st.success(f"✅ Forecast available: **{forecast_data['source']}** - {forecast_data['horizon']} days ahead")
+            # Show sync-aware success message
+            if forecast_data["synced_with_page10"]:
+                st.success(f"✅ **Synced with Forecast Hub** — Using **{forecast_data['source']}** ({forecast_data['horizon']} days ahead)")
+            else:
+                st.info(f"📊 Using direct model results: **{forecast_data['source']}** ({forecast_data['horizon']} days ahead)\n\n*Run forecasts in Page 10 for full sync.*")
 
             # Optimization Button
             if st.button("🚀 Apply Forecast Optimization", type="primary", use_container_width=True, key="optimize"):

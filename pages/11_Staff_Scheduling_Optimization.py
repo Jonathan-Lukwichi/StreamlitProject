@@ -422,34 +422,87 @@ def load_financial_data() -> Dict[str, Any]:
 
 
 def get_forecast_data() -> Dict[str, Any]:
-    """Extract forecast data from session state."""
-    result = {"has_forecast": False, "source": None, "forecasts": [], "horizon": 0, "dates": []}
+    """
+    Extract forecast data from session state.
 
-    # Try ML models
-    ml_results = st.session_state.get("ml_mh_results")
-    if ml_results and isinstance(ml_results, dict):
-        for model in ["XGBoost", "LSTM", "ANN"]:
-            if model in ml_results:
-                per_h = ml_results[model].get("per_h", {})
-                if per_h:
-                    try:
-                        horizons = sorted([int(h) for h in per_h.keys()])
-                        forecasts = []
-                        for h in horizons[:7]:
-                            pred = per_h.get(h, {}).get("predictions") or per_h.get(h, {}).get("forecast")
-                            if pred is not None:
-                                arr = pred.values if hasattr(pred, 'values') else np.array(pred)
-                                forecasts.append(float(arr[-1]) if len(arr) > 0 else 0)
-                        if forecasts:
-                            result["has_forecast"] = True
-                            result["source"] = f"ML ({model})"
-                            result["forecasts"] = forecasts
-                            result["horizon"] = len(forecasts)
-                            break
-                    except:
-                        continue
+    PRIORITY ORDER (synced with Page 10 Forecast Hub):
+    1. forecast_hub_demand - Primary source from Forecast Hub (Page 10)
+    2. active_forecast - Alternative key from Forecast Hub
+    3. ML models (fallback)
+    4. ARIMA (fallback)
+    """
+    result = {
+        "has_forecast": False,
+        "source": None,
+        "model_type": None,
+        "forecasts": [],
+        "horizon": 0,
+        "dates": [],
+        "accuracy": None,
+        "timestamp": None,
+        "synced_with_page10": False,
+    }
 
-    # Try ARIMA
+    # PRIORITY 1: Check forecast_hub_demand (from Page 10 - Forecast Hub)
+    hub_demand = st.session_state.get("forecast_hub_demand")
+    if hub_demand and isinstance(hub_demand, dict):
+        forecasts = hub_demand.get("forecast", [])
+        if forecasts and len(forecasts) > 0:
+            result["has_forecast"] = True
+            result["source"] = hub_demand.get("model", "Forecast Hub")
+            result["model_type"] = hub_demand.get("model_type", "Unknown")
+            result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
+            result["horizon"] = len(result["forecasts"])
+            result["dates"] = hub_demand.get("dates", [])
+            result["accuracy"] = hub_demand.get("avg_accuracy")
+            result["timestamp"] = hub_demand.get("timestamp")
+            result["synced_with_page10"] = True
+            return result
+
+    # PRIORITY 2: Check active_forecast (alternative from Page 10)
+    active = st.session_state.get("active_forecast")
+    if active and isinstance(active, dict):
+        forecasts = active.get("forecasts", [])
+        if forecasts and len(forecasts) > 0:
+            result["has_forecast"] = True
+            result["source"] = active.get("model", "Active Forecast")
+            result["model_type"] = active.get("model_type", "Unknown")
+            result["forecasts"] = [max(0, float(f)) for f in forecasts[:7]]
+            result["horizon"] = len(result["forecasts"])
+            result["dates"] = active.get("dates", [])
+            result["accuracy"] = active.get("accuracy")
+            result["timestamp"] = active.get("updated_at")
+            result["synced_with_page10"] = True
+            return result
+
+    # PRIORITY 3: Try ML models directly (fallback)
+    for model in ["XGBoost", "LSTM", "ANN"]:
+        key = f"ml_mh_results_{model}"
+        ml_results = st.session_state.get(key)
+        if ml_results and isinstance(ml_results, dict):
+            per_h = ml_results.get("per_h", {})
+            if per_h:
+                try:
+                    horizons = sorted([int(h) for h in per_h.keys()])
+                    forecasts = []
+                    for h in horizons[:7]:
+                        h_data = per_h.get(h, {})
+                        pred = h_data.get("predictions") or h_data.get("forecast") or h_data.get("y_test_pred")
+                        if pred is not None:
+                            arr = pred.values if hasattr(pred, 'values') else np.array(pred)
+                            forecasts.append(max(0, float(arr[-1])) if len(arr) > 0 else 0)
+                    if forecasts:
+                        result["has_forecast"] = True
+                        result["source"] = f"ML ({model})"
+                        result["model_type"] = "ML"
+                        result["forecasts"] = forecasts
+                        result["horizon"] = len(forecasts)
+                        result["synced_with_page10"] = False
+                        break
+                except:
+                    continue
+
+    # PRIORITY 4: Try ARIMA (fallback)
     if not result["has_forecast"]:
         arima = st.session_state.get("arima_mh_results")
         if arima and isinstance(arima, dict):
@@ -462,16 +515,19 @@ def get_forecast_data() -> Dict[str, Any]:
                         fc = per_h.get(h, {}).get("forecast")
                         if fc is not None:
                             arr = fc.values if hasattr(fc, 'values') else np.array(fc)
-                            forecasts.append(float(arr[-1]) if len(arr) > 0 else 0)
+                            forecasts.append(max(0, float(arr[-1])) if len(arr) > 0 else 0)
                     if forecasts:
                         result["has_forecast"] = True
                         result["source"] = "ARIMA"
+                        result["model_type"] = "Statistical"
                         result["forecasts"] = forecasts
                         result["horizon"] = len(forecasts)
+                        result["synced_with_page10"] = False
                 except:
                     pass
 
-    if result["has_forecast"]:
+    # Generate dates if not provided
+    if result["has_forecast"] and not result["dates"]:
         today = datetime.now().date()
         result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, result["horizon"] + 1)]
 
@@ -479,26 +535,48 @@ def get_forecast_data() -> Dict[str, Any]:
 
 
 def calculate_optimization(forecast_data: Dict, staff_stats: Dict, cost_params: Dict) -> Dict[str, Any]:
-    """Calculate optimized staffing based on forecast."""
+    """
+    Calculate optimized staffing based on patient demand forecast.
+
+    Staffing Formula:
+    - Staff needed per category = ceil(patients_in_category / patients_per_staff_ratio)
+    - Total staff = sum across all categories
+
+    Cost Formula:
+    - Daily cost = Σ(staff_count × hourly_rate × shift_hours) for each staff type
+
+    Comparison uses consistent 7-day periods for weekly metrics.
+    """
     if not forecast_data["has_forecast"]:
         return {"success": False}
 
     schedules = []
     total_cost = 0
 
-    # Patient distribution by category
+    # Patient distribution by category (based on typical hospital case mix)
+    # These percentages should sum to 1.0
     distribution = {
-        "CARDIAC": 0.15, "TRAUMA": 0.20, "RESPIRATORY": 0.25,
-        "GASTROINTESTINAL": 0.15, "INFECTIOUS": 0.15, "NEUROLOGICAL": 0.05, "OTHER": 0.05,
+        "CARDIAC": 0.15,           # 15% cardiac cases
+        "TRAUMA": 0.20,            # 20% trauma cases
+        "RESPIRATORY": 0.25,       # 25% respiratory cases
+        "GASTROINTESTINAL": 0.15,  # 15% GI cases
+        "INFECTIOUS": 0.15,        # 15% infectious disease
+        "NEUROLOGICAL": 0.05,      # 5% neurological
+        "OTHER": 0.05,             # 5% other
     }
 
     for i, patients in enumerate(forecast_data["forecasts"]):
+        # Distribute patients across categories
         patients_by_cat = {cat: patients * pct for cat, pct in distribution.items()}
 
-        doctors = sum(np.ceil(p / STAFFING_RATIOS[c]["doctors"]) for c, p in patients_by_cat.items())
-        nurses = sum(np.ceil(p / STAFFING_RATIOS[c]["nurses"]) for c, p in patients_by_cat.items())
-        support = sum(np.ceil(p / STAFFING_RATIOS[c]["support"]) for c, p in patients_by_cat.items())
+        # Calculate staff needed using staffing ratios
+        # STAFFING_RATIOS[cat]["doctors"] = patients per doctor (e.g., 5 means 1 doctor per 5 patients)
+        # Formula: ceil(patients / ratio) = minimum staff needed to cover patients
+        doctors = sum(np.ceil(max(0, p) / STAFFING_RATIOS[c]["doctors"]) for c, p in patients_by_cat.items())
+        nurses = sum(np.ceil(max(0, p) / STAFFING_RATIOS[c]["nurses"]) for c, p in patients_by_cat.items())
+        support = sum(np.ceil(max(0, p) / STAFFING_RATIOS[c]["support"]) for c, p in patients_by_cat.items())
 
+        # Daily labor cost = staff_count × hourly_rate × hours_per_shift
         daily_cost = (
             doctors * cost_params["doctor_hourly"] * cost_params["shift_hours"] +
             nurses * cost_params["nurse_hourly"] * cost_params["shift_hours"] +
@@ -516,30 +594,85 @@ def calculate_optimization(forecast_data: Dict, staff_stats: Dict, cost_params: 
         })
         total_cost += daily_cost
 
-    # Calculate current costs for comparison
+    horizon = forecast_data["horizon"]
+
+    # Calculate CURRENT daily labor cost based on historical averages
     current_daily_cost = (
         staff_stats.get("avg_doctors", 0) * cost_params["doctor_hourly"] * cost_params["shift_hours"] +
         staff_stats.get("avg_nurses", 0) * cost_params["nurse_hourly"] * cost_params["shift_hours"] +
         staff_stats.get("avg_support", 0) * cost_params["support_hourly"] * cost_params["shift_hours"]
     )
 
-    horizon = forecast_data["horizon"]
+    # Calculate OPTIMIZED average daily cost
+    optimized_daily_cost = total_cost / horizon if horizon > 0 else 0
+
+    # Use consistent 7-day period for weekly comparisons (standard week)
+    current_weekly_cost = current_daily_cost * 7
+    optimized_weekly_cost = optimized_daily_cost * 7
+    weekly_savings = current_weekly_cost - optimized_weekly_cost
 
     return {
         "success": True,
         "schedules": schedules,
-        "total_cost": total_cost,
-        "avg_daily_cost": total_cost / horizon,
-        "current_daily_cost": current_daily_cost,
-        "current_weekly_cost": current_daily_cost * 7,
-        "optimized_weekly_cost": total_cost,
-        "weekly_savings": (current_daily_cost * 7) - total_cost,
+        "total_cost": total_cost,                      # Total for forecast horizon
+        "avg_daily_cost": optimized_daily_cost,        # Average optimized daily cost
+        "current_daily_cost": current_daily_cost,      # Current average daily cost
+        "current_weekly_cost": current_weekly_cost,    # Current: daily × 7
+        "optimized_weekly_cost": optimized_weekly_cost,# Optimized: avg_daily × 7
+        "weekly_savings": weekly_savings,              # Consistent weekly comparison
         "horizon": horizon,
         "source": forecast_data["source"],
         "avg_opt_doctors": np.mean([s["doctors"] for s in schedules]),
         "avg_opt_nurses": np.mean([s["nurses"] for s in schedules]),
         "avg_opt_support": np.mean([s["support"] for s in schedules]),
     }
+
+
+# =============================================================================
+# FORECAST SYNC STATUS - Synced with Page 10 (Forecast Hub)
+# =============================================================================
+forecast_data = get_forecast_data()
+
+st.markdown("""
+<div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;'>
+    <div style='display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;'>
+        <div>
+            <div style='font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.25rem;'>🔮 FORECAST SOURCE</div>
+""", unsafe_allow_html=True)
+
+sync_col1, sync_col2 = st.columns([3, 1])
+
+with sync_col1:
+    if forecast_data["has_forecast"]:
+        sync_badge = "🔗 Synced" if forecast_data.get("synced_with_page10") else "⚠️ Fallback"
+        sync_color = "#22c55e" if forecast_data.get("synced_with_page10") else "#f59e0b"
+        acc_text = f" • Accuracy: {forecast_data['accuracy']:.1f}%" if forecast_data.get("accuracy") else ""
+
+        st.markdown(f"""
+        <div style='display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;'>
+            <span style='font-weight: 700; color: #e2e8f0; font-size: 1.1rem;'>{forecast_data['source']}</span>
+            <span style='background: rgba({34 if forecast_data.get("synced_with_page10") else 245}, {197 if forecast_data.get("synced_with_page10") else 158}, {94 if forecast_data.get("synced_with_page10") else 11}, 0.15);
+                        color: {sync_color}; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;'>
+                {sync_badge}
+            </span>
+            <span style='color: #64748b; font-size: 0.8rem;'>{forecast_data['horizon']} days ahead{acc_text}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='display: flex; align-items: center; gap: 0.5rem;'>
+            <span style='font-weight: 600; color: #ef4444;'>❌ No Forecast Available</span>
+            <span style='color: #64748b; font-size: 0.8rem;'>Go to Page 10 (Forecast Hub) to generate forecasts</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+with sync_col2:
+    if st.button("🔄 Refresh from Forecast Hub", type="secondary", use_container_width=True, key="refresh_forecast_staff"):
+        # Clear any cached forecast data to force re-read
+        st.rerun()
+
+st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -807,6 +940,7 @@ with tab2:
         cost_params = st.session_state.cost_params
 
         # Calculate linked variables
+        # Daily Labor Cost = Σ(staff_count × hourly_rate × shift_hours)
         daily_labor_cost = (
             staff_stats['avg_doctors'] * cost_params['doctor_hourly'] * cost_params['shift_hours'] +
             staff_stats['avg_nurses'] * cost_params['nurse_hourly'] * cost_params['shift_hours'] +
@@ -814,10 +948,24 @@ with tab2:
         )
         weekly_labor_cost = daily_labor_cost * 7
         monthly_labor_cost = daily_labor_cost * 30
-        overtime_cost = staff_stats['total_overtime'] * cost_params['nurse_hourly'] * cost_params['overtime_multiplier']
+
+        # Overtime Cost Calculation
+        # Use weighted average hourly rate based on staff composition for overtime
+        # Formula: overtime_hours × weighted_avg_rate × overtime_multiplier
         total_staff = staff_stats['avg_doctors'] + staff_stats['avg_nurses'] + staff_stats['avg_support']
+        if total_staff > 0:
+            # Weighted average hourly rate = Σ(staff_pct × hourly_rate)
+            weighted_hourly_rate = (
+                (staff_stats['avg_doctors'] / total_staff) * cost_params['doctor_hourly'] +
+                (staff_stats['avg_nurses'] / total_staff) * cost_params['nurse_hourly'] +
+                (staff_stats['avg_support'] / total_staff) * cost_params['support_hourly']
+            )
+        else:
+            weighted_hourly_rate = cost_params['nurse_hourly']  # Fallback
+
+        overtime_cost = staff_stats['total_overtime'] * weighted_hourly_rate * cost_params['overtime_multiplier']
         cost_per_staff = daily_labor_cost / total_staff if total_staff > 0 else 0
-        shortage_penalty = staff_stats['shortage_days'] * 200  # $200 penalty per shortage day
+        shortage_penalty = staff_stats['shortage_days'] * 200  # $200 penalty per shortage day (industry estimate)
 
         # STAFF SITUATION SUMMARY
         st.markdown('<div class="subsection-header">👥 Staff Situation Summary</div>', unsafe_allow_html=True)
@@ -1013,16 +1161,23 @@ with tab3:
     st.markdown('<div class="section-header">🚀 After Optimization (Forecast Applied)</div>', unsafe_allow_html=True)
 
     if st.session_state.staff_data_loaded and st.session_state.financial_data_loaded:
+        # Re-fetch forecast data to ensure we have the latest
         forecast_data = get_forecast_data()
 
         if not forecast_data["has_forecast"]:
             st.warning("""
             ⚠️ **No forecast data available!**
 
-            Please run forecasting models in the **Modeling Hub (Page 08)** first, then return here.
+            Please go to **Forecast Hub (Page 10)** to generate forecasts, then return here.
             """)
+            if st.button("🔄 Refresh Forecast Data", key="refresh_tab3"):
+                st.rerun()
         else:
-            st.success(f"✅ Forecast available: **{forecast_data['source']}** - {forecast_data['horizon']} days ahead")
+            # Show forecast source with sync status
+            sync_icon = "🔗" if forecast_data.get("synced_with_page10") else "⚠️"
+            sync_text = "Synced with Forecast Hub" if forecast_data.get("synced_with_page10") else "Using fallback data"
+            acc_text = f" • Accuracy: {forecast_data['accuracy']:.1f}%" if forecast_data.get("accuracy") else ""
+            st.success(f"{sync_icon} Forecast: **{forecast_data['source']}** - {forecast_data['horizon']} days ahead{acc_text} ({sync_text})")
 
             # Optimization Button
             if st.button("🚀 Apply Forecast Optimization", type="primary", use_container_width=True, key="optimize"):
@@ -1171,8 +1326,18 @@ with tab4:
         staff_stats = st.session_state.staff_stats
         cost_params = st.session_state.cost_params
 
-        # Calculate values
-        overtime_cost = staff_stats['total_overtime'] * cost_params['nurse_hourly'] * cost_params['overtime_multiplier']
+        # Calculate values using weighted average hourly rate for overtime
+        total_staff = staff_stats['avg_doctors'] + staff_stats['avg_nurses'] + staff_stats['avg_support']
+        if total_staff > 0:
+            weighted_hourly_rate = (
+                (staff_stats['avg_doctors'] / total_staff) * cost_params['doctor_hourly'] +
+                (staff_stats['avg_nurses'] / total_staff) * cost_params['nurse_hourly'] +
+                (staff_stats['avg_support'] / total_staff) * cost_params['support_hourly']
+            )
+        else:
+            weighted_hourly_rate = cost_params['nurse_hourly']
+
+        overtime_cost = staff_stats['total_overtime'] * weighted_hourly_rate * cost_params['overtime_multiplier']
         savings_pct = (opt['weekly_savings'] / opt['current_weekly_cost'] * 100) if opt['current_weekly_cost'] > 0 else 0
         annual_savings = opt['weekly_savings'] * 52
 
