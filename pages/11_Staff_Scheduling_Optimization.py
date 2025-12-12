@@ -1,6 +1,7 @@
 # =============================================================================
 # 11_Staff_Scheduling_Optimization.py
 # SIMPLIFIED: Forecast-Driven Staff Scheduling with Before/After Comparison
+# Design: Matches Modeling Hub (Page 08) styling
 # =============================================================================
 """
 Simplified Staff Scheduling - Forecast Driven
@@ -25,7 +26,7 @@ from typing import Optional, Dict, List, Any, Tuple
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
-    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
+    DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 
@@ -82,12 +83,404 @@ FIXED_STAFFING = {
 
 
 # =============================================================================
-# STEP 1: DATA EXTRACTION FUNCTIONS
+# FLUORESCENT EFFECTS + CUSTOM TAB STYLING (Same as Modeling Hub)
 # =============================================================================
+st.markdown(f"""
+<style>
+/* ========================================
+   FLUORESCENT EFFECTS FOR STAFF SCHEDULING
+   ======================================== */
+
+@keyframes float-orb {{
+    0%, 100% {{
+        transform: translate(0, 0) scale(1);
+        opacity: 0.25;
+    }}
+    50% {{
+        transform: translate(30px, -30px) scale(1.05);
+        opacity: 0.35;
+    }}
+}}
+
+.fluorescent-orb {{
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(70px);
+}}
+
+.orb-1 {{
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.25), transparent 70%);
+    top: 15%;
+    right: 20%;
+    animation: float-orb 25s ease-in-out infinite;
+}}
+
+.orb-2 {{
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.2), transparent 70%);
+    bottom: 20%;
+    left: 15%;
+    animation: float-orb 30s ease-in-out infinite;
+    animation-delay: 5s;
+}}
+
+@keyframes sparkle {{
+    0%, 100% {{
+        opacity: 0;
+        transform: scale(0);
+    }}
+    50% {{
+        opacity: 0.6;
+        transform: scale(1);
+    }}
+}}
+
+.sparkle {{
+    position: fixed;
+    width: 3px;
+    height: 3px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 197, 94, 0.3));
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 2;
+    animation: sparkle 3s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}}
+
+.sparkle-1 {{ top: 25%; left: 35%; animation-delay: 0s; }}
+.sparkle-2 {{ top: 65%; left: 70%; animation-delay: 1s; }}
+.sparkle-3 {{ top: 45%; left: 15%; animation-delay: 2s; }}
+
+/* ========================================
+   CUSTOM TAB STYLING (Modern Design)
+   ======================================== */
+
+/* Tab container */
+.stTabs {{
+    background: transparent;
+    margin-top: 1rem;
+}}
+
+/* Tab list (container for all tab buttons) */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 0.5rem;
+    background: linear-gradient(135deg, rgba(11, 17, 32, 0.6), rgba(5, 8, 22, 0.5));
+    padding: 0.5rem;
+    border-radius: 16px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}}
+
+/* Individual tab buttons */
+.stTabs [data-baseweb="tab"] {{
+    height: 50px;
+    background: transparent;
+    border-radius: 12px;
+    padding: 0 1.5rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: {BODY_TEXT};
+    border: 1px solid transparent;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}}
+
+/* Tab button hover effect */
+.stTabs [data-baseweb="tab"]:hover {{
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(59, 130, 246, 0.1));
+    border-color: rgba(34, 197, 94, 0.3);
+    color: {TEXT_COLOR};
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+}}
+
+/* Active/selected tab */
+.stTabs [aria-selected="true"] {{
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(59, 130, 246, 0.2)) !important;
+    border: 1px solid rgba(34, 197, 94, 0.5) !important;
+    color: {TEXT_COLOR} !important;
+    box-shadow:
+        0 0 20px rgba(34, 197, 94, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}}
+
+/* Active tab indicator (underline) - hide it */
+.stTabs [data-baseweb="tab-highlight"] {{
+    background-color: transparent;
+}}
+
+/* Tab panels (content area) */
+.stTabs [data-baseweb="tab-panel"] {{
+    padding-top: 1.5rem;
+}}
+
+/* ========================================
+   METRIC CARDS (Staff Scheduling Style)
+   ======================================== */
+
+.metric-card {{
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}}
+
+.metric-card:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}}
+
+.metric-card.before {{
+    border-color: rgba(239, 68, 68, 0.5);
+}}
+
+.metric-card.after {{
+    border-color: rgba(34, 197, 94, 0.5);
+}}
+
+.metric-card.savings {{
+    border-color: rgba(234, 179, 8, 0.5);
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.1), rgba(15, 23, 42, 0.98));
+}}
+
+.metric-value {{
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}}
+
+.metric-value.red {{ color: #ef4444; }}
+.metric-value.green {{ color: #22c55e; }}
+.metric-value.blue {{ color: #3b82f6; }}
+.metric-value.yellow {{ color: #eab308; }}
+
+.metric-label {{
+    font-size: 0.9rem;
+    color: #94a3b8;
+}}
+
+/* Section headers */
+.section-header {{
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin: 2rem 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(34, 197, 94, 0.3);
+}}
+
+/* Comparison table */
+.comparison-table {{
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}}
+
+.comparison-table th, .comparison-table td {{
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+}}
+
+.comparison-table th {{
+    color: #60a5fa;
+    font-weight: 600;
+}}
+
+.highlight-good {{ color: #22c55e; font-weight: 600; }}
+.highlight-bad {{ color: #ef4444; font-weight: 600; }}
+
+/* Data source badge */
+.data-source-badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(59, 130, 246, 0.15));
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 20px;
+    font-size: 0.875rem;
+    color: #22c55e;
+    font-weight: 500;
+}}
+
+.data-source-badge.warning {{
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(234, 179, 8, 0.1));
+    border-color: rgba(234, 179, 8, 0.4);
+    color: #eab308;
+}}
+
+@media (max-width: 768px) {{
+    .fluorescent-orb {{
+        width: 200px !important;
+        height: 200px !important;
+        filter: blur(50px);
+    }}
+    .sparkle {{
+        display: none;
+    }}
+
+    /* Make tabs stack vertically on mobile */
+    .stTabs [data-baseweb="tab-list"] {{
+        flex-direction: column;
+    }}
+
+    .stTabs [data-baseweb="tab"] {{
+        width: 100%;
+    }}
+}}
+</style>
+
+<!-- Fluorescent Floating Orbs -->
+<div class="fluorescent-orb orb-1"></div>
+<div class="fluorescent-orb orb-2"></div>
+
+<!-- Sparkle Particles -->
+<div class="sparkle sparkle-1"></div>
+<div class="sparkle sparkle-2"></div>
+<div class="sparkle sparkle-3"></div>
+""", unsafe_allow_html=True)
+
+
+# =============================================================================
+# HERO HEADER (Same style as Modeling Hub)
+# =============================================================================
+st.markdown(
+    f"""
+    <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
+      <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
+        <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>👥</div>
+        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Staff Scheduling Optimization</h1>
+      </div>
+      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
+        Forecast-driven resource allocation with Before/After financial impact comparison
+      </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# =============================================================================
+# STEP 1: DATA EXTRACTION FUNCTIONS (Connected to Page 10 Forecast Hub)
+# =============================================================================
+
+def extract_forecast_from_ml_results() -> Optional[Dict[str, Any]]:
+    """
+    Extract forecast data from ML multi-horizon results.
+    Uses the same format as Page 10 (Forecast Hub).
+    """
+    ml_results = st.session_state.get("ml_mh_results")
+    if not ml_results or not isinstance(ml_results, dict):
+        return None
+
+    for model_name in ["XGBoost", "LSTM", "ANN"]:
+        if model_name in ml_results:
+            model_data = ml_results[model_name]
+            per_h = model_data.get("per_h", {})
+
+            if not per_h:
+                continue
+
+            try:
+                # Get horizons
+                horizons = sorted([int(h) for h in per_h.keys()])
+                if not horizons:
+                    continue
+
+                # Build forecast array
+                forecasts = []
+                for h in horizons[:7]:  # Max 7 days
+                    h_data = per_h.get(h, {})
+                    pred = h_data.get("predictions") or h_data.get("forecast") or h_data.get("y_pred")
+                    if pred is not None:
+                        pred_arr = pred.values if hasattr(pred, 'values') else np.array(pred)
+                        # Take last prediction for each horizon
+                        forecasts.append(float(pred_arr[-1]) if len(pred_arr) > 0 else 0)
+
+                if forecasts:
+                    return {
+                        "model": f"ML ({model_name})",
+                        "forecasts": forecasts,
+                        "horizons": horizons[:7],
+                    }
+            except Exception:
+                continue
+
+    return None
+
+
+def extract_forecast_from_arima() -> Optional[Dict[str, Any]]:
+    """
+    Extract forecast data from ARIMA multi-horizon results.
+    """
+    arima_results = st.session_state.get("arima_mh_results")
+    if not arima_results or not isinstance(arima_results, dict):
+        return None
+
+    per_h = arima_results.get("per_h", {})
+    if not per_h:
+        return None
+
+    try:
+        horizons = sorted([int(h) for h in per_h.keys()])
+        forecasts = []
+
+        for h in horizons[:7]:
+            h_data = per_h.get(h, {})
+            fc = h_data.get("forecast")
+            if fc is not None:
+                fc_arr = fc.values if hasattr(fc, 'values') else np.array(fc)
+                forecasts.append(float(fc_arr[-1]) if len(fc_arr) > 0 else 0)
+
+        if forecasts:
+            return {
+                "model": "ARIMA",
+                "forecasts": forecasts,
+                "horizons": horizons[:7],
+            }
+    except Exception:
+        pass
+
+    return None
+
+
+def extract_forecast_from_sarimax() -> Optional[Dict[str, Any]]:
+    """
+    Extract forecast data from SARIMAX results.
+    """
+    sarimax_results = st.session_state.get("sarimax_results")
+    if not sarimax_results or not isinstance(sarimax_results, dict):
+        return None
+
+    try:
+        fc = sarimax_results.get("forecast")
+        if fc is not None:
+            fc_arr = fc.values if hasattr(fc, 'values') else np.array(fc)
+            if len(fc_arr) > 0:
+                forecasts = list(fc_arr[:7])
+                return {
+                    "model": "SARIMAX",
+                    "forecasts": forecasts,
+                    "horizons": list(range(1, len(forecasts) + 1)),
+                }
+    except Exception:
+        pass
+
+    return None
+
 
 def get_forecast_data() -> Dict[str, Any]:
     """
     Extract forecast data from session state.
+    Priority: ML models > ARIMA > SARIMAX
     Returns total patient forecast and by clinical category.
     """
     result = {
@@ -99,72 +492,32 @@ def get_forecast_data() -> Dict[str, Any]:
         "horizon": 0,
     }
 
-    # Try different session state keys for forecasts
-    # Priority: ML models > SARIMAX > ARIMA
+    # Try each source in priority order
+    forecast_source = None
 
-    # 1. Check for ML multi-horizon results (XGBoost, LSTM, ANN)
-    ml_results = st.session_state.get("ml_mh_results")
-    if ml_results and isinstance(ml_results, dict):
-        for model_name in ["XGBoost", "LSTM", "ANN"]:
-            if model_name in ml_results:
-                model_data = ml_results[model_name]
-                if "per_h" in model_data:
-                    forecasts = []
-                    for h in range(1, 8):
-                        h_key = f"h{h}"
-                        if h_key in model_data["per_h"]:
-                            pred = model_data["per_h"][h_key].get("predictions", [])
-                            if pred:
-                                forecasts.append(float(np.mean(pred[-7:])) if len(pred) > 7 else float(np.mean(pred)))
-                    if forecasts:
-                        result["has_forecast"] = True
-                        result["source"] = f"ML Model ({model_name})"
-                        result["total_forecast"] = forecasts
-                        result["horizon"] = len(forecasts)
-                        break
+    # 1. Try ML models
+    forecast_source = extract_forecast_from_ml_results()
 
-    # 2. Check for SARIMAX results
-    if not result["has_forecast"]:
-        sarimax = st.session_state.get("sarimax_results")
-        if sarimax and isinstance(sarimax, dict):
-            if "forecast" in sarimax:
-                fc = sarimax["forecast"]
-                if isinstance(fc, (list, np.ndarray)) and len(fc) > 0:
-                    result["has_forecast"] = True
-                    result["source"] = "SARIMAX"
-                    result["total_forecast"] = list(fc[:7])
-                    result["horizon"] = len(result["total_forecast"])
+    # 2. Try ARIMA
+    if not forecast_source:
+        forecast_source = extract_forecast_from_arima()
 
-    # 3. Check for ARIMA multi-horizon results
-    if not result["has_forecast"]:
-        arima = st.session_state.get("arima_mh_results")
-        if arima and isinstance(arima, dict):
-            if "per_h" in arima:
-                forecasts = []
-                for h in range(1, 8):
-                    h_key = f"h{h}"
-                    if h_key in arima["per_h"]:
-                        pred = arima["per_h"][h_key].get("predictions", [])
-                        if pred:
-                            forecasts.append(float(np.mean(pred[-7:])) if len(pred) > 7 else float(np.mean(pred)))
-                if forecasts:
-                    result["has_forecast"] = True
-                    result["source"] = "ARIMA"
-                    result["total_forecast"] = forecasts
-                    result["horizon"] = len(forecasts)
+    # 3. Try SARIMAX
+    if not forecast_source:
+        forecast_source = extract_forecast_from_sarimax()
 
-    # 4. Check for multi-target results (clinical categories)
-    multi_target = st.session_state.get("sarimax_multi_target_results")
-    if multi_target and isinstance(multi_target, dict):
-        for category in ["CARDIAC", "TRAUMA", "RESPIRATORY", "GASTROINTESTINAL", "INFECTIOUS", "NEUROLOGICAL"]:
-            if category in multi_target:
-                cat_data = multi_target[category]
-                if "forecast" in cat_data:
-                    result["category_forecast"][category] = list(cat_data["forecast"][:7])
+    if forecast_source:
+        result["has_forecast"] = True
+        result["source"] = forecast_source["model"]
+        result["total_forecast"] = forecast_source["forecasts"]
+        result["horizon"] = len(forecast_source["forecasts"])
 
-    # If no category forecast, distribute total forecast proportionally
-    if result["has_forecast"] and not result["category_forecast"]:
-        # Default distribution based on typical ED patterns
+        # Generate dates
+        today = datetime.now().date()
+        result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d")
+                          for i in range(1, result["horizon"] + 1)]
+
+        # Distribute total forecast by clinical category
         distribution = {
             "CARDIAC": 0.15,
             "TRAUMA": 0.20,
@@ -176,11 +529,6 @@ def get_forecast_data() -> Dict[str, Any]:
         }
         for cat, pct in distribution.items():
             result["category_forecast"][cat] = [f * pct for f in result["total_forecast"]]
-
-    # Generate dates
-    if result["has_forecast"]:
-        today = datetime.now().date()
-        result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, result["horizon"] + 1)]
 
     return result
 
@@ -356,119 +704,43 @@ def analyze_after_scenario(forecast_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # =============================================================================
-# CUSTOM CSS
-# =============================================================================
-st.markdown("""
-<style>
-/* Metric cards */
-.metric-card {
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 12px;
-    padding: 1.5rem;
-    text-align: center;
-    margin-bottom: 1rem;
-}
-
-.metric-card.before {
-    border-color: rgba(239, 68, 68, 0.5);
-}
-
-.metric-card.after {
-    border-color: rgba(34, 197, 94, 0.5);
-}
-
-.metric-card.savings {
-    border-color: rgba(234, 179, 8, 0.5);
-    background: linear-gradient(135deg, rgba(234, 179, 8, 0.1), rgba(15, 23, 42, 0.98));
-}
-
-.metric-value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-}
-
-.metric-value.red { color: #ef4444; }
-.metric-value.green { color: #22c55e; }
-.metric-value.blue { color: #3b82f6; }
-.metric-value.yellow { color: #eab308; }
-
-.metric-label {
-    font-size: 0.9rem;
-    color: #94a3b8;
-}
-
-/* Section headers */
-.section-header {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #f1f5f9;
-    margin: 2rem 0 1rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid rgba(59, 130, 246, 0.3);
-}
-
-/* Comparison table */
-.comparison-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1rem 0;
-}
-
-.comparison-table th, .comparison-table td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.comparison-table th {
-    color: #60a5fa;
-    font-weight: 600;
-}
-
-.highlight-good { color: #22c55e; font-weight: 600; }
-.highlight-bad { color: #ef4444; font-weight: 600; }
-</style>
-""", unsafe_allow_html=True)
-
-
-# =============================================================================
-# MAIN PAGE
-# =============================================================================
-
-st.markdown("# 👥 Staff Scheduling")
-st.markdown("### Forecast-Driven Resource Allocation")
-
-st.info("""
-**How this works:**
-1. **BEFORE**: Hospital uses fixed staffing (same staff every day) → inefficient
-2. **AFTER**: Staff allocation based on ML patient predictions → optimized
-
-Compare the costs and see the savings from using forecasting!
-""")
-
-# =============================================================================
 # LOAD DATA
 # =============================================================================
 
 forecast_data = get_forecast_data()
 historical_data = get_historical_data()
 
-# Show data status
+# Show data status with styled badges
+st.markdown("### 📡 Data Connection Status")
 col1, col2 = st.columns(2)
 
 with col1:
     if forecast_data["has_forecast"]:
-        st.success(f"✅ Forecast loaded: {forecast_data['source']} ({forecast_data['horizon']} days)")
+        st.markdown(f"""
+        <div class="data-source-badge">
+            ✅ Forecast: {forecast_data['source']} ({forecast_data['horizon']} days)
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.warning("⚠️ No forecast data. Please run models in Modeling Hub first.")
+        st.markdown("""
+        <div class="data-source-badge warning">
+            ⚠️ No forecast - Run models in Modeling Hub
+        </div>
+        """, unsafe_allow_html=True)
 
 with col2:
     if historical_data["has_data"]:
-        st.success(f"✅ Historical data: {len(historical_data['daily_patients'])} days")
+        st.markdown(f"""
+        <div class="data-source-badge">
+            ✅ Historical: {len(historical_data['daily_patients'])} days
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.warning("⚠️ No historical data. Please load data in Data Hub first.")
+        st.markdown("""
+        <div class="data-source-badge warning">
+            ⚠️ No historical data - Load in Data Hub
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # =============================================================================
