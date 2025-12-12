@@ -319,6 +319,8 @@ if "inventory_stats" not in st.session_state:
 
 if "inv_financial_data_loaded" not in st.session_state:
     st.session_state.inv_financial_data_loaded = False
+if "inv_financial_df" not in st.session_state:
+    st.session_state.inv_financial_df = None
 if "inv_cost_params" not in st.session_state:
     st.session_state.inv_cost_params = DEFAULT_COST_PARAMS.copy()
 if "inv_financial_stats" not in st.session_state:
@@ -379,13 +381,21 @@ def load_inventory_data() -> Dict[str, Any]:
 
 def load_financial_data() -> Dict[str, Any]:
     """Load financial/cost parameters from Supabase."""
-    result = {"success": False, "cost_params": DEFAULT_COST_PARAMS.copy(), "stats": {}, "error": None}
+    result = {"success": False, "cost_params": DEFAULT_COST_PARAMS.copy(), "stats": {}, "data": None, "error": None}
 
     try:
         service = get_financial_service()
         if not service.is_connected():
             result["error"] = "Supabase not connected"
             return result
+
+        # Fetch the raw financial dataframe for preview
+        try:
+            financial_df = service.fetch_all()
+            if financial_df is not None and not financial_df.empty:
+                result["data"] = financial_df
+        except Exception:
+            pass  # Continue even if raw data fetch fails
 
         inv_params = service.get_inventory_cost_params()
 
@@ -633,19 +643,95 @@ with tab1:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # Graph: Usage Trends
+            # Graph: Usage Trends (Dynamic Equipment Selection)
             if st.session_state.inventory_df is not None:
                 df = st.session_state.inventory_df.copy()
                 if "Date" in df.columns:
                     df = df.sort_values("Date").tail(30)
 
-                    fig = go.Figure()
+                    # Find usage columns
                     usage_cols = [c for c in df.columns if "Usage" in c or "usage" in c]
-                    colors = ["#a855f7", "#3b82f6", "#22c55e"]
-                    for i, col in enumerate(usage_cols[:3]):
-                        fig.add_trace(go.Scatter(x=df["Date"], y=df[col], name=col.replace("_", " "), line=dict(color=colors[i % len(colors)])))
 
-                    fig.update_layout(title="Usage Trends (Last 30 Days)", template="plotly_dark", height=250, margin=dict(l=20, r=20, t=40, b=20))
+                    # Equipment selection options
+                    equipment_options = ["📊 All Equipment"]
+                    equipment_col_map = {}
+                    equipment_colors = {
+                        "📊 All Equipment": ["#a855f7", "#3b82f6", "#22c55e", "#f97316", "#eab308"],
+                        "🧤 Gloves": "#a855f7",
+                        "🛡️ PPE Sets": "#3b82f6",
+                        "💊 Medications": "#22c55e",
+                        "💉 Syringes": "#f97316",
+                        "🩹 Bandages": "#eab308",
+                    }
+
+                    # Map columns to equipment names
+                    for col in usage_cols:
+                        col_lower = col.lower()
+                        if "glove" in col_lower:
+                            equipment_options.append("🧤 Gloves")
+                            equipment_col_map["🧤 Gloves"] = col
+                        elif "ppe" in col_lower:
+                            equipment_options.append("🛡️ PPE Sets")
+                            equipment_col_map["🛡️ PPE Sets"] = col
+                        elif "medication" in col_lower or "med" in col_lower:
+                            equipment_options.append("💊 Medications")
+                            equipment_col_map["💊 Medications"] = col
+                        elif "syringe" in col_lower:
+                            equipment_options.append("💉 Syringes")
+                            equipment_col_map["💉 Syringes"] = col
+                        elif "bandage" in col_lower:
+                            equipment_options.append("🩹 Bandages")
+                            equipment_col_map["🩹 Bandages"] = col
+
+                    # Equipment selector
+                    selected_equipment = st.selectbox(
+                        "Select Equipment to View",
+                        options=equipment_options,
+                        index=0,
+                        key="inv_equipment_selector"
+                    )
+
+                    fig = go.Figure()
+
+                    if selected_equipment == "📊 All Equipment":
+                        # Show all equipment
+                        colors = equipment_colors["📊 All Equipment"]
+                        for i, col in enumerate(usage_cols[:5]):
+                            fig.add_trace(go.Scatter(
+                                x=df["Date"],
+                                y=df[col],
+                                name=col.replace("_", " "),
+                                line=dict(color=colors[i % len(colors)], width=2),
+                                mode='lines+markers',
+                                marker=dict(size=4)
+                            ))
+                        title = "Usage Trends - All Equipment (Last 30 Days)"
+                    else:
+                        # Show selected equipment only
+                        col = equipment_col_map.get(selected_equipment)
+                        if col and col in df.columns:
+                            color = equipment_colors.get(selected_equipment, "#a855f7")
+                            fig.add_trace(go.Scatter(
+                                x=df["Date"],
+                                y=df[col],
+                                name=selected_equipment,
+                                line=dict(color=color, width=3),
+                                mode='lines+markers',
+                                marker=dict(size=6),
+                                fill='tozeroy',
+                                fillcolor=f'rgba{tuple(list(int(color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4)) + [0.2])}'
+                            ))
+                        title = f"Usage Trend - {selected_equipment} (Last 30 Days)"
+
+                    fig.update_layout(
+                        title=title,
+                        template="plotly_dark",
+                        height=280,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        xaxis_title="Date",
+                        yaxis_title="Units Used",
+                        hovermode='x unified'
+                    )
                     st.plotly_chart(fig, use_container_width=True)
 
             # Observations
@@ -683,6 +769,7 @@ with tab1:
                 result = load_financial_data()
                 if result["success"]:
                     st.session_state.inv_financial_data_loaded = True
+                    st.session_state.inv_financial_df = result["data"]
                     st.session_state.inv_cost_params = result["cost_params"]
                     st.session_state.inv_financial_stats = result["stats"]
                     st.success("✅ Cost parameters loaded!")
@@ -775,6 +862,11 @@ with tab1:
                 st.markdown("**Observations:**")
                 total_daily = gloves_cost + ppe_cost + med_cost
                 st.markdown(f'<div class="observation-box success">💵 Total daily inventory cost: ${total_daily:,.0f}</div>', unsafe_allow_html=True)
+
+            # Raw Financial Data Preview
+            if st.session_state.inv_financial_df is not None and not st.session_state.inv_financial_df.empty:
+                with st.expander("📋 View Raw Financial Data"):
+                    st.dataframe(st.session_state.inv_financial_df.tail(20), use_container_width=True, height=200)
 
         else:
             st.markdown('<span class="status-badge pending">⚠️ Not Loaded</span>', unsafe_allow_html=True)
@@ -1273,7 +1365,7 @@ with st.sidebar:
 
     if st.button("🗑️ Clear All Data", use_container_width=True):
         for key in ["inventory_data_loaded", "inventory_df", "inventory_stats", "inv_financial_data_loaded",
-                    "inv_cost_params", "inv_financial_stats", "inv_optimization_done", "inv_optimized_results"]:
+                    "inv_financial_df", "inv_cost_params", "inv_financial_stats", "inv_optimization_done", "inv_optimized_results"]:
             if key in st.session_state:
                 st.session_state[key] = None if "df" in key or "stats" in key or "results" in key or "params" in key else False
         st.session_state.inv_cost_params = DEFAULT_COST_PARAMS.copy()
