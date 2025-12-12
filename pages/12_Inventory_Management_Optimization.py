@@ -412,14 +412,30 @@ def load_financial_data() -> Dict[str, Any]:
         inv_params = service.get_inventory_cost_params()
 
         if inv_params:
+            # Get raw values
+            raw_gloves_cost = inv_params.get("gloves_unit_cost", 15.0)
+            raw_ppe_cost = inv_params.get("ppe_unit_cost", 45.0)
+            raw_med_cost = inv_params.get("medication_unit_cost", 8.0)
+            raw_holding_cost = inv_params.get("holding_cost", 0.25)
+            raw_ordering_cost = inv_params.get("ordering_cost", 50.0)
+            raw_stockout_penalty = inv_params.get("stockout_penalty", 100.0)
+            raw_overstock_penalty = inv_params.get("overstock_penalty", 25.0)
+
+            # Validate holding_cost_pct - should be 0-1 (representing 0-100%)
+            # If value > 1, it might be in percentage form already, so divide by 100
+            # Then clamp to reasonable range (0.05 to 0.50 = 5% to 50%)
+            if raw_holding_cost > 1:
+                raw_holding_cost = raw_holding_cost / 100
+            validated_holding_cost = max(0.05, min(0.50, abs(raw_holding_cost))) if raw_holding_cost else 0.25
+
             result["cost_params"] = {
-                "gloves_unit_cost": inv_params.get("gloves_unit_cost", 15.0),
-                "ppe_unit_cost": inv_params.get("ppe_unit_cost", 45.0),
-                "medication_unit_cost": inv_params.get("medication_unit_cost", 8.0),
-                "holding_cost_pct": inv_params.get("holding_cost", 0.25),
-                "ordering_cost": inv_params.get("ordering_cost", 50.0),
-                "stockout_penalty": inv_params.get("stockout_penalty", 100.0),
-                "overstock_penalty": inv_params.get("overstock_penalty", 25.0),
+                "gloves_unit_cost": max(0, raw_gloves_cost) if raw_gloves_cost else 15.0,
+                "ppe_unit_cost": max(0, raw_ppe_cost) if raw_ppe_cost else 45.0,
+                "medication_unit_cost": max(0, raw_med_cost) if raw_med_cost else 8.0,
+                "holding_cost_pct": validated_holding_cost,
+                "ordering_cost": max(0, raw_ordering_cost) if raw_ordering_cost else 50.0,
+                "stockout_penalty": max(0, raw_stockout_penalty) if raw_stockout_penalty else 100.0,
+                "overstock_penalty": max(0, raw_overstock_penalty) if raw_overstock_penalty else 25.0,
             }
 
         result["success"] = True
