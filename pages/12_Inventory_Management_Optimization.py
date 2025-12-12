@@ -359,6 +359,11 @@ def load_inventory_data() -> Dict[str, Any]:
         avg_usage = stats.get("avg_usage", {})
         avg_levels = stats.get("avg_levels", {})
 
+        # Get stockout risk and ensure it's valid (0-100%)
+        raw_stockout_risk = stats.get("avg_stockout_risk", 0)
+        # Handle negative values by taking absolute value, then clamp to 0-100
+        avg_stockout_risk = max(0, min(100, abs(raw_stockout_risk))) if raw_stockout_risk else 0
+
         result["stats"] = {
             "total_records": len(df),
             "date_start": df["Date"].min() if "Date" in df.columns else None,
@@ -370,7 +375,7 @@ def load_inventory_data() -> Dict[str, Any]:
             "avg_ppe_level": avg_levels.get("ppe", 0),
             "avg_medication_level": avg_levels.get("medications", 0),
             "restock_events": stats.get("restock_events", 0),
-            "avg_stockout_risk": stats.get("avg_stockout_risk", 0),
+            "avg_stockout_risk": avg_stockout_risk,
         }
 
         return result
