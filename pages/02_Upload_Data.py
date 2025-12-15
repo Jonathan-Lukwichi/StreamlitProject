@@ -260,7 +260,7 @@ def _go_preprocessing():
 
 # ---- Page Configuration ----
 st.set_page_config(
-    page_title="Data Hub - HealthForecast AI",
+    page_title="Upload Data - HealthForecast AI",
     page_icon="📤",
     layout="wide",
 )
@@ -372,7 +372,7 @@ def page_data_hub():
         f"""
         <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
           <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>📤</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Data Integration Hub</h1>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Upload Data</h1>
           <p class='hf-feature-description' style='font-size: 1rem; max-width: 700px; margin: 0 auto;'>
             Upload and manage your patient, weather, and calendar data
           </p>

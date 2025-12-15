@@ -585,7 +585,7 @@ class FeatureSelectionPipeline:
 
 # Page Configuration
 st.set_page_config(
-    page_title="Automated Feature Selection - HealthForecast AI",
+    page_title="Feature Selection - HealthForecast AI",
     page_icon="🧩",
     layout="wide",
 )
@@ -687,7 +687,7 @@ def page_feature_selection():
         f"""
         <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
           <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🧩</div>
-          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Automated Feature Selection</h1>
+          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Feature Selection</h1>
           <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
             Intelligently select the most impactful features using advanced selection algorithms and machine learning techniques
           </p>

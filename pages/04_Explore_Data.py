@@ -337,7 +337,7 @@ def _render_time_series_diagnostics(df):
 
 # ---- Page Configuration ----
 st.set_page_config(
-    page_title="EDA - HealthForecast AI",
+    page_title="Explore Data - HealthForecast AI",
     page_icon="📊",
     layout="wide",
 )
@@ -416,7 +416,7 @@ def page_eda():
         f"""
         <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
           <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>📊</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Exploratory Data Analysis</h1>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Explore Data</h1>
           <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 auto;'>
             Uncover patterns, trends, and anomalies in your patient arrival data with advanced statistical analysis
           </p>

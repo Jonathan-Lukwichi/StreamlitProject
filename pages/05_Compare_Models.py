@@ -1488,7 +1488,7 @@ def _build_error_evolution(per_h: dict, title: str):
 
 # Page Configuration
 st.set_page_config(
-    page_title="Benchmarks - HealthForecast AI",
+    page_title="Compare Models - HealthForecast AI",
     page_icon="🤖",
     layout="wide",
 )
@@ -1669,7 +1669,7 @@ def page_benchmarks():
         f"""
         <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
           <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🤖</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Benchmark Models</h1>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Compare Models</h1>
           <p class='hf-feature-description' style='font-size: 1rem; max-width: 700px; margin: 0 auto;'>
             Train and evaluate forecasting models for patient arrivals with advanced statistical and machine learning techniques
           </p>

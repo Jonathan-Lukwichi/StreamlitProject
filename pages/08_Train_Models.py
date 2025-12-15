@@ -50,7 +50,7 @@ require_admin_access()
 configure_sidebar_navigation()
 
 st.set_page_config(
-    page_title="Modeling Hub - HealthForecast AI",
+    page_title="Train Models - HealthForecast AI",
     page_icon="🧠",
     layout="wide",
 )
@@ -64,7 +64,7 @@ render_cache_management()
 # Results Storage Panel (Supabase persistence)
 render_results_storage_panel(
     page_type="modeling_hub",
-    page_title="Modeling Hub",
+    page_title="Train Models",
     custom_keys=["ml_model_results", "benchmark_results", "hybrid_results"],
 )
 
@@ -244,7 +244,7 @@ st.markdown(
     <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
       <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
         <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🧠</div>
-        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Modeling Hub</h1>
+        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Train Models</h1>
       </div>
       <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
         Unified platform for configuring and training time series forecasting models

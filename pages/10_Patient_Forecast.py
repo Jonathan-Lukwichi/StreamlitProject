@@ -29,7 +29,7 @@ require_authentication()
 configure_sidebar_navigation()
 
 st.set_page_config(
-    page_title="Forecast Hub - HealthForecast AI",
+    page_title="Patient Forecast - HealthForecast AI",
     page_icon="🔮",
     layout="wide",
 )
@@ -1201,7 +1201,7 @@ st.markdown(
     f"""
     <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
       <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🔮</div>
-      <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Forecast Hub</h1>
+      <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Patient Forecast</h1>
       <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
         View forecasts from trained models<br>
         <span style='color: #94a3b8; font-size: 0.9rem;'>Uses test set predictions from Benchmarks & Modeling Hub</span>
@@ -2504,7 +2504,7 @@ with tab_export:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #64748b; font-size: 0.85rem;'>
-    <strong>Forecast Hub</strong> — View test set forecasts from trained models<br>
+    <strong>Patient Forecast</strong> — View test set forecasts from trained models<br>
     Uses predictions generated during model training in Benchmarks & Modeling Hub
 </div>
 """, unsafe_allow_html=True)

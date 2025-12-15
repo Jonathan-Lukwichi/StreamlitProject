@@ -44,7 +44,7 @@ require_authentication()
 configure_sidebar_navigation()
 
 st.set_page_config(
-    page_title="Staff Scheduling - HealthForecast AI",
+    page_title="Staff Planner - HealthForecast AI",
     page_icon="👥",
     layout="wide",
 )
@@ -287,7 +287,7 @@ st.markdown(
     <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
       <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
         <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>👥</div>
-        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Staff Scheduling Optimization</h1>
+        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Staff Planner</h1>
       </div>
       <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
         Load hospital data, analyze current situation, apply forecast optimization, and compare results

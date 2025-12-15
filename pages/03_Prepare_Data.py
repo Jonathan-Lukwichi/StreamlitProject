@@ -146,7 +146,7 @@ except Exception:
 
 # ---------- PAGE CONFIG --------------------------------------------------------
 st.set_page_config(
-    page_title="Data Preparation Studio - HealthForecast AI",
+    page_title="Prepare Data - HealthForecast AI",
     page_icon="🧠",
     layout="wide",
 )
@@ -613,7 +613,7 @@ def page_data_preparation_studio():
     # Results Storage Panel (Supabase persistence)
     render_results_storage_panel(
         page_type="data_preparation",
-        page_title="Data Preparation",
+        page_title="Prepare Data",
         custom_keys=["patient_data", "weather_data", "calendar_data", "reason_data"],
     )
 
@@ -759,7 +759,7 @@ def page_data_preparation_studio():
         f"""
         <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
           <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🧠</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Data Preparation Studio</h1>
+          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Prepare Data</h1>
           <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 auto;'>
             Intelligent data fusion and feature engineering pipeline for production-ready forecasting models
           </p>

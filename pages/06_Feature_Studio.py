@@ -65,7 +65,7 @@ except Exception:
         if subtitle: st.caption(subtitle)
 
 st.set_page_config(
-    page_title="Advanced Feature Engineering - HealthForecast AI",
+    page_title="Feature Studio - HealthForecast AI",
     page_icon="🧪",
     layout="wide",
 )
@@ -541,7 +541,7 @@ def main():
     # Results Storage Panel (Supabase persistence)
     render_results_storage_panel(
         page_type="feature_engineering",
-        page_title="Feature Engineering",
+        page_title="Feature Studio",
     )
 
     # Auto-load saved results if available
@@ -646,7 +646,7 @@ def main():
         f"""
         <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
           <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🧪</div>
-          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Advanced Feature Engineering</h1>
+          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Feature Studio</h1>
           <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
             Create sophisticated temporal and cyclical features with automated deduplication and scaling for enhanced model performance
           </p>

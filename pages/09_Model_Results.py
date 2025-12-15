@@ -28,7 +28,7 @@ require_admin_access()
 configure_sidebar_navigation()
 
 st.set_page_config(
-    page_title="Results - HealthForecast AI",
+    page_title="Model Results - HealthForecast AI",
     page_icon="📊",
     layout="wide",
 )
