@@ -478,6 +478,223 @@ st.markdown(f"""
     .savings-value {{ font-size: 2rem; }}
     .day-patients {{ font-size: 1.25rem; }}
 }}
+
+/* ========================================
+   DARK BLUE FLUORESCENT SIDEBAR STATUS CARDS
+   ======================================== */
+
+@keyframes sidebar-card-pulse {{
+    0%, 100% {{
+        box-shadow:
+            0 0 10px rgba(6, 78, 145, 0.4),
+            0 0 20px rgba(6, 78, 145, 0.2),
+            inset 0 1px 0 rgba(34, 211, 238, 0.1);
+    }}
+    50% {{
+        box-shadow:
+            0 0 15px rgba(6, 78, 145, 0.6),
+            0 0 30px rgba(6, 78, 145, 0.3),
+            inset 0 1px 0 rgba(34, 211, 238, 0.2);
+    }}
+}}
+
+@keyframes status-glow {{
+    0%, 100% {{ text-shadow: 0 0 5px currentColor; }}
+    50% {{ text-shadow: 0 0 15px currentColor, 0 0 25px currentColor; }}
+}}
+
+.sidebar-status-container {{
+    background: linear-gradient(135deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(6, 78, 145, 0.1) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.3);
+    border-radius: 16px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    animation: sidebar-card-pulse 4s ease-in-out infinite;
+}}
+
+.sidebar-status-title {{
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #22d3ee;
+    margin-bottom: 0.75rem;
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+}}
+
+.sidebar-status-card {{
+    background: linear-gradient(135deg, #064e91 0%, #0a3d6e 40%, #041e42 100%);
+    border: 1px solid rgba(34, 211, 238, 0.25);
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.3s ease;
+}}
+
+.sidebar-status-card:hover {{
+    transform: translateX(3px);
+    border-color: rgba(34, 211, 238, 0.5);
+    box-shadow: 0 0 15px rgba(6, 78, 145, 0.4);
+}}
+
+.sidebar-status-card:last-child {{
+    margin-bottom: 0;
+}}
+
+.sidebar-status-label {{
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}}
+
+.sidebar-status-value {{
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}}
+
+.status-active {{
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    animation: status-glow 2s ease-in-out infinite;
+}}
+
+.status-inactive {{
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}}
+
+.status-pending {{
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}}
+
+/* Savings Card */
+.sidebar-savings-card {{
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(6, 78, 145, 0.2) 50%, rgba(16, 185, 129, 0.1) 100%);
+    border: 2px solid rgba(34, 197, 94, 0.4);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    animation: sidebar-card-pulse 4s ease-in-out infinite;
+}}
+
+.sidebar-savings-value {{
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #22c55e;
+    text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);
+    animation: status-glow 2s ease-in-out infinite;
+}}
+
+.sidebar-savings-label {{
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #86efac;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+
+/* Activity Tracker */
+.sidebar-activity-container {{
+    background: linear-gradient(135deg, rgba(6, 78, 145, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: 12px;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+}}
+
+.sidebar-activity-title {{
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #22d3ee;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}}
+
+.sidebar-activity-item {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    font-size: 0.65rem;
+    color: #94a3b8;
+    border-bottom: 1px solid rgba(100, 116, 139, 0.15);
+}}
+
+.sidebar-activity-item:last-child {{
+    border-bottom: none;
+}}
+
+.activity-dot {{
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}}
+
+.activity-dot.active {{
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}}
+
+.activity-dot.pending {{
+    background: #fbbf24;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}}
+
+.activity-dot.inactive {{
+    background: #64748b;
+}}
+
+/* Quick Links Card */
+.sidebar-links-container {{
+    background: linear-gradient(135deg, rgba(6, 78, 145, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: 12px;
+    padding: 0.75rem;
+}}
+
+.sidebar-link-item {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    margin-bottom: 0.25rem;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    color: #22d3ee;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}}
+
+.sidebar-link-item:hover {{
+    background: rgba(6, 78, 145, 0.3);
+    transform: translateX(3px);
+}}
+
+.sidebar-link-item:last-child {{
+    margin-bottom: 0;
+}}
 </style>
 
 <!-- Fluorescent Floating Orbs -->
@@ -1761,32 +1978,147 @@ with tab_actions:
 
 
 # =============================================================================
-# SIDEBAR - Quick Navigation
+# SIDEBAR - Dark Blue Fluorescent Status Tracker
 # =============================================================================
 with st.sidebar:
     st.markdown("---")
-    st.markdown("### 📊 Quick Status")
 
-    st.markdown(f"**Forecast:** {'✅' if forecast['has_forecast'] else '❌'} {forecast['source'] if forecast['has_forecast'] else 'Not available'}")
-    st.markdown(f"**Staff Data:** {'✅ Loaded' if staffing['data_loaded'] else '❌ Not loaded'}")
-    st.markdown(f"**Inventory Data:** {'✅ Loaded' if inventory['data_loaded'] else '❌ Not loaded'}")
-    st.markdown(f"**Staff Optimized:** {'✅' if staffing['optimization_done'] else '❌'}")
-    st.markdown(f"**Inventory Optimized:** {'✅' if inventory['optimization_done'] else '❌'}")
+    # -------------------------------------------------------------------------
+    # QUICK STATUS - Dark Blue Fluorescent Cards
+    # -------------------------------------------------------------------------
+    # Determine status classes for each item
+    forecast_status = "status-active" if forecast['has_forecast'] else "status-inactive"
+    forecast_icon = "✅" if forecast['has_forecast'] else "❌"
+    forecast_text = forecast['source'][:15] + "..." if forecast['has_forecast'] and len(forecast.get('source', '')) > 15 else (forecast.get('source', 'N/A') if forecast['has_forecast'] else "Not available")
 
+    staff_data_status = "status-active" if staffing['data_loaded'] else "status-inactive"
+    staff_data_icon = "✅" if staffing['data_loaded'] else "❌"
+    staff_data_text = "Loaded" if staffing['data_loaded'] else "Not loaded"
+
+    inv_data_status = "status-active" if inventory['data_loaded'] else "status-inactive"
+    inv_data_icon = "✅" if inventory['data_loaded'] else "❌"
+    inv_data_text = "Loaded" if inventory['data_loaded'] else "Not loaded"
+
+    staff_opt_status = "status-active" if staffing['optimization_done'] else "status-inactive"
+    staff_opt_icon = "✅" if staffing['optimization_done'] else "❌"
+    staff_opt_text = "Optimized" if staffing['optimization_done'] else "Pending"
+
+    inv_opt_status = "status-active" if inventory['optimization_done'] else "status-inactive"
+    inv_opt_icon = "✅" if inventory['optimization_done'] else "❌"
+    inv_opt_text = "Optimized" if inventory['optimization_done'] else "Pending"
+
+    st.markdown(f"""
+    <div class="sidebar-status-container">
+        <div class="sidebar-status-title">📊 Quick Status</div>
+
+        <div class="sidebar-status-card">
+            <span class="sidebar-status-label">🔮 Forecast</span>
+            <span class="sidebar-status-value {forecast_status}">{forecast_icon} {forecast_text}</span>
+        </div>
+
+        <div class="sidebar-status-card">
+            <span class="sidebar-status-label">👥 Staff Data</span>
+            <span class="sidebar-status-value {staff_data_status}">{staff_data_icon} {staff_data_text}</span>
+        </div>
+
+        <div class="sidebar-status-card">
+            <span class="sidebar-status-label">📦 Inventory</span>
+            <span class="sidebar-status-value {inv_data_status}">{inv_data_icon} {inv_data_text}</span>
+        </div>
+
+        <div class="sidebar-status-card">
+            <span class="sidebar-status-label">🚀 Staff Opt.</span>
+            <span class="sidebar-status-value {staff_opt_status}">{staff_opt_icon} {staff_opt_text}</span>
+        </div>
+
+        <div class="sidebar-status-card">
+            <span class="sidebar-status-label">📈 Inv. Opt.</span>
+            <span class="sidebar-status-value {inv_opt_status}">{inv_opt_icon} {inv_opt_text}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SAVINGS CARD - Show if optimizations have generated savings
+    # -------------------------------------------------------------------------
     if financial["total_monthly_savings"] > 0:
-        st.markdown("---")
-        st.markdown("### 💰 Savings")
-        st.markdown(f"**Monthly:** ${financial['total_monthly_savings']:,.0f}")
-        st.markdown(f"**Annual:** ${financial['annual_savings']:,.0f}")
+        st.markdown(f"""
+        <div class="sidebar-savings-card">
+            <div class="sidebar-savings-label">💰 Monthly Savings</div>
+            <div class="sidebar-savings-value">${financial['total_monthly_savings']:,.0f}</div>
+            <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 0.25rem;">
+                Annual: ${financial['annual_savings']:,.0f}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # ACTIVITY TRACKER - Real-time app activity monitoring
+    # -------------------------------------------------------------------------
+    # Determine activity status
+    data_uploaded = st.session_state.get("patient_loaded", False) or st.session_state.get("merged_data") is not None
+    models_trained = forecast["has_forecast"]
+    forecast_generated = forecast["synced_with_page10"] if forecast["has_forecast"] else False
+    resources_optimized = staffing["optimization_done"] or inventory["optimization_done"]
+    actions_pending = len([a for a in actions if a["priority"] == "urgent"]) > 0
+
+    # Activity dots
+    upload_dot = "active" if data_uploaded else "inactive"
+    train_dot = "active" if models_trained else ("pending" if data_uploaded else "inactive")
+    forecast_dot = "active" if forecast_generated else ("pending" if models_trained else "inactive")
+    optimize_dot = "active" if resources_optimized else ("pending" if forecast_generated else "inactive")
+    action_dot = "active" if not actions_pending else "pending"
+
+    st.markdown(f"""
+    <div class="sidebar-activity-container">
+        <div class="sidebar-activity-title">⚡ Activity Tracker</div>
+
+        <div class="sidebar-activity-item">
+            <span class="activity-dot {upload_dot}"></span>
+            <span>Data Upload</span>
+            <span style="margin-left: auto; color: {'#22c55e' if data_uploaded else '#64748b'};">{'Done' if data_uploaded else 'Pending'}</span>
+        </div>
+
+        <div class="sidebar-activity-item">
+            <span class="activity-dot {train_dot}"></span>
+            <span>Model Training</span>
+            <span style="margin-left: auto; color: {'#22c55e' if models_trained else '#64748b'};">{'Done' if models_trained else 'Pending'}</span>
+        </div>
+
+        <div class="sidebar-activity-item">
+            <span class="activity-dot {forecast_dot}"></span>
+            <span>Forecast Generated</span>
+            <span style="margin-left: auto; color: {'#22c55e' if forecast_generated else '#64748b'};">{'Done' if forecast_generated else 'Pending'}</span>
+        </div>
+
+        <div class="sidebar-activity-item">
+            <span class="activity-dot {optimize_dot}"></span>
+            <span>Resource Optimization</span>
+            <span style="margin-left: auto; color: {'#22c55e' if resources_optimized else '#64748b'};">{'Done' if resources_optimized else 'Pending'}</span>
+        </div>
+
+        <div class="sidebar-activity-item">
+            <span class="activity-dot {action_dot}"></span>
+            <span>Urgent Actions</span>
+            <span style="margin-left: auto; color: {'#22c55e' if not actions_pending else '#fbbf24'};">{'Clear' if not actions_pending else 'Review'}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("### 🔗 Quick Links")
+
+    # -------------------------------------------------------------------------
+    # QUICK LINKS - Styled navigation links
+    # -------------------------------------------------------------------------
     st.markdown("""
-    - **Train Models:** Modeling Hub
-    - **Patient Forecast:** Forecast Hub
-    - **Staff Planner:** Staff Planner
-    - **Supply Planner:** Supply Planner
-    """)
+    <div class="sidebar-links-container">
+        <div class="sidebar-status-title" style="font-size: 0.75rem; margin-bottom: 0.5rem;">🔗 Quick Links</div>
+        <div class="sidebar-link-item">🧠 Train Models → Modeling Hub</div>
+        <div class="sidebar-link-item">🔮 Forecast → Patient Forecast</div>
+        <div class="sidebar-link-item">👥 Staff → Staff Planner</div>
+        <div class="sidebar-link-item">📦 Supply → Supply Planner</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # =============================================================================
