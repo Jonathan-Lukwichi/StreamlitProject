@@ -34,6 +34,14 @@ except ImportError:
     API_AVAILABLE = False
     APIConfigManager = None
 
+# Import Hospital Data Service
+try:
+    from app_core.data.hospital_service import HospitalDataService, get_hospital_service
+    HOSPITAL_SERVICE_AVAILABLE = True
+except ImportError:
+    HOSPITAL_SERVICE_AVAILABLE = False
+    HospitalDataService = None
+
 try:
     from app_core.state.session import init_state
 except Exception:
@@ -382,8 +390,105 @@ def page_data_hub():
     )
 
     # Ensure session keys exist
-    for k in ["patient_data", "weather_data", "calendar_data", "reason_data"]:
+    for k in ["patient_data", "weather_data", "calendar_data", "reason_data", "selected_hospital"]:
         st.session_state.setdefault(k, None)
+
+    # ========================================================================
+    # HOSPITAL SELECTOR SECTION
+    # ========================================================================
+    st.markdown(f"""
+    <div class='hf-feature-card' style='margin-bottom: 1.5rem; padding: 1.5rem;'>
+        <div style='display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;'>
+            <div style='font-size: 2rem;'>🏥</div>
+            <div>
+                <h3 class='hf-feature-title' style='margin: 0; font-size: 1.25rem;'>Select Hospital</h3>
+                <p class='hf-feature-description' style='margin: 0.25rem 0 0 0; font-size: 0.875rem;'>
+                    Choose the hospital to load data from
+                </p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Get available hospitals
+    available_hospitals = ["Pamplona Spain Hospital"]  # Default
+    if HOSPITAL_SERVICE_AVAILABLE:
+        try:
+            hospital_service = get_hospital_service()
+            if hospital_service.is_connected():
+                available_hospitals = hospital_service.get_available_hospitals()
+        except Exception:
+            pass
+
+    col_hosp1, col_hosp2, col_hosp3 = st.columns([1, 2, 1])
+    with col_hosp2:
+        # Hospital selector dropdown
+        selected_hospital = st.selectbox(
+            "🏥 Hospital",
+            options=available_hospitals,
+            index=0,
+            key="hospital_selector",
+            help="Select the hospital to fetch data from"
+        )
+        st.session_state["selected_hospital"] = selected_hospital
+
+        # Quick fetch all button
+        if HOSPITAL_SERVICE_AVAILABLE and API_AVAILABLE:
+            st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+
+            col_date1, col_date2 = st.columns(2)
+            with col_date1:
+                hosp_start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="hosp_start")
+            with col_date2:
+                hosp_end = st.date_input("End Date", value=datetime(2023, 12, 31), key="hosp_end")
+
+            if st.button(f"🚀 Load All Data for {selected_hospital}", use_container_width=True, type="primary"):
+                start_dt = datetime.combine(hosp_start, datetime.min.time())
+                end_dt = datetime.combine(hosp_end, datetime.min.time())
+
+                hospital_service = get_hospital_service()
+
+                progress_bar = st.progress(0, text="Fetching datasets...")
+                datasets = ["patient", "weather", "calendar", "reason"]
+
+                success_count = 0
+                for i, dataset_type in enumerate(datasets):
+                    progress_bar.progress((i) / 4, text=f"Fetching {dataset_type} data...")
+
+                    df = hospital_service.fetch_dataset_by_hospital(
+                        dataset_type=dataset_type,
+                        hospital_name=selected_hospital,
+                        start_date=start_dt,
+                        end_date=end_dt,
+                    )
+
+                    if df is not None and not df.empty:
+                        # Clean datetime columns
+                        df = _clean_datetime_column(df, dataset_type)
+                        df = _remove_empty_columns(df)
+
+                        # Special handling for reason dataset
+                        if dataset_type == "reason":
+                            cols_to_drop = [col for col in df.columns if col.lower() == "total_arrivals"]
+                            if cols_to_drop:
+                                df = df.drop(columns=cols_to_drop)
+
+                        st.session_state[f"{dataset_type}_data"] = df
+                        st.session_state[f"{dataset_type}_loaded"] = True
+                        success_count += 1
+                        st.success(f"✅ {dataset_type.title()}: {len(df):,} rows")
+                    else:
+                        st.warning(f"⚠️ No {dataset_type} data found")
+
+                progress_bar.progress(1.0, text="Complete!")
+
+                if success_count == 4:
+                    st.success(f"✅ Successfully loaded all data for **{selected_hospital}**!")
+                    st.balloons()
+                elif success_count > 0:
+                    st.warning(f"⚠️ Loaded {success_count}/4 datasets for {selected_hospital}")
+
+    st.markdown("---")
 
     # ========================================================================
     # FOUR-COLUMN GRID LAYOUT FOR DATA UPLOAD CARDS
@@ -587,47 +692,6 @@ def page_data_hub():
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ========================================================================
-    # BULK API FETCH SECTION
-    # ========================================================================
-    if API_AVAILABLE:
-        st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1.5rem; padding: 1.5rem;'>
-            <h3 class='hf-feature-title' style='font-size: 1.25rem; margin-bottom: 0.5rem;'>🚀 Bulk API Fetch</h3>
-            <p class='hf-feature-description' style='margin: 0; font-size: 0.875rem;'>
-                Fetch all 4 datasets from Supabase at once
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        col_bulk1, col_bulk2, col_bulk3 = st.columns([1, 2, 1])
-        with col_bulk2:
-            col_a, col_b = st.columns(2)
-            with col_a:
-                bulk_start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="bulk_start")
-            with col_b:
-                bulk_end = st.date_input("End Date", value=datetime(2023, 12, 31), key="bulk_end")
-
-            if st.button("🚀 Fetch All Datasets from Supabase", use_container_width=True, type="primary"):
-                start_dt = datetime.combine(bulk_start, datetime.min.time())
-                end_dt = datetime.combine(bulk_end, datetime.min.time())
-
-                with st.spinner("Fetching all datasets from Supabase..."):
-                    success_count = 0
-                    for dataset in ["patient", "weather", "calendar", "reason"]:
-                        result = _fetch_from_api(dataset, start_dt, end_dt, "supabase")
-                        if result is not None:
-                            success_count += 1
-
-                if success_count == 4:
-                    st.success(f"✅ Successfully fetched all 4 datasets!")
-                elif success_count > 0:
-                    st.warning(f"⚠️ Fetched {success_count}/4 datasets. Some datasets may not have data for this date range.")
-                else:
-                    st.error("❌ Failed to fetch datasets. Please check your configuration.")
-
-    # ========================================================================
     # DETAILED DATA PREVIEW SECTION (EXPANDABLE)
     # ========================================================================
     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
@@ -674,9 +738,11 @@ def page_data_hub():
     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
 
     # Status Summary Card
+    current_hospital = st.session_state.get("selected_hospital", "No hospital selected")
     st.markdown(f"""
     <div class='hf-feature-card' style='text-align: center; margin-bottom: 1.5rem; padding: 1.5rem;'>
-        <h3 class='hf-feature-title' style='font-size: 1.125rem; margin-bottom: 1rem;'>📋 Data Upload Status</h3>
+        <h3 class='hf-feature-title' style='font-size: 1.125rem; margin-bottom: 0.5rem;'>📋 Data Upload Status</h3>
+        <p style='color: {PRIMARY_COLOR}; font-size: 0.9rem; margin-bottom: 1rem;'>🏥 {current_hospital}</p>
         <div style='display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap;'>
             <div>
                 <div style='font-size: 1.25rem; margin-bottom: 0.25rem;'>
