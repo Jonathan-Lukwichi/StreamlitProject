@@ -477,8 +477,28 @@ div[data-testid="stButton"] > button[kind="primary"]:active {
     text-align: center !important;
 }
 
+/* CENTER FEATURE LISTS */
 .hf-feature-list {
-    text-align: left !important;
+    text-align: center !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    padding: 0 !important;
+    list-style: none !important;
+}
+
+.hf-feature-list li {
+    text-align: center !important;
+    padding-left: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    justify-content: center !important;
+}
+
+.hf-feature-list li::before {
+    position: static !important;
+    margin-right: 0 !important;
 }
 </style>
 
@@ -657,19 +677,26 @@ st.markdown("""
     display: flex;
     gap: 2.5rem;
     justify-content: center;
+    align-items: center;
     flex-wrap: wrap;
     margin-top: 1.5rem;
+    width: 100%;
 }
 
 .stat-item {
     text-align: center;
     padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .stat-number {
     font-size: 2.5rem;
     font-weight: 800;
     animation: text-glow-cyan 2s ease-in-out infinite;
+    text-align: center;
 }
 
 .stat-label {
