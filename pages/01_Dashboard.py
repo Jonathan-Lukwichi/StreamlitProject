@@ -1978,273 +1978,78 @@ with tab_actions:
 
 
 # =============================================================================
-# SIDEBAR - Dark Blue Fluorescent Status Tracker
+# SIDEBAR - Dark Blue Fluorescent Status Tracker (100% Inline Styles)
 # =============================================================================
 with st.sidebar:
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # QUICK STATUS - Dark Blue Fluorescent Cards (Inline Styles)
+    # QUICK STATUS - Using Streamlit native components for reliability
     # -------------------------------------------------------------------------
-    # Determine status values
-    forecast_icon = "✅" if forecast['has_forecast'] else "❌"
-    forecast_text = forecast['source'][:12] + "..." if forecast['has_forecast'] and len(forecast.get('source', '')) > 12 else (forecast.get('source', 'N/A') if forecast['has_forecast'] else "Not available")
-    forecast_color = "#22c55e" if forecast['has_forecast'] else "#f87171"
-    forecast_bg = "rgba(34, 197, 94, 0.2)" if forecast['has_forecast'] else "rgba(239, 68, 68, 0.15)"
+    st.markdown("### 📊 Quick Status")
 
-    staff_data_icon = "✅" if staffing['data_loaded'] else "❌"
-    staff_data_text = "Loaded" if staffing['data_loaded'] else "Not loaded"
-    staff_data_color = "#22c55e" if staffing['data_loaded'] else "#f87171"
-    staff_data_bg = "rgba(34, 197, 94, 0.2)" if staffing['data_loaded'] else "rgba(239, 68, 68, 0.15)"
+    # Status items using native Streamlit
+    forecast_status = f"✅ {forecast['source'][:15]}..." if forecast['has_forecast'] and len(forecast.get('source', '')) > 15 else (f"✅ {forecast.get('source', 'Available')}" if forecast['has_forecast'] else "❌ Not available")
+    staff_status = "✅ Loaded" if staffing['data_loaded'] else "❌ Not loaded"
+    inv_status = "✅ Loaded" if inventory['data_loaded'] else "❌ Not loaded"
+    staff_opt = "✅ Optimized" if staffing['optimization_done'] else "❌ Pending"
+    inv_opt = "✅ Optimized" if inventory['optimization_done'] else "❌ Pending"
 
-    inv_data_icon = "✅" if inventory['data_loaded'] else "❌"
-    inv_data_text = "Loaded" if inventory['data_loaded'] else "Not loaded"
-    inv_data_color = "#22c55e" if inventory['data_loaded'] else "#f87171"
-    inv_data_bg = "rgba(34, 197, 94, 0.2)" if inventory['data_loaded'] else "rgba(239, 68, 68, 0.15)"
+    # Display as clean metric-style cards
+    st.caption("🔮 **Forecast**")
+    st.info(forecast_status)
 
-    staff_opt_icon = "✅" if staffing['optimization_done'] else "❌"
-    staff_opt_text = "Optimized" if staffing['optimization_done'] else "Pending"
-    staff_opt_color = "#22c55e" if staffing['optimization_done'] else "#f87171"
-    staff_opt_bg = "rgba(34, 197, 94, 0.2)" if staffing['optimization_done'] else "rgba(239, 68, 68, 0.15)"
+    st.caption("👥 **Staff Data**")
+    st.info(staff_status)
 
-    inv_opt_icon = "✅" if inventory['optimization_done'] else "❌"
-    inv_opt_text = "Optimized" if inventory['optimization_done'] else "Pending"
-    inv_opt_color = "#22c55e" if inventory['optimization_done'] else "#f87171"
-    inv_opt_bg = "rgba(34, 197, 94, 0.2)" if inventory['optimization_done'] else "rgba(239, 68, 68, 0.15)"
+    st.caption("📦 **Inventory Data**")
+    st.info(inv_status)
 
-    # Quick Status Container with inline styles
-    st.markdown(f"""
-    <style>
-    .sb-container {{
-        background: linear-gradient(135deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(6, 78, 145, 0.1) 100%);
-        border: 1px solid rgba(34, 211, 238, 0.3);
-        border-radius: 16px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 0 15px rgba(6, 78, 145, 0.3);
-    }}
-    .sb-title {{
-        text-align: center;
-        font-size: 0.85rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        color: #22d3ee;
-        margin-bottom: 0.75rem;
-        text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
-    }}
-    .sb-card {{
-        background: linear-gradient(135deg, #064e91 0%, #0a3d6e 40%, #041e42 100%);
-        border: 1px solid rgba(34, 211, 238, 0.25);
-        border-radius: 10px;
-        padding: 0.5rem 0.6rem;
-        margin-bottom: 0.4rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }}
-    .sb-label {{
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: #94a3b8;
-    }}
-    .sb-value {{
-        font-size: 0.65rem;
-        font-weight: 700;
-        padding: 0.15rem 0.4rem;
-        border-radius: 6px;
-    }}
-    .sb-savings {{
-        background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(6, 78, 145, 0.2) 50%, rgba(16, 185, 129, 0.1) 100%);
-        border: 2px solid rgba(34, 197, 94, 0.4);
-        border-radius: 12px;
-        padding: 0.75rem;
-        text-align: center;
-        margin-bottom: 1rem;
-    }}
-    .sb-savings-value {{
-        font-size: 1.3rem;
-        font-weight: 800;
-        color: #22c55e;
-        text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);
-    }}
-    .sb-savings-label {{
-        font-size: 0.65rem;
-        font-weight: 600;
-        color: #86efac;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }}
-    .sb-activity {{
-        background: linear-gradient(135deg, rgba(6, 78, 145, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
-        border: 1px solid rgba(34, 211, 238, 0.2);
-        border-radius: 12px;
-        padding: 0.6rem;
-        margin-bottom: 1rem;
-    }}
-    .sb-activity-title {{
-        font-size: 0.7rem;
-        font-weight: 700;
-        color: #22d3ee;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 0.4rem;
-    }}
-    .sb-activity-item {{
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.25rem 0;
-        font-size: 0.6rem;
-        color: #94a3b8;
-        border-bottom: 1px solid rgba(100, 116, 139, 0.15);
-    }}
-    .sb-activity-item:last-child {{
-        border-bottom: none;
-    }}
-    .sb-dot {{
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }}
-    .sb-dot-active {{
-        background: #22c55e;
-        box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-    }}
-    .sb-dot-pending {{
-        background: #fbbf24;
-        box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
-    }}
-    .sb-dot-inactive {{
-        background: #64748b;
-    }}
-    .sb-links {{
-        background: linear-gradient(135deg, rgba(6, 78, 145, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%);
-        border: 1px solid rgba(34, 211, 238, 0.2);
-        border-radius: 12px;
-        padding: 0.6rem;
-    }}
-    .sb-link-item {{
-        padding: 0.3rem 0.4rem;
-        margin-bottom: 0.2rem;
-        border-radius: 6px;
-        font-size: 0.65rem;
-        color: #22d3ee;
-        font-weight: 600;
-    }}
-    </style>
+    st.caption("🚀 **Staff Optimization**")
+    st.info(staff_opt)
 
-    <div class="sb-container">
-        <div class="sb-title">📊 Quick Status</div>
-
-        <div class="sb-card">
-            <span class="sb-label">🔮 Forecast</span>
-            <span class="sb-value" style="background: {forecast_bg}; color: {forecast_color}; border: 1px solid {forecast_color}40;">{forecast_icon} {forecast_text}</span>
-        </div>
-
-        <div class="sb-card">
-            <span class="sb-label">👥 Staff Data</span>
-            <span class="sb-value" style="background: {staff_data_bg}; color: {staff_data_color}; border: 1px solid {staff_data_color}40;">{staff_data_icon} {staff_data_text}</span>
-        </div>
-
-        <div class="sb-card">
-            <span class="sb-label">📦 Inventory</span>
-            <span class="sb-value" style="background: {inv_data_bg}; color: {inv_data_color}; border: 1px solid {inv_data_color}40;">{inv_data_icon} {inv_data_text}</span>
-        </div>
-
-        <div class="sb-card">
-            <span class="sb-label">🚀 Staff Opt.</span>
-            <span class="sb-value" style="background: {staff_opt_bg}; color: {staff_opt_color}; border: 1px solid {staff_opt_color}40;">{staff_opt_icon} {staff_opt_text}</span>
-        </div>
-
-        <div class="sb-card">
-            <span class="sb-label">📈 Inv. Opt.</span>
-            <span class="sb-value" style="background: {inv_opt_bg}; color: {inv_opt_color}; border: 1px solid {inv_opt_color}40;">{inv_opt_icon} {inv_opt_text}</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("📈 **Inventory Optimization**")
+    st.info(inv_opt)
 
     # -------------------------------------------------------------------------
-    # SAVINGS CARD - Show if optimizations have generated savings
+    # SAVINGS CARD
     # -------------------------------------------------------------------------
     if financial["total_monthly_savings"] > 0:
-        st.markdown(f"""
-        <div class="sb-savings">
-            <div class="sb-savings-label">💰 Monthly Savings</div>
-            <div class="sb-savings-value">${financial['total_monthly_savings']:,.0f}</div>
-            <div style="font-size: 0.6rem; color: #94a3b8; margin-top: 0.2rem;">
-                Annual: ${financial['annual_savings']:,.0f}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown("### 💰 Savings")
+        st.success(f"**Monthly:** ${financial['total_monthly_savings']:,.0f}")
+        st.caption(f"Annual: ${financial['annual_savings']:,.0f}")
+
+    st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # ACTIVITY TRACKER - Real-time app activity monitoring
+    # ACTIVITY TRACKER
     # -------------------------------------------------------------------------
+    st.markdown("### ⚡ Activity Tracker")
+
     data_uploaded = st.session_state.get("patient_loaded", False) or st.session_state.get("merged_data") is not None
     models_trained = forecast["has_forecast"]
     forecast_generated = forecast["synced_with_page10"] if forecast["has_forecast"] else False
     resources_optimized = staffing["optimization_done"] or inventory["optimization_done"]
     actions_pending = len([a for a in actions if a["priority"] == "urgent"]) > 0
 
-    # Activity dot classes
-    upload_dot_class = "sb-dot-active" if data_uploaded else "sb-dot-inactive"
-    train_dot_class = "sb-dot-active" if models_trained else ("sb-dot-pending" if data_uploaded else "sb-dot-inactive")
-    forecast_dot_class = "sb-dot-active" if forecast_generated else ("sb-dot-pending" if models_trained else "sb-dot-inactive")
-    optimize_dot_class = "sb-dot-active" if resources_optimized else ("sb-dot-pending" if forecast_generated else "sb-dot-inactive")
-    action_dot_class = "sb-dot-active" if not actions_pending else "sb-dot-pending"
-
-    st.markdown(f"""
-    <div class="sb-activity">
-        <div class="sb-activity-title">⚡ Activity Tracker</div>
-
-        <div class="sb-activity-item">
-            <span class="sb-dot {upload_dot_class}"></span>
-            <span>Data Upload</span>
-            <span style="margin-left: auto; color: {'#22c55e' if data_uploaded else '#64748b'};">{'Done' if data_uploaded else 'Pending'}</span>
-        </div>
-
-        <div class="sb-activity-item">
-            <span class="sb-dot {train_dot_class}"></span>
-            <span>Model Training</span>
-            <span style="margin-left: auto; color: {'#22c55e' if models_trained else '#64748b'};">{'Done' if models_trained else 'Pending'}</span>
-        </div>
-
-        <div class="sb-activity-item">
-            <span class="sb-dot {forecast_dot_class}"></span>
-            <span>Forecast</span>
-            <span style="margin-left: auto; color: {'#22c55e' if forecast_generated else '#64748b'};">{'Done' if forecast_generated else 'Pending'}</span>
-        </div>
-
-        <div class="sb-activity-item">
-            <span class="sb-dot {optimize_dot_class}"></span>
-            <span>Optimization</span>
-            <span style="margin-left: auto; color: {'#22c55e' if resources_optimized else '#64748b'};">{'Done' if resources_optimized else 'Pending'}</span>
-        </div>
-
-        <div class="sb-activity-item">
-            <span class="sb-dot {action_dot_class}"></span>
-            <span>Urgent Actions</span>
-            <span style="margin-left: auto; color: {'#22c55e' if not actions_pending else '#fbbf24'};">{'Clear' if not actions_pending else 'Review'}</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Activity items
+    st.markdown(f"{'🟢' if data_uploaded else '⚪'} Data Upload: **{'Done' if data_uploaded else 'Pending'}**")
+    st.markdown(f"{'🟢' if models_trained else '🟡' if data_uploaded else '⚪'} Model Training: **{'Done' if models_trained else 'Pending'}**")
+    st.markdown(f"{'🟢' if forecast_generated else '🟡' if models_trained else '⚪'} Forecast: **{'Done' if forecast_generated else 'Pending'}**")
+    st.markdown(f"{'🟢' if resources_optimized else '🟡' if forecast_generated else '⚪'} Optimization: **{'Done' if resources_optimized else 'Pending'}**")
+    st.markdown(f"{'🟢' if not actions_pending else '🟡'} Urgent Actions: **{'Clear' if not actions_pending else 'Review'}**")
 
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # QUICK LINKS - Styled navigation links
+    # QUICK LINKS
     # -------------------------------------------------------------------------
-    st.markdown("""
-    <div class="sb-links">
-        <div class="sb-title" style="font-size: 0.7rem; margin-bottom: 0.4rem;">🔗 Quick Links</div>
-        <div class="sb-link-item">🧠 Train Models → Modeling Hub</div>
-        <div class="sb-link-item">🔮 Forecast → Patient Forecast</div>
-        <div class="sb-link-item">👥 Staff → Staff Planner</div>
-        <div class="sb-link-item">📦 Supply → Supply Planner</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### 🔗 Quick Links")
+    st.markdown("- 🧠 Train Models → Modeling Hub")
+    st.markdown("- 🔮 Forecast → Patient Forecast")
+    st.markdown("- 👥 Staff → Staff Planner")
+    st.markdown("- 📦 Supply → Supply Planner")
 
 
 # =============================================================================
