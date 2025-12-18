@@ -8,10 +8,10 @@ from app_core.auth.navigation import configure_sidebar_navigation
 # PAGE CONFIGURATION
 # ============================================================================
 st.set_page_config(
-    page_title="HealthForecast AI - Login",
+    page_title="HealthForecast AI - Welcome",
     page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="collapsed",  # Hide sidebar until login
+    initial_sidebar_state="collapsed",
 )
 
 # Initialize session state
@@ -331,104 +331,160 @@ hero_html = hero_card(
 st.markdown(hero_html, unsafe_allow_html=True)
 
 # ============================================================================
-# START HERE SECTION - Beautiful Entry Point
+# START HERE SECTION - Beautiful Entry Point with Fluorescent Card
 # ============================================================================
 
 st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
 
-# Stunning "Start Here" button with custom CSS
+# Enhanced CSS for fluorescent cards and dark blue button
 st.markdown("""
 <style>
 /* ========================================
-   START HERE BUTTON - Premium Styling
+   FLUORESCENT CARD STYLING
    ======================================== */
 
-@keyframes pulse-glow {
+@keyframes card-glow {
     0%, 100% {
         box-shadow:
-            0 0 20px rgba(59, 130, 246, 0.4),
-            0 0 40px rgba(34, 211, 238, 0.3),
-            0 0 60px rgba(168, 85, 247, 0.2),
-            0 8px 32px rgba(0, 0, 0, 0.3);
+            0 0 20px rgba(6, 78, 145, 0.3),
+            0 0 40px rgba(6, 78, 145, 0.2),
+            0 0 60px rgba(34, 211, 238, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
     }
     50% {
         box-shadow:
-            0 0 30px rgba(59, 130, 246, 0.6),
-            0 0 60px rgba(34, 211, 238, 0.4),
-            0 0 80px rgba(168, 85, 247, 0.3),
-            0 12px 40px rgba(0, 0, 0, 0.4);
+            0 0 30px rgba(6, 78, 145, 0.4),
+            0 0 60px rgba(6, 78, 145, 0.3),
+            0 0 80px rgba(34, 211, 238, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
     }
 }
 
-@keyframes shimmer {
-    0% {
-        background-position: -200% center;
+@keyframes button-pulse {
+    0%, 100% {
+        box-shadow:
+            0 0 15px rgba(6, 78, 145, 0.6),
+            0 0 30px rgba(6, 78, 145, 0.4),
+            0 0 45px rgba(6, 78, 145, 0.2),
+            0 4px 20px rgba(0, 0, 0, 0.4);
     }
-    100% {
-        background-position: 200% center;
+    50% {
+        box-shadow:
+            0 0 25px rgba(6, 78, 145, 0.8),
+            0 0 50px rgba(6, 78, 145, 0.5),
+            0 0 75px rgba(34, 211, 238, 0.3),
+            0 8px 30px rgba(0, 0, 0, 0.5);
     }
 }
 
-.start-here-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin: 3rem 0;
+@keyframes text-glow-cyan {
+    0%, 100% {
+        text-shadow: 0 0 10px rgba(34, 211, 238, 0.5), 0 0 20px rgba(34, 211, 238, 0.3);
+    }
+    50% {
+        text-shadow: 0 0 20px rgba(34, 211, 238, 0.7), 0 0 40px rgba(34, 211, 238, 0.4);
+    }
 }
 
-.start-here-wrapper {
+/* Fluorescent Start Here Card */
+.fluorescent-cta-card {
+    background: linear-gradient(145deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.9) 50%, rgba(6, 78, 145, 0.1) 100%);
+    border: 1px solid rgba(6, 78, 145, 0.4);
+    border-radius: 24px;
+    padding: 3rem 2rem;
     text-align: center;
-    padding: 2rem;
+    animation: card-glow 3s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+    margin: 1rem auto;
+    max-width: 700px;
 }
 
-.start-here-title {
+.fluorescent-cta-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent);
+    animation: shimmer-sweep 4s infinite;
+}
+
+@keyframes shimmer-sweep {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.cta-title {
     color: #ffffff;
-    font-size: 2.2rem;
-    font-weight: 700;
+    font-size: 2rem;
+    font-weight: 800;
     margin-bottom: 1rem;
-    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    animation: text-glow-cyan 3s ease-in-out infinite;
+    letter-spacing: 1px;
 }
 
-.start-here-subtitle {
+.cta-subtitle {
     color: #94a3b8;
-    font-size: 1.15rem;
-    margin-bottom: 2rem;
-    max-width: 500px;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin-bottom: 0;
+    max-width: 550px;
     margin-left: auto;
     margin-right: auto;
 }
 
-/* The actual Streamlit button styling */
+/* Dark Blue Fluorescent Button */
 div[data-testid="stButton"] > button[kind="primary"] {
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%) !important;
-    background-size: 200% 200% !important;
-    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    background: linear-gradient(135deg, #064e91 0%, #0a3d6e 40%, #041e42 100%) !important;
+    border: 2px solid rgba(34, 211, 238, 0.4) !important;
     border-radius: 16px !important;
-    padding: 1.5rem 4rem !important;
-    font-size: 1.5rem !important;
-    font-weight: 700 !important;
-    color: white !important;
+    padding: 1.25rem 3rem !important;
+    font-size: 1.35rem !important;
+    font-weight: 800 !important;
+    color: #22d3ee !important;
     text-transform: uppercase !important;
-    letter-spacing: 2px !important;
-    animation: pulse-glow 2s ease-in-out infinite !important;
+    letter-spacing: 3px !important;
+    animation: button-pulse 2s ease-in-out infinite !important;
     transition: all 0.3s ease !important;
-    min-height: 80px !important;
+    min-height: 70px !important;
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.5) !important;
 }
 
 div[data-testid="stButton"] > button[kind="primary"]:hover {
-    transform: translateY(-4px) scale(1.02) !important;
-    background-position: right center !important;
-    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-3px) scale(1.03) !important;
+    border-color: rgba(34, 211, 238, 0.8) !important;
+    color: #67e8f9 !important;
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.8) !important;
 }
 
 div[data-testid="stButton"] > button[kind="primary"]:active {
-    transform: translateY(-2px) scale(1.01) !important;
+    transform: translateY(-1px) scale(1.01) !important;
+}
+
+/* Override all feature cards to have consistent fluorescent styling */
+.hf-feature-card {
+    animation: card-glow 4s ease-in-out infinite !important;
+    border: 1px solid rgba(6, 78, 145, 0.3) !important;
+}
+
+.hf-feature-title {
+    text-align: center !important;
+}
+
+.hf-feature-description {
+    text-align: center !important;
+}
+
+.hf-feature-list {
+    text-align: left !important;
 }
 </style>
 
-<div class='start-here-wrapper'>
-    <h2 class='start-here-title'>Ready to Transform Healthcare?</h2>
-    <p class='start-here-subtitle'>
+<div class='fluorescent-cta-card'>
+    <h2 class='cta-title'>Ready to Transform Healthcare?</h2>
+    <p class='cta-subtitle'>
         Experience AI-powered patient forecasting that helps hospitals
         optimize operations and improve patient care.
     </p>
@@ -438,6 +494,7 @@ div[data-testid="stButton"] > button[kind="primary"]:active {
 # Centered Start Here button
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
+    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
     if st.button("START HERE", type="primary", use_container_width=True, key="start_here_btn"):
         # Set authentication state for demo mode
         st.session_state.authenticated = True
@@ -549,53 +606,122 @@ with col5:
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================================
-# VALUE PROPOSITION SECTION
+# VALUE PROPOSITION SECTION - Fluorescent Stats Card
 # ============================================================================
 st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
 
 st.markdown("""
-<div class='hf-feature-card' style='text-align: center;'>
-    <h2 class='hf-feature-title' style='font-size: 2rem; margin-bottom: 1.5rem;'>
-        Built for Healthcare Leaders
-    </h2>
-    <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 900px; margin: 0 auto 2rem auto;'>
+<style>
+/* Stats Card Fluorescent Styling */
+.stats-card {
+    background: linear-gradient(145deg, rgba(6, 78, 145, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(6, 78, 145, 0.08) 100%);
+    border: 1px solid rgba(6, 78, 145, 0.35);
+    border-radius: 24px;
+    padding: 2.5rem 2rem;
+    text-align: center;
+    animation: card-glow 4s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.08), transparent);
+    animation: shimmer-sweep 5s infinite;
+}
+
+.stats-title {
+    color: #ffffff;
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    animation: text-glow-cyan 3s ease-in-out infinite;
+    text-align: center;
+}
+
+.stats-description {
+    color: #94a3b8;
+    font-size: 1rem;
+    line-height: 1.7;
+    max-width: 800px;
+    margin: 0 auto 2rem auto;
+    text-align: center;
+}
+
+.stats-grid {
+    display: flex;
+    gap: 2.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 1rem;
+}
+
+.stat-number {
+    font-size: 2.5rem;
+    font-weight: 800;
+    animation: text-glow-cyan 2s ease-in-out infinite;
+}
+
+.stat-label {
+    color: #94a3b8;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    text-align: center;
+}
+</style>
+
+<div class='stats-card'>
+    <h2 class='stats-title'>Built for Healthcare Leaders</h2>
+    <p class='stats-description'>
         HealthForecast AI empowers hospital executives, operations managers, and clinical teams
         to make data-driven decisions with confidence. Our platform combines cutting-edge AI
         with healthcare domain expertise to deliver actionable insights that improve patient
         outcomes and operational efficiency.
     </p>
-    <div style='display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem;'>
-        <div>
-            <div style='font-size: 2.5rem; font-weight: 800; color: #fbbf24; text-shadow: 0 0 20px rgba(251, 191, 36, 0.4);'>8+</div>
-            <div style='color: #94a3b8; margin-top: 0.5rem;'>Forecasting Models</div>
+    <div class='stats-grid'>
+        <div class='stat-item'>
+            <div class='stat-number' style='color: #22d3ee; text-shadow: 0 0 25px rgba(34, 211, 238, 0.6);'>8+</div>
+            <div class='stat-label'>Forecasting Models</div>
         </div>
-        <div>
-            <div style='font-size: 2.5rem; font-weight: 800; color: #22d3ee; text-shadow: 0 0 20px rgba(34, 211, 238, 0.4);'>3</div>
-            <div style='color: #94a3b8; margin-top: 0.5rem;'>Data Sources</div>
+        <div class='stat-item'>
+            <div class='stat-number' style='color: #3b82f6; text-shadow: 0 0 25px rgba(59, 130, 246, 0.6);'>4</div>
+            <div class='stat-label'>Data Sources</div>
         </div>
-        <div>
-            <div style='font-size: 2.5rem; font-weight: 800; color: #a855f7; text-shadow: 0 0 20px rgba(168, 85, 247, 0.4);'>1-7</div>
-            <div style='color: #94a3b8; margin-top: 0.5rem;'>Day Horizons</div>
+        <div class='stat-item'>
+            <div class='stat-number' style='color: #8b5cf6; text-shadow: 0 0 25px rgba(139, 92, 246, 0.6);'>1-7</div>
+            <div class='stat-label'>Day Horizons</div>
         </div>
-        <div>
-            <div style='font-size: 2.5rem; font-weight: 800; color: #22c55e; text-shadow: 0 0 20px rgba(34, 197, 94, 0.4);'>100%</div>
-            <div style='color: #94a3b8; margin-top: 0.5rem;'>Explainable AI</div>
+        <div class='stat-item'>
+            <div class='stat-number' style='color: #06b6d4; text-shadow: 0 0 25px rgba(6, 182, 212, 0.6);'>100%</div>
+            <div class='stat-label'>Explainable AI</div>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# FOOTER
+# FOOTER - Fluorescent Styling
 # ============================================================================
 st.markdown("<div style='margin-top: 4rem;'></div>", unsafe_allow_html=True)
 st.markdown(
     """
-    <div style='text-align: center; color: #64748b; padding: 2rem 0; border-top: 1px solid rgba(255,255,255,0.06);'>
-        <p style='margin: 0; font-size: 0.875rem;'>
-            <strong style='color: #d1d5db;'>HealthForecast AI</strong> · Enterprise Healthcare Intelligence Platform
+    <div style='text-align: center; color: #64748b; padding: 2rem 0; border-top: 1px solid rgba(6, 78, 145, 0.3);'>
+        <p style='margin: 0; font-size: 0.9rem;'>
+            <strong style='color: #22d3ee; text-shadow: 0 0 10px rgba(34, 211, 238, 0.3);'>HealthForecast AI</strong>
+            <span style='color: #475569;'>·</span>
+            <span style='color: #94a3b8;'>Enterprise Healthcare Intelligence Platform</span>
         </p>
-        <p style='margin: 0.5rem 0 0 0; font-size: 0.75rem;'>
+        <p style='margin: 0.75rem 0 0 0; font-size: 0.8rem; color: #64748b;'>
             Powered by Advanced Machine Learning · Built for Healthcare Excellence
         </p>
     </div>
