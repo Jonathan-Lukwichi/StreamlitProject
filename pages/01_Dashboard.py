@@ -711,6 +711,205 @@ st.markdown(f"""
 
 
 # =============================================================================
+# CENTRALIZED ACTIVITY TRACKING - Real-time state detection across all pages
+# =============================================================================
+
+def get_platform_activity_state() -> Dict[str, Any]:
+    """
+    Centralized function to detect real activity state across all pages.
+    This connects with session state from all pages for accurate tracking.
+
+    Returns a comprehensive dictionary of platform activity status.
+    """
+    activity = {
+        # Step 1: Data Upload (Page 02 - Upload Data)
+        "data_uploaded": False,
+        "patient_data_loaded": False,
+        "weather_data_loaded": False,
+        "calendar_data_loaded": False,
+        "reason_data_loaded": False,
+        "datasets_count": 0,
+
+        # Step 2: Data Preparation (Page 03 - Prepare Data)
+        "data_prepared": False,
+        "merged_data_available": False,
+        "features_created": False,
+
+        # Step 3: Model Training (Page 08 - Train Models)
+        "models_trained": False,
+        "trained_models_list": [],
+        "best_model": None,
+
+        # Step 4: Forecast Generation (Page 10 - Patient Forecast)
+        "forecast_generated": False,
+        "forecast_source": None,
+        "forecast_synced": False,
+
+        # Step 5: Resource Optimization (Pages 11, 12)
+        "staff_data_loaded": False,
+        "staff_optimized": False,
+        "inventory_data_loaded": False,
+        "inventory_optimized": False,
+        "any_optimization_done": False,
+
+        # Step 6: Actions Reviewed (Page 13 - Action Center)
+        "actions_reviewed": False,
+        "urgent_actions_count": 0,
+
+        # Overall workflow
+        "workflow_started": False,
+        "workflow_complete": False,
+    }
+
+    # ==========================================================================
+    # STEP 1: Check Data Upload State (from Page 02)
+    # ==========================================================================
+    patient_data = st.session_state.get("patient_data")
+    weather_data = st.session_state.get("weather_data")
+    calendar_data = st.session_state.get("calendar_data")
+    reason_data = st.session_state.get("reason_data")
+
+    # Check if dataframes are actually loaded (not None and not empty)
+    activity["patient_data_loaded"] = (
+        patient_data is not None and
+        hasattr(patient_data, 'empty') and
+        not patient_data.empty
+    )
+    activity["weather_data_loaded"] = (
+        weather_data is not None and
+        hasattr(weather_data, 'empty') and
+        not weather_data.empty
+    )
+    activity["calendar_data_loaded"] = (
+        calendar_data is not None and
+        hasattr(calendar_data, 'empty') and
+        not calendar_data.empty
+    )
+    activity["reason_data_loaded"] = (
+        reason_data is not None and
+        hasattr(reason_data, 'empty') and
+        not reason_data.empty
+    )
+
+    # Count loaded datasets
+    activity["datasets_count"] = sum([
+        activity["patient_data_loaded"],
+        activity["weather_data_loaded"],
+        activity["calendar_data_loaded"],
+        activity["reason_data_loaded"],
+    ])
+
+    # Data is uploaded if patient data is loaded (minimum requirement)
+    activity["data_uploaded"] = activity["patient_data_loaded"]
+
+    # ==========================================================================
+    # STEP 2: Check Data Preparation State (from Page 03)
+    # ==========================================================================
+    merged_data = st.session_state.get("merged_data")
+    activity["merged_data_available"] = (
+        merged_data is not None and
+        hasattr(merged_data, 'empty') and
+        not merged_data.empty
+    )
+
+    # Check for feature engineering
+    activity["features_created"] = st.session_state.get("features_created", False)
+
+    # Data is prepared if merged data exists
+    activity["data_prepared"] = activity["merged_data_available"]
+
+    # ==========================================================================
+    # STEP 3: Check Model Training State (from Page 08)
+    # ==========================================================================
+    trained_models = []
+
+    # Check ARIMA
+    arima_results = st.session_state.get("arima_mh_results")
+    if arima_results and isinstance(arima_results, dict) and arima_results.get("per_h"):
+        trained_models.append("ARIMA")
+
+    # Check SARIMAX
+    sarimax_results = st.session_state.get("sarimax_mh_results")
+    if sarimax_results and isinstance(sarimax_results, dict) and sarimax_results.get("per_h"):
+        trained_models.append("SARIMAX")
+
+    # Check ML models (XGBoost, LSTM, ANN, etc.)
+    for model_name in ["XGBoost", "LSTM", "ANN", "RandomForest", "GradientBoosting"]:
+        ml_key = f"ml_mh_results_{model_name}"
+        ml_results = st.session_state.get(ml_key)
+        if ml_results and isinstance(ml_results, dict) and ml_results.get("per_h"):
+            trained_models.append(model_name)
+
+    activity["trained_models_list"] = trained_models
+    activity["models_trained"] = len(trained_models) > 0
+
+    # Get best model if available
+    best_model = st.session_state.get("best_model_name")
+    if best_model:
+        activity["best_model"] = best_model
+    elif trained_models:
+        activity["best_model"] = trained_models[0]
+
+    # ==========================================================================
+    # STEP 4: Check Forecast Generation State (from Page 10)
+    # ==========================================================================
+    # Primary: forecast_hub_demand (from Forecast Hub)
+    hub_demand = st.session_state.get("forecast_hub_demand")
+    if hub_demand and isinstance(hub_demand, dict):
+        forecasts = hub_demand.get("forecast", [])
+        if forecasts and len(forecasts) > 0:
+            activity["forecast_generated"] = True
+            activity["forecast_source"] = hub_demand.get("model", "Forecast Hub")
+            activity["forecast_synced"] = True
+
+    # Secondary: active_forecast
+    if not activity["forecast_generated"]:
+        active_forecast = st.session_state.get("active_forecast")
+        if active_forecast and isinstance(active_forecast, dict):
+            forecasts = active_forecast.get("forecasts", [])
+            if forecasts and len(forecasts) > 0:
+                activity["forecast_generated"] = True
+                activity["forecast_source"] = active_forecast.get("model", "Active Forecast")
+                activity["forecast_synced"] = True
+
+    # ==========================================================================
+    # STEP 5: Check Resource Optimization State (from Pages 11, 12)
+    # ==========================================================================
+    # Staff Planner (Page 11)
+    activity["staff_data_loaded"] = st.session_state.get("staff_data_loaded", False)
+    activity["staff_optimized"] = st.session_state.get("optimization_done", False)
+
+    # Supply Planner (Page 12)
+    activity["inventory_data_loaded"] = st.session_state.get("inventory_data_loaded", False)
+    activity["inventory_optimized"] = st.session_state.get("inv_optimization_done", False)
+
+    activity["any_optimization_done"] = (
+        activity["staff_optimized"] or activity["inventory_optimized"]
+    )
+
+    # ==========================================================================
+    # STEP 6: Actions Status
+    # ==========================================================================
+    # Actions are "reviewed" only if workflow is complete and no urgent items
+    # This is calculated after we know the full state
+
+    # ==========================================================================
+    # WORKFLOW STATUS
+    # ==========================================================================
+    activity["workflow_started"] = activity["data_uploaded"]
+
+    # Workflow is complete when all major steps are done
+    activity["workflow_complete"] = (
+        activity["data_uploaded"] and
+        activity["models_trained"] and
+        activity["forecast_generated"] and
+        activity["any_optimization_done"]
+    )
+
+    return activity
+
+
+# =============================================================================
 # DATA EXTRACTION FUNCTIONS - Aligned with Pages 10, 11, 12
 # =============================================================================
 
@@ -1266,42 +1465,68 @@ st.markdown(f"""
 
 
 # =============================================================================
-# GET ALL DATA
+# GET ALL DATA - Using centralized activity tracking
 # =============================================================================
+# Get platform-wide activity state (connects with all pages)
+platform_activity = get_platform_activity_state()
+
+# Get detailed data for display
 forecast = get_forecast_data()
 staffing = get_staff_insights()
 inventory = get_inventory_insights()
 financial = calculate_financial_impact(forecast, staffing, inventory)
 actions = generate_action_items(forecast, staffing, inventory)
 
-
-
+# Count urgent actions for step 5
+urgent_actions_count = len([a for a in actions if a["priority"] == "urgent"])
 
 # =============================================================================
-# WORKFLOW PROGRESS INDICATOR - Shows user journey through the system
+# WORKFLOW PROGRESS INDICATOR - Real-time tracking across all pages
 # =============================================================================
-# Determine step completion status
-step1_done = st.session_state.get("patient_loaded", False) or st.session_state.get("merged_data") is not None
-step2_done = forecast["has_forecast"]
-step3_done = forecast["has_forecast"]
-step4_done = staffing["optimization_done"] or inventory["optimization_done"]
-step5_done = len([a for a in actions if a["priority"] == "urgent"]) == 0
+# Step completion based on ACTUAL platform activity state
+step1_done = platform_activity["data_uploaded"]  # Patient data loaded
+step2_done = platform_activity["models_trained"]  # At least one model trained
+step3_done = platform_activity["forecast_generated"]  # Forecast available
+step4_done = platform_activity["any_optimization_done"]  # Staff OR inventory optimized
 
-# Calculate completion percentage
-steps_done = sum([step1_done, step2_done, step4_done, step5_done])
-completion_pct = int((steps_done / 4) * 100)
+# Step 5: Actions are "done" only if:
+# 1. Workflow is actually started (data uploaded)
+# 2. AND there are no urgent actions remaining
+# If workflow hasn't started, step 5 should NOT be marked done
+step5_done = (
+    platform_activity["workflow_started"] and
+    platform_activity["any_optimization_done"] and
+    urgent_actions_count == 0
+)
 
-# Step styling
+# Calculate completion percentage (5 steps)
+steps_done = sum([step1_done, step2_done, step3_done, step4_done, step5_done])
+completion_pct = int((steps_done / 5) * 100)
+
+# Step styling - with "in progress" state (yellow) for current step
+# Step 1: Upload Data
 s1_color = "#22c55e" if step1_done else "#64748b"
 s1_icon = "✅" if step1_done else "1️⃣"
-s2_color = "#22c55e" if step2_done else "#64748b"
-s2_icon = "✅" if step2_done else "2️⃣"
-s3_color = "#22c55e" if step3_done else "#64748b"
-s3_icon = "✅" if step3_done else "3️⃣"
-s4_color = "#22c55e" if step4_done else "#64748b"
-s4_icon = "✅" if step4_done else "4️⃣"
-s5_color = "#22c55e" if step5_done else "#64748b"
-s5_icon = "✅" if step5_done else "5️⃣"
+
+# Step 2: Train Models - in progress if data uploaded but no models
+s2_in_progress = step1_done and not step2_done
+s2_color = "#22c55e" if step2_done else ("#f59e0b" if s2_in_progress else "#64748b")
+s2_icon = "✅" if step2_done else ("🔄" if s2_in_progress else "2️⃣")
+
+# Step 3: Generate Forecast - in progress if models trained but no forecast
+s3_in_progress = step2_done and not step3_done
+s3_color = "#22c55e" if step3_done else ("#f59e0b" if s3_in_progress else "#64748b")
+s3_icon = "✅" if step3_done else ("🔄" if s3_in_progress else "3️⃣")
+
+# Step 4: Optimize Resources - in progress if forecast done but no optimization
+s4_in_progress = step3_done and not step4_done
+s4_color = "#22c55e" if step4_done else ("#f59e0b" if s4_in_progress else "#64748b")
+s4_icon = "✅" if step4_done else ("🔄" if s4_in_progress else "4️⃣")
+
+# Step 5: Take Action - in progress if optimization done but urgent actions remain
+s5_in_progress = step4_done and not step5_done
+s5_color = "#22c55e" if step5_done else ("#f59e0b" if s5_in_progress else "#64748b")
+s5_icon = "✅" if step5_done else ("🔄" if s5_in_progress else "5️⃣")
 
 st.markdown(f"""
 <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
@@ -1978,38 +2203,107 @@ with tab_actions:
 
 
 # =============================================================================
-# SIDEBAR - Dark Blue Fluorescent Status Tracker (100% Inline Styles)
+# SIDEBAR - Real-time Activity Tracker (Using Centralized State)
 # =============================================================================
 with st.sidebar:
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # QUICK STATUS - Using Streamlit native components for reliability
+    # WORKFLOW STAGE INDICATOR
     # -------------------------------------------------------------------------
-    st.markdown("### 📊 Quick Status")
+    st.markdown("### 📍 Current Stage")
 
-    # Status items using native Streamlit
-    forecast_status = f"✅ {forecast['source'][:15]}..." if forecast['has_forecast'] and len(forecast.get('source', '')) > 15 else (f"✅ {forecast.get('source', 'Available')}" if forecast['has_forecast'] else "❌ Not available")
-    staff_status = "✅ Loaded" if staffing['data_loaded'] else "❌ Not loaded"
-    inv_status = "✅ Loaded" if inventory['data_loaded'] else "❌ Not loaded"
-    staff_opt = "✅ Optimized" if staffing['optimization_done'] else "❌ Pending"
-    inv_opt = "✅ Optimized" if inventory['optimization_done'] else "❌ Pending"
+    # Determine current workflow stage based on platform activity
+    if not platform_activity["data_uploaded"]:
+        current_stage = "📁 Upload Data"
+        stage_hint = "Start by uploading patient data"
+    elif not platform_activity["models_trained"]:
+        current_stage = "🧠 Train Models"
+        stage_hint = "Train forecasting models"
+    elif not platform_activity["forecast_generated"]:
+        current_stage = "🔮 Generate Forecast"
+        stage_hint = "Create patient predictions"
+    elif not platform_activity["any_optimization_done"]:
+        current_stage = "⚡ Optimize Resources"
+        stage_hint = "Optimize staff & inventory"
+    elif urgent_actions_count > 0:
+        current_stage = "✅ Review Actions"
+        stage_hint = f"{urgent_actions_count} urgent items"
+    else:
+        current_stage = "🎉 Complete!"
+        stage_hint = "All steps finished"
 
-    # Display as clean metric-style cards
-    st.caption("🔮 **Forecast**")
-    st.info(forecast_status)
+    st.info(f"**{current_stage}**\n\n{stage_hint}")
 
-    st.caption("👥 **Staff Data**")
-    st.info(staff_status)
+    st.markdown("---")
 
-    st.caption("📦 **Inventory Data**")
-    st.info(inv_status)
+    # -------------------------------------------------------------------------
+    # DATA STATUS - Using centralized activity tracking
+    # -------------------------------------------------------------------------
+    st.markdown("### 📊 Data Status")
 
-    st.caption("🚀 **Staff Optimization**")
-    st.info(staff_opt)
+    # Patient data status
+    patient_icon = "✅" if platform_activity["patient_data_loaded"] else "⚪"
+    st.markdown(f"{patient_icon} Patient Data: **{'Loaded' if platform_activity['patient_data_loaded'] else 'Not loaded'}**")
 
-    st.caption("📈 **Inventory Optimization**")
-    st.info(inv_opt)
+    # Weather data
+    weather_icon = "✅" if platform_activity["weather_data_loaded"] else "⚪"
+    st.markdown(f"{weather_icon} Weather Data: **{'Loaded' if platform_activity['weather_data_loaded'] else 'Not loaded'}**")
+
+    # Calendar data
+    calendar_icon = "✅" if platform_activity["calendar_data_loaded"] else "⚪"
+    st.markdown(f"{calendar_icon} Calendar Data: **{'Loaded' if platform_activity['calendar_data_loaded'] else 'Not loaded'}**")
+
+    # Merged data
+    merged_icon = "✅" if platform_activity["merged_data_available"] else "⚪"
+    st.markdown(f"{merged_icon} Merged Data: **{'Ready' if platform_activity['merged_data_available'] else 'Not ready'}**")
+
+    st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    # MODEL STATUS
+    # -------------------------------------------------------------------------
+    st.markdown("### 🧠 Models")
+
+    if platform_activity["models_trained"]:
+        models_list = platform_activity["trained_models_list"]
+        st.success(f"**{len(models_list)} model(s) trained**")
+        for model in models_list[:3]:  # Show max 3
+            st.markdown(f"  ✅ {model}")
+        if len(models_list) > 3:
+            st.caption(f"  +{len(models_list) - 3} more...")
+    else:
+        st.warning("No models trained yet")
+
+    st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    # FORECAST STATUS
+    # -------------------------------------------------------------------------
+    st.markdown("### 🔮 Forecast")
+
+    if platform_activity["forecast_generated"]:
+        source = platform_activity.get("forecast_source", "Unknown")
+        st.success(f"**Active:** {source}")
+        if platform_activity["forecast_synced"]:
+            st.caption("✅ Synced with Forecast Hub")
+    else:
+        st.warning("No forecast generated")
+
+    st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    # OPTIMIZATION STATUS
+    # -------------------------------------------------------------------------
+    st.markdown("### ⚡ Optimization")
+
+    staff_icon = "✅" if platform_activity["staff_optimized"] else ("🟡" if platform_activity["staff_data_loaded"] else "⚪")
+    staff_status = "Optimized" if platform_activity["staff_optimized"] else ("Data loaded" if platform_activity["staff_data_loaded"] else "Not started")
+    st.markdown(f"{staff_icon} Staff: **{staff_status}**")
+
+    inv_icon = "✅" if platform_activity["inventory_optimized"] else ("🟡" if platform_activity["inventory_data_loaded"] else "⚪")
+    inv_status = "Optimized" if platform_activity["inventory_optimized"] else ("Data loaded" if platform_activity["inventory_data_loaded"] else "Not started")
+    st.markdown(f"{inv_icon} Inventory: **{inv_status}**")
 
     # -------------------------------------------------------------------------
     # SAVINGS CARD
@@ -2023,33 +2317,44 @@ with st.sidebar:
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # ACTIVITY TRACKER
+    # URGENT ACTIONS
     # -------------------------------------------------------------------------
-    st.markdown("### ⚡ Activity Tracker")
-
-    data_uploaded = st.session_state.get("patient_loaded", False) or st.session_state.get("merged_data") is not None
-    models_trained = forecast["has_forecast"]
-    forecast_generated = forecast["synced_with_page10"] if forecast["has_forecast"] else False
-    resources_optimized = staffing["optimization_done"] or inventory["optimization_done"]
-    actions_pending = len([a for a in actions if a["priority"] == "urgent"]) > 0
-
-    # Activity items
-    st.markdown(f"{'🟢' if data_uploaded else '⚪'} Data Upload: **{'Done' if data_uploaded else 'Pending'}**")
-    st.markdown(f"{'🟢' if models_trained else '🟡' if data_uploaded else '⚪'} Model Training: **{'Done' if models_trained else 'Pending'}**")
-    st.markdown(f"{'🟢' if forecast_generated else '🟡' if models_trained else '⚪'} Forecast: **{'Done' if forecast_generated else 'Pending'}**")
-    st.markdown(f"{'🟢' if resources_optimized else '🟡' if forecast_generated else '⚪'} Optimization: **{'Done' if resources_optimized else 'Pending'}**")
-    st.markdown(f"{'🟢' if not actions_pending else '🟡'} Urgent Actions: **{'Clear' if not actions_pending else 'Review'}**")
+    if urgent_actions_count > 0:
+        st.markdown("### ⚠️ Urgent Actions")
+        st.error(f"**{urgent_actions_count}** urgent item(s) need attention")
+    else:
+        if platform_activity["workflow_started"]:
+            st.markdown("### ✅ Actions")
+            st.success("No urgent items")
 
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # QUICK LINKS
+    # QUICK NAVIGATION
     # -------------------------------------------------------------------------
     st.markdown("### 🔗 Quick Links")
-    st.markdown("- 🧠 Train Models → Modeling Hub")
-    st.markdown("- 🔮 Forecast → Patient Forecast")
-    st.markdown("- 👥 Staff → Staff Planner")
-    st.markdown("- 📦 Supply → Supply Planner")
+
+    # Show contextual navigation based on current stage
+    if not platform_activity["data_uploaded"]:
+        if st.button("📁 Go to Upload Data", use_container_width=True, key="nav_upload"):
+            st.switch_page("pages/02_Upload_Data.py")
+    elif not platform_activity["models_trained"]:
+        if st.button("🧠 Go to Train Models", use_container_width=True, key="nav_train"):
+            st.switch_page("pages/08_Train_Models.py")
+    elif not platform_activity["forecast_generated"]:
+        if st.button("🔮 Go to Forecast", use_container_width=True, key="nav_forecast"):
+            st.switch_page("pages/10_Patient_Forecast.py")
+    elif not platform_activity["any_optimization_done"]:
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("👥 Staff", use_container_width=True, key="nav_staff"):
+                st.switch_page("pages/11_Staff_Planner.py")
+        with col2:
+            if st.button("📦 Supply", use_container_width=True, key="nav_supply"):
+                st.switch_page("pages/12_Supply_Planner.py")
+    else:
+        if st.button("🏥 Go to Action Center", use_container_width=True, key="nav_actions"):
+            st.switch_page("pages/13_Action_Center.py")
 
 
 # =============================================================================
