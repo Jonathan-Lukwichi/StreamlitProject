@@ -1,0 +1,239 @@
+📦
+Inventory Management Optimization
+Mathematical Formulation & Approach Comparison
+HealthForecast AI Platform
+Industrial Engineering Approach
+December 2024
+Table of Contents
+1. Healthcare Inventory Management Context
+1.1 Why Inventory Optimization Matters in Healthcare
+Healthcare inventory management is critical because:
+Stockouts can be life-threatening (medications, PPE during pandemics)
+Overstocking ties up capital and leads to expiration waste
+Demand is uncertain and driven by patient arrivals (your ML forecast target)
+Many items have shelf life constraints (medications, blood products)
+1.2 Inventory Categories in HealthForecast AI
+1.3 The ML-Inventory Connection
+Your patient arrival forecasts directly drive inventory demand:
+d_{i,t} = α_i × D̂_t    (where α_i = usage rate per patient for item i)    (1)
+Example: If D̂_t = 100 patients and glove usage is 5 per patient:
+d_{gloves,t} = 5 × 100 = 500 pairs needed    (2)
+2. From Patient Forecasts to Inventory Demand Intervals
+2.1 Propagating Uncertainty from ML Forecasts
+Your ML model provides patient arrival intervals [L_t, U_t]. Convert to inventory demand:
+d̂_{i,t} = α_i × D̂_t    (point forecast)    (3)
+[d_{i,t}^L, d_{i,t}^U] = [α_i × L_t, α_i × U_t]    (prediction interval)    (4)
+2.2 Lead Time Demand
+For inventory decisions, we need demand during lead time (time to receive order):
+D_{i,L} = Σ_{τ=t}^{t+L} d_{i,τ}    (demand during lead time L)    (5)
+If demand is approximately stationary with mean μ_i and std σ_i:
+E[D_{i,L}] = L × μ_i    (6)
+Std[D_{i,L}] = √L × σ_i    (7)
+2.3 Inventory Demand RPIW
+Compute the Relative Prediction Interval Width for inventory demand:
+RPIW_i = (d_{i,t}^U - d_{i,t}^L) / d̂_{i,t} × 100%    (8)
+This is the SAME as patient RPIW since the scaling factor α_i cancels:
+RPIW_i = (α_i × U_t - α_i × L_t) / (α_i × D̂_t) = (U_t - L_t) / D̂_t = RPIW_{patients}    (9)
+3. Problem Definition
+3.1 Decision Variables
+3.2 Parameters
+3.3 Inventory Balance Equation
+Fundamental inventory dynamics:
+I_{i,t} = I_{i,t-1} + Q_{i,t-L_i} - d_{i,t} + B_{i,t} - B_{i,t-1}    (10)
+Where orders placed at t-L arrive at t (lead time delay).
+4. Optimization Method Selection Based on RPIW
+🎯 Same RPIW from patient forecasts → Inventory optimization method
+5. Approach 1: Deterministic Inventory Optimization
+Use when RPIW < 15% (Narrow Prediction Intervals)
+5.1 Economic Order Quantity (EOQ) Model
+Classic EOQ balances ordering costs against holding costs:
+Q_i^* = √(2 × K_i × D_i / h_i)    (EOQ)
+Where D_i is the annual (or period) demand for item i.
+5.2 Multi-Item Deterministic Formulation
+Objective: Minimize total inventory cost
+min Z = Σ_t Σ_i [K_i × y_{i,t} + c_i × Q_{i,t} + h_i × I_{i,t} + p_i × B_{i,t}]    (11)
+Subject to:
+C1: Inventory Balance
+I_{i,t} = I_{i,t-1} + Q_{i,t-L_i} - d̂_{i,t} + B_{i,t} - B_{i,t-1}    ∀i, ∀t    (12)
+C2: Storage Capacity
+Σ_i v_i × I_{i,t} ≤ W    ∀t    (v_i = volume per unit)    (13)
+C3: Order-Quantity Link
+Q_{i,t} ≤ M × y_{i,t}    ∀i, ∀t    (M = big number)    (14)
+C4: Minimum Order Quantity
+Q_{i,t} ≥ Q_i^{min} × y_{i,t}    ∀i, ∀t    (15)
+C5: Budget Constraint
+Σ_i c_i × Q_{i,t} ≤ Budget_t    ∀t    (16)
+C6: Non-negativity
+Q_{i,t} ≥ 0, I_{i,t} ≥ 0, B_{i,t} ≥ 0, y_{i,t} ∈ {0,1}    (17)
+5.3 Reorder Point with Minimal Safety Stock
+When RPIW < 15%, minimal safety stock is needed:
+s_i = d̂_i × L_i + SS_i    (18)
+SS_i = z_{CSL} × σ_i × √L_i    (with small σ_i)    (19)
+6. Approach 2: Stochastic Inventory Optimization
+Use when RPIW > 40% (Wide Prediction Intervals)
+6.1 Newsvendor Model (Single Period)
+For perishable items or single-period decisions:
+Q^* = F^{-1}(p / (p + h)) = F^{-1}(Critical Ratio)    (NV)
+Where F is the CDF of demand, p = stockout cost, h = overage cost.
+6.2 Stochastic (s, S) Policy
+When inventory drops to s (reorder point), order up to S (order-up-to level):
+s = Reorder point (trigger for ordering)
+S = Order-up-to level (target inventory after order)
+Order quantity Q = S - I when I ≤ s
+6.3 Two-Stage Stochastic Formulation
+Stage 1: Decide order quantities before demand is revealed
+Stage 2: Observe demand realization, compute costs
+Objective:
+min Z = Σ_i [K_i × y_i + c_i × Q_i] + E_ω[Σ_i (h_i × I_i^ω + p_i × B_i^ω)]    (20)
+Scenario-based formulation:
+min Z = Σ_i [K_i × y_i + c_i × Q_i] + Σ_ω π_ω × Σ_i (h_i × I_i^ω + p_i × B_i^ω)    (21)
+Subject to (per scenario ω):
+I_i^ω = I_i^0 + Q_i - d_i^ω + B_i^ω    ∀i, ∀ω    (22)
+I_i^ω ≥ 0, B_i^ω ≥ 0    ∀i, ∀ω    (23)
+6.4 Scenario Generation from Prediction Intervals
+6.5 Safety Stock from Prediction Intervals
+Derive safety stock directly from your ML prediction intervals:
+σ_i = (d_i^U - d_i^L) / (2 × z_{0.90}) = (α_i × (U_t - L_t)) / 3.29    (24)
+SS_i = z_{CSL} × σ_i × √L_i    (25)
+Example: For 99% CSL and L=3 days:
+SS_i = 2.33 × σ_i × √3 = 4.04 × σ_i    (26)
+7. Approach 3: Robust Inventory Optimization
+Use when RPIW 15-40% (Medium Prediction Intervals)
+7.1 Concept
+Robust optimization protects against worst-case demand within an uncertainty set derived directly from your prediction intervals. No probability distribution needed.
+7.2 Uncertainty Set from Prediction Intervals
+Define demand uncertainty using your ML prediction intervals:
+d_{i,t} ∈ [d̂_{i,t} - Δ_{i,t}, d̂_{i,t} + Δ_{i,t}]    (27)
+Δ_{i,t} = d_{i,t}^U - d̂_{i,t} = α_i × (U_t - D̂_t)    (28)
+Budget of uncertainty (Bertsimas & Sim):
+d_{i,t} = d̂_{i,t} + δ_{i,t} × Δ_{i,t}, where |δ_{i,t}| ≤ 1 and Σ_t |δ_{i,t}| ≤ Γ_i    (29)
+7.3 Robust Counterpart Formulation
+Objective: Minimize cost under worst-case demand
+min Z = Σ_i [K_i × y_i + c_i × Q_i + h_i × I_i] + max_{d ∈ U} Σ_i p_i × B_i(d)    (30)
+The robust counterpart (using LP duality):
+min Z = Σ_i [K_i × y_i + c_i × Q_i + h_i × I_i + p_i × (Γ_i × π_i + Σ_t ρ_{i,t})]    (31)
+Subject to:
+I_i ≥ d̂_i × L_i + ρ_i - Q_i - I_i^0    ∀i    (32)
+π_i + ρ_{i,t} ≥ Δ_{i,t}    ∀i, ∀t    (33)
+π_i ≥ 0, ρ_{i,t} ≥ 0    ∀i, ∀t    (34)
+7.4 Robust Safety Stock
+Safety stock derived directly from prediction interval bounds:
+SS_i^{robust} = Δ_i × √(L_i × Γ_i)    (35)
+Where Γ_i controls conservatism (from RPIW):
+8. Approach Comparison
+8.1 Comprehensive Comparison
+8.2 Summary Decision Rule
+9. Python Implementation Stack
+9.1 Recommended Libraries
+9.2 Integration with HealthForecast AI
+— End of Document —
+
+--- TABLE ---
+From Demand Forecasting to Optimal Inventory
+Prediction Intervals → Safety Stock → Order Quantities → Total Cost Minimization
+Deterministic EOQ  •  Stochastic (s,S)  •  Robust Min-Max
+
+--- TABLE ---
+Healthcare Inventory Types: Gloves (i=1)  •  PPE (i=2)  •  Medications (i=3)
+
+--- TABLE ---
+Item (i) | Unit Cost | Demand Driver | Criticality
+i=1: Gloves | R 2.50/pair | ~5 per patient | High volume, low unit cost
+i=2: PPE | R 45/set | ~0.3 per patient | Critical during outbreaks
+i=3: Medications | R 85/unit | Condition-specific | Life-critical, expiration dates
+
+--- TABLE ---
+🔗 Key Insight
+Your ML model's prediction intervals for patient arrivals translate directly to prediction intervals for inventory demand. Narrow patient forecast intervals → Narrow inventory demand intervals → Simpler inventory optimization.
+
+--- TABLE ---
+Use the SAME RPIW from your patient forecasts to select the inventory optimization method!
+
+--- TABLE ---
+Variable | Type | Description
+Q_{i,t} | Integer ≥ 0 | Order quantity for item i at time t
+I_{i,t} | Continuous | Inventory level for item i at end of period t
+s_i | Continuous ≥ 0 | Reorder point (when to order) for item i
+S_i | Continuous ≥ 0 | Order-up-to level for item i
+SS_i | Continuous ≥ 0 | Safety stock for item i
+y_{i,t} | Binary {0,1} | Order indicator (1 if order placed at t)
+B_{i,t} | Continuous ≥ 0 | Backorder/stockout quantity for item i at t
+
+--- TABLE ---
+Parameter | Description
+d̂_{i,t} | Forecasted demand for item i on day t (from ML × usage rate)
+c_i | Unit purchase cost for item i
+h_i | Holding cost per unit per period (typically 0.05% of c_i per day)
+K_i | Fixed ordering cost per order for item i
+p_i | Stockout penalty cost per unit (much higher than h_i in healthcare)
+L_i | Lead time for item i (days from order to delivery)
+W | Warehouse storage capacity
+CSL_i | Cycle service level target (e.g., 95%, 99%)
+
+--- TABLE ---
+RPIW | Uncertainty | Method | Safety Stock
+< 15% | 🟢 LOW | Deterministic EOQ | Minimal (~1 day)
+15-40% | 🟡 MEDIUM | Robust (s,S) | From interval width
+> 40% | 🔴 HIGH | Stochastic (s,S) | From distribution
+
+--- TABLE ---
+💡 When to Use
+Deterministic EOQ/MILP is appropriate when demand forecasts are highly accurate (RPIW < 15%). Safety stock can be minimal because demand rarely deviates significantly from the forecast.
+
+--- TABLE ---
+Scenario | Demand | Probability | Source
+ω = 1 (Low) | d_i^1 = α_i × L_t | π_1 = 0.10 | 10th percentile
+ω = 2 (Medium) | d_i^2 = α_i × D̂_t | π_2 = 0.60 | 50th percentile
+ω = 3 (High) | d_i^3 = α_i × U_t | π_3 = 0.30 | 90th percentile
+
+--- TABLE ---
+💡 When to Use
+Stochastic inventory optimization is needed when RPIW > 40%. Wide prediction intervals mean significant chance of demand being far from forecast, requiring explicit scenario modeling and higher safety stock.
+
+--- TABLE ---
+RPIW | Γ_i | Protection | Safety Stock
+15-20% | Γ = 1 | 1 day worst-case | Low
+20-30% | Γ = √L ≈ 1.7 | Balanced | Moderate
+30-40% | Γ = L = 3 | All days protected | High
+
+--- TABLE ---
+💡 When to Use
+Robust inventory optimization is ideal for RPIW 15-40%. It uses prediction interval bounds directly (Δ_i) without requiring probability distributions. Same computational complexity as deterministic, with built-in protection.
+
+--- TABLE ---
+Criterion | Deterministic | Robust | Stochastic
+RPIW Threshold | < 15% | 15-40% | > 40%
+Policy Type | EOQ / Fixed | Robust (s, S) | Stochastic (s, S)
+Safety Stock | Minimal | From Δ × √(L×Γ) | From distribution
+Holding Cost | 🟢 Low | 🟡 Medium | 🔴 Higher
+Stockout Risk | 🔴 Higher | 🟡 Controlled | 🟢 Low
+Computation | ⚡ Fast | ⚡ Fast | 🐢 Slow
+Best For | Stable demand | Moderate variability | Critical items, high var
+
+--- TABLE ---
+🎯 INVENTORY OPTIMIZATION METHOD SELECTION
+Same RPIW from Patient Forecasts → Inventory Decision
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RPIW < 15%  →  Deterministic EOQ/MILP
+15% ≤ RPIW ≤ 40%  →  Robust (s, S) Policy
+RPIW > 40%  →  Stochastic (s, S) Policy
+
+--- TABLE ---
+Library | Purpose | Use Case
+PuLP | Linear/Integer Programming | Deterministic, Robust MILP
+Pyomo | Algebraic Modeling | Stochastic (PySP extension)
+SciPy | EOQ, Newsvendor | Analytical solutions
+SimPy | Discrete Event Simulation | Policy validation
+
+--- TABLE ---
+ML FORECAST → PREDICTION INTERVALS → INVENTORY OPTIMIZATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Patient Arrival Forecast (XGBoost/LSTM/Hybrid) → D̂_t, [L_t, U_t]
+↓
+2. Convert to Inventory Demand: d̂_i = α_i × D̂_t
+↓
+3. Compute RPIW → Select Optimization Method
+↓
+4. Solve → Optimal (s, S) or Order Quantities
+↓
+5. Display in Streamlit Dashboard with Reorder Alerts
