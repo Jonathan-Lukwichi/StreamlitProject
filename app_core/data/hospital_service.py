@@ -26,6 +26,14 @@ class HospitalDataService:
         "reason": "clinical_visits",
     }
 
+    # Date column names for each table (some tables use 'date', others use 'datetime')
+    DATE_COLUMNS = {
+        "patient": "datetime",
+        "weather": "datetime",
+        "calendar": "date",  # calendar_data uses 'date' not 'datetime'
+        "reason": "datetime",
+    }
+
     def __init__(self):
         """Initialize the hospital data service."""
         self.client = get_cached_supabase_client()
@@ -115,8 +123,8 @@ class HospitalDataService:
                     .eq("hospital_name", hospital_name)
                 )
 
-                # Add date filters if provided
-                date_column = "datetime" if dataset_type != "calendar" else "datetime"
+                # Get the correct date column for this table
+                date_column = self.DATE_COLUMNS.get(dataset_type, "datetime")
 
                 if start_date:
                     query = query.gte(date_column, start_date.strftime("%Y-%m-%d"))
