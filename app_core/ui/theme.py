@@ -265,7 +265,11 @@ def apply_css() -> None:
     .hf-hero-content {{
         position: relative;
         z-index: 1;
-        text-align: center;
+        text-align: center !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
     }}
 
     /* Hero Title */
@@ -280,6 +284,8 @@ def apply_css() -> None:
         background-clip: text;
         margin-bottom: 1.5rem;
         text-shadow: 0 0 40px rgba(59,130,246,0.3);
+        text-align: center !important;
+        width: 100% !important;
     }}
 
     /* Hero Subtitle */
@@ -289,9 +295,11 @@ def apply_css() -> None:
         color: {BODY_TEXT};
         line-height: 1.6;
         max-width: 800px;
-        margin: 0 auto 2rem auto;
+        margin: 0 auto 2rem auto !important;
         opacity: 0.9;
-        text-align: center;
+        text-align: center !important;
+        width: 100% !important;
+        display: block !important;
     }}
 
     /* Pills (Tags) */

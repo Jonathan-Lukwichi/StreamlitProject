@@ -638,10 +638,14 @@ st.markdown("""
     border: 1px solid rgba(6, 78, 145, 0.35);
     border-radius: 24px;
     padding: 2.5rem 2rem;
-    text-align: center;
+    text-align: center !important;
     animation: card-glow 4s ease-in-out infinite;
     position: relative;
     overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
 .stats-card::before {
@@ -661,7 +665,8 @@ st.markdown("""
     font-weight: 800;
     margin-bottom: 1rem;
     animation: text-glow-cyan 3s ease-in-out infinite;
-    text-align: center;
+    text-align: center !important;
+    width: 100% !important;
 }
 
 .stats-description {
@@ -669,8 +674,10 @@ st.markdown("""
     font-size: 1rem;
     line-height: 1.7;
     max-width: 800px;
-    margin: 0 auto 2rem auto;
-    text-align: center;
+    margin: 0 auto 2rem auto !important;
+    text-align: center !important;
+    width: 100% !important;
+    display: block !important;
 }
 
 .stats-grid {
