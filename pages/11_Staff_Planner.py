@@ -30,6 +30,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # Import Supabase services
 from app_core.data.staff_scheduling_service import StaffSchedulingService
@@ -1475,3 +1476,8 @@ with st.sidebar:
                 st.session_state[key] = None if "df" in key or "stats" in key or "results" in key else False
         st.session_state.cost_params = DEFAULT_COST_PARAMS.copy()
         st.rerun()
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(10)  # Staff Planner is page index 10

@@ -18,6 +18,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -1808,6 +1809,11 @@ with tab_thesis:
             "text/plain",
         )
 
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(8)  # Model Results is page index 8
 
 # -----------------------------------------------------------------------------
 # FOOTER

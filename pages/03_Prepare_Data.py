@@ -17,6 +17,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
+from app_core.ui.page_navigation import render_page_navigation
 from app_core.cache import save_to_cache, get_cache_manager
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
@@ -1376,5 +1377,10 @@ def page_data_preparation_studio():
 
 init_state()
 page_data_preparation_studio()
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(2)  # Prepare Data is page index 2
 
 

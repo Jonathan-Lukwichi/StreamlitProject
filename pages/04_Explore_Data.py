@@ -25,6 +25,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -1021,5 +1022,10 @@ def page_eda():
 
 init_state()
 page_eda()
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(3)  # Explore Data is page index 3
 
 

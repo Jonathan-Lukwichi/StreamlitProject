@@ -18,6 +18,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BG_BLACK, BODY_TEXT
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -3540,5 +3541,10 @@ def _create_model_performance_summary(comp_df: pd.DataFrame):
     return summaries
 
 page_benchmarks()
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(4)  # Baseline Models is page index 4
 
 

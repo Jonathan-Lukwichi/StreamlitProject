@@ -28,6 +28,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
 # ============================================================================
@@ -1093,6 +1094,11 @@ def main():
     """, unsafe_allow_html=True)
 
     page_feature_selection()
+
+    # =============================================================================
+    # PAGE NAVIGATION
+    # =============================================================================
+    render_page_navigation(6)  # Feature Selection is page index 6
 
 if __name__ == "__main__":
     main()

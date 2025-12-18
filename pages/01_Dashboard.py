@@ -34,6 +34,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
@@ -1787,6 +1788,11 @@ with st.sidebar:
     - **Supply Planner:** Supply Planner
     """)
 
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(0)  # Dashboard is page index 0
 
 # =============================================================================
 # FOOTER

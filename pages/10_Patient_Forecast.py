@@ -19,6 +19,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
@@ -2497,6 +2498,11 @@ with tab_export:
                 "num_samples": len(test_eval),
                 "date_range": f"{test_eval.index.min()} to {test_eval.index.max()}" if hasattr(test_eval.index, 'min') else "N/A",
             })
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(9)  # Patient Forecast is page index 9
 
 # =============================================================================
 # FOOTER

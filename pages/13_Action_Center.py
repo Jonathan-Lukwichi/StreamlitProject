@@ -18,6 +18,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
@@ -1615,6 +1616,11 @@ with st.sidebar:
         st.markdown(f"**Monthly:** ${financial['total_monthly_savings']:,.0f}")
         st.markdown(f"**Annual:** ${financial['annual_savings']:,.0f}")
 
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(12)  # Action Center is page index 12
 
 # =============================================================================
 # FOOTER

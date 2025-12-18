@@ -17,6 +17,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -787,5 +788,10 @@ def page_data_hub():
 
 init_state()
 page_data_hub()
+
+# =============================================================================
+# PAGE NAVIGATION
+# =============================================================================
+render_page_navigation(1)  # Upload Data is page index 1
 
 
