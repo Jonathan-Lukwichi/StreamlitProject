@@ -184,60 +184,39 @@ def initialize_session_state():
 def require_authentication(redirect_to_welcome: bool = True):
     """
     Decorator to protect pages that require authentication.
-    Stops page execution if user is not authenticated.
+
+    NOTE: Authentication is currently BYPASSED for demo purposes.
+    All users are automatically granted access.
 
     Args:
         redirect_to_welcome: If True, provide a button to go to Welcome page
     """
+    # AUTO-AUTHENTICATE: Bypass login for demo mode
     if not check_authentication():
-        st.error("🔒 Please log in to access this page")
-        st.markdown("---")
-        st.info("This page requires authentication. Please login from the Welcome page.")
-
-        if redirect_to_welcome:
-            if st.button("🏠 Go to Login Page", type="primary"):
-                st.switch_page("Welcome.py")
-
-        st.stop()
+        st.session_state.authenticated = True
+        st.session_state.role = "admin"
+        st.session_state.username = "demo_user"
+        st.session_state.name = "Demo User"
+    # Authentication bypassed - all pages accessible
 
 
 def require_admin_access(redirect_to_welcome: bool = True):
     """
     Decorator to protect pages that require admin access.
-    Stops page execution if user is not admin.
+
+    NOTE: Admin access is currently BYPASSED for demo purposes.
+    All users are automatically granted admin access.
 
     Args:
         redirect_to_welcome: If True, provide a button to go to Welcome page
     """
+    # AUTO-AUTHENTICATE: Bypass login for demo mode
     if not check_authentication():
-        st.error("🔒 Please log in to access this page")
-        st.markdown("---")
-        st.info("This page requires authentication. Please login from the Welcome page.")
-
-        if redirect_to_welcome:
-            if st.button("🏠 Go to Login Page", type="primary"):
-                st.switch_page("Welcome.py")
-
-        st.stop()
-
-    if not check_admin_access():
-        st.error("🔒 Administrator Access Required")
-        st.markdown("---")
-        st.warning(
-            f"Sorry {get_user_name()}, this page is restricted to administrators only. "
-            "Contact your system administrator for access."
-        )
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🏠 Go to Dashboard", type="primary"):
-                st.switch_page("pages/01_Dashboard.py")
-        with col2:
-            if st.button("🚪 Logout"):
-                logout_user()
-                st.switch_page("Welcome.py")
-
-        st.stop()
+        st.session_state.authenticated = True
+        st.session_state.role = "admin"
+        st.session_state.username = "demo_user"
+        st.session_state.name = "Demo User"
+    # Admin access bypassed - all pages accessible
 
 
 # ==================== PASSWORD HASHING UTILITY ====================

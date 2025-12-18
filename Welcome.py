@@ -1,11 +1,7 @@
 from __future__ import annotations
 import streamlit as st
 from app_core.ui.theme import apply_css, hero_card, feature_card
-from app_core.auth.authentication import (
-    get_authenticator,
-    get_user_credentials,
-    initialize_session_state
-)
+from app_core.auth.authentication import initialize_session_state
 from app_core.auth.navigation import configure_sidebar_navigation
 
 # ============================================================================
@@ -335,96 +331,121 @@ hero_html = hero_card(
 st.markdown(hero_html, unsafe_allow_html=True)
 
 # ============================================================================
-# LOGIN SECTION
+# START HERE SECTION - Beautiful Entry Point
 # ============================================================================
 
-# Check if user is already authenticated
-if st.session_state.get("authenticated", False):
-    st.success(f"✅ Welcome back, {st.session_state.get('name', 'User')}!")
-    st.info(f"**Role:** {st.session_state.get('role', 'Unknown').title()}")
+st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
 
-    # Show navigation buttons based on role
-    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+# Stunning "Start Here" button with custom CSS
+st.markdown("""
+<style>
+/* ========================================
+   START HERE BUTTON - Premium Styling
+   ======================================== */
 
-    col1, col2, col3 = st.columns([1, 1, 1])
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow:
+            0 0 20px rgba(59, 130, 246, 0.4),
+            0 0 40px rgba(34, 211, 238, 0.3),
+            0 0 60px rgba(168, 85, 247, 0.2),
+            0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        box-shadow:
+            0 0 30px rgba(59, 130, 246, 0.6),
+            0 0 60px rgba(34, 211, 238, 0.4),
+            0 0 80px rgba(168, 85, 247, 0.3),
+            0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+}
 
-    with col1:
-        if st.button("📊 Go to Dashboard", type="primary", use_container_width=True):
-            st.switch_page("pages/01_Dashboard.py")
+@keyframes shimmer {
+    0% {
+        background-position: -200% center;
+    }
+    100% {
+        background-position: 200% center;
+    }
+}
 
-    with col2:
-        if st.session_state.get("role") == "admin":
-            if st.button("🗄️ Data Hub (Admin)", type="primary", use_container_width=True):
-                st.switch_page("pages/02_Data_Hub.py")
-        else:
-            if st.button("🔮 Forecast Page", type="primary", use_container_width=True):
-                st.switch_page("pages/10_Forecast.py")
+.start-here-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 3rem 0;
+}
 
-    with col3:
-        if st.button("🚪 Logout", use_container_width=True):
-            # Clear session state
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+.start-here-wrapper {
+    text-align: center;
+    padding: 2rem;
+}
 
-else:
-    # Show login form
-    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+.start-here-title {
+    color: #ffffff;
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
 
-    # Create two-column layout for login options
-    st.markdown("""
-    <div style='text-align: center; margin-bottom: 2rem;'>
-        <h2 style='color: #ffffff; font-size: 2rem; margin-bottom: 0.5rem;'>
-            Welcome to HealthForecast AI
-        </h2>
-        <p style='color: #94a3b8; font-size: 1.1rem;'>
-            Please login to access the platform
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+.start-here-subtitle {
+    color: #94a3b8;
+    font-size: 1.15rem;
+    margin-bottom: 2rem;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+}
 
-    # Authenticator setup
-    authenticator = get_authenticator()
+/* The actual Streamlit button styling */
+div[data-testid="stButton"] > button[kind="primary"] {
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%) !important;
+    background-size: 200% 200% !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem 4rem !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: white !important;
+    text-transform: uppercase !important;
+    letter-spacing: 2px !important;
+    animation: pulse-glow 2s ease-in-out infinite !important;
+    transition: all 0.3s ease !important;
+    min-height: 80px !important;
+}
 
-    # Login widget
-    try:
-        # Call login without unpacking - it modifies session_state directly
-        authenticator.login()
+div[data-testid="stButton"] > button[kind="primary"]:hover {
+    transform: translateY(-4px) scale(1.02) !important;
+    background-position: right center !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+}
 
-        # Check authentication status from session state
-        authentication_status = st.session_state.get("authentication_status")
-        name = st.session_state.get("name")
-        username = st.session_state.get("username")
+div[data-testid="stButton"] > button[kind="primary"]:active {
+    transform: translateY(-2px) scale(1.01) !important;
+}
+</style>
 
-        if authentication_status:
-            # Get user credentials
-            credentials = get_user_credentials()
-            user_data = credentials["usernames"].get(username, {})
+<div class='start-here-wrapper'>
+    <h2 class='start-here-title'>Ready to Transform Healthcare?</h2>
+    <p class='start-here-subtitle'>
+        Experience AI-powered patient forecasting that helps hospitals
+        optimize operations and improve patient care.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-            # Store authentication data in session state
-            st.session_state.authenticated = True
-            st.session_state.username = username
-            st.session_state.name = name
-            st.session_state.role = user_data.get("role", "user")
-            st.session_state.email = user_data.get("email", "")
-
-            st.success(f"✅ Welcome, {name}!")
-            st.info(f"**Role:** {st.session_state.role.title()}")
-
-            # Redirect based on role
-            if st.session_state.role == "admin":
-                st.info("🔑 Redirecting to Data Hub (Admin Access)...")
-                st.switch_page("pages/02_Data_Hub.py")
-            else:
-                st.info("📊 Redirecting to Dashboard...")
-                st.switch_page("pages/01_Dashboard.py")
-
-        elif authentication_status == False:
-            st.error("❌ Username or password is incorrect")
-
-    except Exception as e:
-        st.error(f"Authentication error: {str(e)}")
-        st.info("Please refresh the page and try again")
+# Centered Start Here button
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("START HERE", type="primary", use_container_width=True, key="start_here_btn"):
+        # Set authentication state for demo mode
+        st.session_state.authenticated = True
+        st.session_state.role = "admin"
+        st.session_state.username = "demo_user"
+        st.session_state.name = "Demo User"
+        # Redirect to Dashboard
+        st.switch_page("pages/01_Dashboard.py")
 
 # ============================================================================
 # FEATURE GRID - Showcase Core Capabilities
