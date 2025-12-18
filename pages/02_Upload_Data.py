@@ -773,18 +773,6 @@ def page_data_hub():
     </div>
     """, unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        if all_loaded:
-            if st.button("🧠 Continue to Data Preprocessing Studio", use_container_width=True, type="primary"):
-                _go_preprocessing()
-        else:
-            st.button(
-                "🧠 Continue to Data Preprocessing Studio",
-                use_container_width=True,
-                disabled=True,
-                help="Upload all four datasets to proceed.",
-            )
 
 init_state()
 page_data_hub()
