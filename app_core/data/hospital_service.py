@@ -18,12 +18,12 @@ class HospitalDataService:
     filtered by hospital name.
     """
 
-    # Table names in Supabase
+    # Table names in Supabase (must match your actual table names)
     TABLES = {
-        "patient": "patient_data",
+        "patient": "patient_arrivals",
         "weather": "weather_data",
         "calendar": "calendar_data",
-        "reason": "reason_data",
+        "reason": "clinical_visits",
     }
 
     def __init__(self):
