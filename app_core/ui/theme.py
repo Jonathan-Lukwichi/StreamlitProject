@@ -291,6 +291,7 @@ def apply_css() -> None:
         max-width: 800px;
         margin: 0 auto 2rem auto;
         opacity: 0.9;
+        text-align: center;
     }}
 
     /* Pills (Tags) */
