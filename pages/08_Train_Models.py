@@ -42,6 +42,15 @@ try:
 except ImportError:
     CQR_AVAILABLE = False
 
+# =============================================================================
+# OPTUNA IMPORT CHECK (For Bayesian Optimization)
+# =============================================================================
+try:
+    import optuna
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
 # ============================================================================
@@ -3290,6 +3299,14 @@ def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
     Returns:
         dict with best_params, trial_results, and all metrics
     """
+    # Check if optuna is available
+    if not OPTUNA_AVAILABLE:
+        raise ImportError(
+            "Optuna is not installed. To use Bayesian Optimization, please install it:\n\n"
+            "pip install optuna\n\n"
+            "Alternatively, use 'Grid Search' or 'Random Search' which don't require optuna."
+        )
+
     import optuna
     from sklearn.model_selection import TimeSeriesSplit, cross_val_score
     from sklearn.metrics import mean_squared_error, mean_absolute_error, make_scorer
@@ -3869,13 +3886,24 @@ def page_hyperparameter_tuning():
     col1, col2 = st.columns(2)
 
     with col1:
-        # Search method selection
+        # Search method selection - show warning if Bayesian selected but optuna not available
+        search_options = ["Grid Search", "Random Search", "Bayesian Optimization"]
         search_method = st.selectbox(
             "Search Method",
-            options=["Grid Search", "Random Search", "Bayesian Optimization"],
-            help="Grid: Exhaustive search | Random: Random sampling | Bayesian: Smart optimization"
+            options=search_options,
+            help="Grid: Exhaustive search | Random: Random sampling | Bayesian: Smart optimization (requires optuna)"
         )
         cfg["tuning_search_method"] = search_method
+
+        # Show warning if Bayesian Optimization selected but optuna not installed
+        if search_method == "Bayesian Optimization" and not OPTUNA_AVAILABLE:
+            st.warning(
+                "⚠️ **Optuna not installed**\n\n"
+                "Bayesian Optimization requires the `optuna` package. "
+                "Please install it with:\n\n"
+                "```bash\npip install optuna\n```\n\n"
+                "Or select **Grid Search** or **Random Search** instead."
+            )
 
     with col2:
         # Optimization metric selection
@@ -3963,12 +3991,19 @@ def page_hyperparameter_tuning():
         else:
             button_text = f"🚀 Run {search_method} - All Models"
 
+        # Disable button if Bayesian selected but optuna not available
+        button_disabled = (search_method == "Bayesian Optimization" and not OPTUNA_AVAILABLE)
+
         run_optimization = st.button(
             button_text,
             type="primary",
             use_container_width=True,
-            help="Start hyperparameter optimization with TimeSeriesSplit CV"
+            help="Start hyperparameter optimization with TimeSeriesSplit CV",
+            disabled=button_disabled
         )
+
+        if button_disabled:
+            st.caption("⚠️ Install optuna to enable Bayesian Optimization")
 
     # Execute optimization
     if run_optimization:
