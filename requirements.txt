@@ -21,6 +21,7 @@ scipy>=1.11.0
 xgboost>=3.0.0
 tensorflow>=2.17.0
 joblib>=1.4.0
+optuna>=3.5.0  # Hyperparameter optimization (Bayesian)
 
 # Optional: Additional useful packages for forecasting applications
 openpyxl>=3.1.0  # For Excel file support
