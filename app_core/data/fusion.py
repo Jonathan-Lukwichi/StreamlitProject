@@ -53,6 +53,7 @@ def _prep_weather(df: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare weather data with standardized 'datetime' column.
     Assumes 'datetime' column is already clean (timezone-naive) from Data Hub.
+    Handles both PascalCase and lowercase column names from different sources.
     """
     df = df.copy()
 
@@ -72,11 +73,26 @@ def _prep_weather(df: pd.DataFrame) -> pd.DataFrame:
     # Initialize output with Date only (drop datetime to avoid duplication)
     out = df[["Date"]].copy()
 
-    # Extract weather columns
-    weather_cols = ["Average_Temp", "Max_temp", "Average_wind", "Max_wind", "Average_mslp", "Total_precipitation", "Moon_Phase"]
-    for col in weather_cols:
-        if col in df.columns:
-            out[col] = pd.to_numeric(df[col], errors="coerce")
+    # Build a case-insensitive column lookup map
+    col_map = {c.lower(): c for c in df.columns}
+
+    # Extract weather columns (handle both PascalCase and lowercase from Supabase)
+    weather_cols = {
+        "Average_Temp": ["average_temp", "Average_Temp"],
+        "Max_temp": ["max_temp", "Max_temp"],
+        "Average_wind": ["average_wind", "Average_wind"],
+        "Max_wind": ["max_wind", "Max_wind"],
+        "Average_mslp": ["average_mslp", "Average_mslp"],
+        "Total_precipitation": ["total_precipitation", "Total_precipitation"],
+        "Moon_Phase": ["moon_phase", "Moon_Phase"],
+    }
+
+    for target_col, possible_names in weather_cols.items():
+        for name in possible_names:
+            if name.lower() in col_map:
+                actual_col = col_map[name.lower()]
+                out[target_col] = pd.to_numeric(df[actual_col], errors="coerce")
+                break
 
     return out
 
@@ -84,6 +100,7 @@ def _prep_calendar(df: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare calendar data with standardized 'datetime' column.
     Assumes 'datetime' column is already clean (timezone-naive) from Data Hub.
+    Handles both PascalCase and lowercase column names from different sources.
     """
     df = df.copy()
 
@@ -100,12 +117,33 @@ def _prep_calendar(df: pd.DataFrame) -> pd.DataFrame:
     # Create Date for merging (normalize to midnight for daily aggregation)
     out = pd.DataFrame({"Date": _normalize_to_date(df["datetime"])})
 
-    # Extract calendar features
-    out["Holiday"] = pd.to_numeric(df["Holiday"], errors="coerce").fillna(0).astype(int) if "Holiday" in df.columns else 0
-    out["Holiday_prev"] = pd.to_numeric(df["Holiday_prev"], errors="coerce").fillna(0).astype(float) if "Holiday_prev" in df.columns else 0.0
+    # Build a case-insensitive column lookup map
+    col_map = {c.lower(): c for c in df.columns}
 
-    if "Day_of_week" in df.columns:
-        out["Day_of_week"] = pd.to_numeric(df["Day_of_week"], errors="coerce").astype('Int64')
+    # Extract calendar features (handle both PascalCase and lowercase from Supabase)
+    # Holiday
+    holiday_col = col_map.get("holiday")
+    if holiday_col:
+        out["Holiday"] = pd.to_numeric(df[holiday_col], errors="coerce").fillna(0).astype(int)
+    else:
+        out["Holiday"] = 0
+
+    # Holiday_prev
+    holiday_prev_col = col_map.get("holiday_prev")
+    if holiday_prev_col:
+        out["Holiday_prev"] = pd.to_numeric(df[holiday_prev_col], errors="coerce").fillna(0).astype(float)
+    else:
+        out["Holiday_prev"] = 0.0
+
+    # Day_of_week
+    day_of_week_col = col_map.get("day_of_week")
+    if day_of_week_col:
+        out["Day_of_week"] = pd.to_numeric(df[day_of_week_col], errors="coerce").astype('Int64')
+
+    # Moon_Phase (from calendar data)
+    moon_phase_col = col_map.get("moon_phase")
+    if moon_phase_col:
+        out["Moon_Phase"] = pd.to_numeric(df[moon_phase_col], errors="coerce")
 
     return out
 
@@ -120,24 +158,28 @@ def _create_aggregated_categories(df: pd.DataFrame) -> pd.DataFrame:
     - Infectious_Cases = Flu_Symptoms + Fever + Viral_Infection
     - Other_Cases = Headache + Dizziness + Allergic_Reaction + Mental_Health
 
+    Handles both PascalCase and lowercase column names from different sources.
     Returns the dataframe with aggregated columns added (keeps all original granular columns).
     """
     df = df.copy()
 
-    # Define category mappings
+    # Build a case-insensitive column lookup map
+    col_map = {c.lower(): c for c in df.columns}
+
+    # Define category mappings (lowercase for matching)
     category_mappings = {
-        "Respiratory_Cases": ["Asthma", "Pneumonia", "Shortness_of_Breath"],
-        "Cardiac_Cases": ["Chest_Pain", "Arrhythmia", "Hypertensive_Emergency"],
-        "Trauma_Cases": ["Fracture", "Laceration", "Burn", "Fall_Injury"],
-        "Gastrointestinal_Cases": ["Abdominal_Pain", "Vomiting", "Diarrhea"],
-        "Infectious_Cases": ["Flu_Symptoms", "Fever", "Viral_Infection"],
-        "Other_Cases": ["Headache", "Dizziness", "Allergic_Reaction", "Mental_Health"]
+        "Respiratory_Cases": ["asthma", "pneumonia", "shortness_of_breath"],
+        "Cardiac_Cases": ["chest_pain", "arrhythmia", "hypertensive_emergency"],
+        "Trauma_Cases": ["fracture", "laceration", "burn", "fall_injury"],
+        "Gastrointestinal_Cases": ["abdominal_pain", "vomiting", "diarrhea"],
+        "Infectious_Cases": ["flu_symptoms", "fever", "viral_infection"],
+        "Other_Cases": ["headache", "dizziness", "allergic_reaction", "mental_health"]
     }
 
     # Create each aggregated category
-    for category_name, component_cols in category_mappings.items():
-        # Find which component columns exist in the dataframe
-        available_cols = [col for col in component_cols if col in df.columns]
+    for category_name, component_cols_lower in category_mappings.items():
+        # Find which component columns exist in the dataframe (case-insensitive)
+        available_cols = [col_map[col_lower] for col_lower in component_cols_lower if col_lower in col_map]
 
         if available_cols:
             # Sum available columns, filling NaN with 0
