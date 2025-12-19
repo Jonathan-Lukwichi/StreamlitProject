@@ -52,34 +52,42 @@ class HospitalDataService:
         if not self.is_connected():
             return ["Pamplona Spain Hospital"]  # Default fallback
 
-        try:
-            # Try to fetch from the view first
-            response = self.client.table("available_hospitals").select("hospital_name").execute()
+        hospitals_set = set()
 
-            if response.data:
-                hospitals = [row["hospital_name"] for row in response.data if row.get("hospital_name")]
-                if hospitals:
-                    return sorted(hospitals)
+        # Query all tables to find unique hospital names
+        tables_to_check = ["patient_arrivals", "weather_data", "calendar_data", "clinical_visits"]
 
-        except Exception:
-            pass
+        for table_name in tables_to_check:
+            try:
+                # Paginate through the table to get all unique hospital names
+                offset = 0
+                batch_size = 1000
 
-        # Fallback: query patient_data table directly
-        try:
-            response = (
-                self.client.table("patient_data")
-                .select("hospital_name")
-                .limit(1000)
-                .execute()
-            )
+                while True:
+                    response = (
+                        self.client.table(table_name)
+                        .select("hospital_name")
+                        .range(offset, offset + batch_size - 1)
+                        .execute()
+                    )
 
-            if response.data:
-                hospitals = list(set(row.get("hospital_name") for row in response.data if row.get("hospital_name")))
-                if hospitals:
-                    return sorted(hospitals)
+                    if response.data:
+                        for row in response.data:
+                            if row.get("hospital_name"):
+                                hospitals_set.add(row["hospital_name"])
 
-        except Exception:
-            pass
+                        # If we got less than batch_size, we've reached the end
+                        if len(response.data) < batch_size:
+                            break
+                        offset += batch_size
+                    else:
+                        break
+
+            except Exception:
+                continue
+
+        if hospitals_set:
+            return sorted(list(hospitals_set))
 
         # Default if nothing found
         return ["Pamplona Spain Hospital"]
