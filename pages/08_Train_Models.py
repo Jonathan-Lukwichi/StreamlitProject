@@ -4528,26 +4528,52 @@ def page_hyperparameter_tuning():
                         key=f"opt_acc_{selected_model_opt}"
                     )
 
-            # CV Results Table
+            # CV Results Table (handle both Grid/Random Search and Bayesian Optimization)
             with st.expander("📋 All Parameter Combinations (CV Results)", expanded=False):
-                cv_results = opt_results['cv_results']
+                # Check which type of results we have
+                if 'cv_results' in opt_results:
+                    # Grid Search or Random Search (sklearn format)
+                    cv_results = opt_results['cv_results']
 
-                # Select relevant columns
-                display_cols = ['params', 'mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE', 'mean_test_Accuracy', 'rank_test_' + opt_results['refit_metric']]
-                available_cols = [col for col in display_cols if col in cv_results.columns]
+                    # Select relevant columns
+                    display_cols = ['params', 'mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE', 'mean_test_Accuracy', 'rank_test_' + opt_results['refit_metric']]
+                    available_cols = [col for col in display_cols if col in cv_results.columns]
 
-                if available_cols:
-                    display_df = cv_results[available_cols].copy()
+                    if available_cols:
+                        display_df = cv_results[available_cols].copy()
 
-                    # Invert negative scores for display
-                    if 'mean_test_RMSE' in display_df.columns:
-                        display_df['mean_test_RMSE'] = -display_df['mean_test_RMSE']
-                    if 'mean_test_MAE' in display_df.columns:
-                        display_df['mean_test_MAE'] = -display_df['mean_test_MAE']
-                    if 'mean_test_MAPE' in display_df.columns:
-                        display_df['mean_test_MAPE'] = -display_df['mean_test_MAPE']
+                        # Invert negative scores for display
+                        if 'mean_test_RMSE' in display_df.columns:
+                            display_df['mean_test_RMSE'] = -display_df['mean_test_RMSE']
+                        if 'mean_test_MAE' in display_df.columns:
+                            display_df['mean_test_MAE'] = -display_df['mean_test_MAE']
+                        if 'mean_test_MAPE' in display_df.columns:
+                            display_df['mean_test_MAPE'] = -display_df['mean_test_MAPE']
+
+                        st.dataframe(display_df, use_container_width=True, height=400)
+                    else:
+                        st.info("No CV results available to display.")
+
+                elif 'trial_results' in opt_results:
+                    # Bayesian Optimization (Optuna format)
+                    trial_results = opt_results['trial_results']
+
+                    st.markdown("**Bayesian Optimization Trial History:**")
+
+                    # Format params column for better display
+                    display_df = trial_results.copy()
+                    display_df['params'] = display_df['params'].apply(lambda x: str(x) if isinstance(x, dict) else x)
+
+                    # Rename columns for clarity
+                    display_df = display_df.rename(columns={
+                        'trial': 'Trial #',
+                        'value': f'Score ({opt_results.get("refit_metric", "Metric")})',
+                        'params': 'Parameters'
+                    })
 
                     st.dataframe(display_df, use_container_width=True, height=400)
+                else:
+                    st.info("No detailed CV results available for this optimization method.")
 
             # Display 7-day backtesting results if available
             backtest_results = st.session_state.get(f"backtest_results_{selected_model_opt}")
