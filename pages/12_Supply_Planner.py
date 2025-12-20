@@ -36,6 +36,15 @@ from app_core.ui.page_navigation import render_page_navigation
 from app_core.data.inventory_service import InventoryService, get_inventory_service
 from app_core.data.financial_service import FinancialService, get_financial_service
 
+# Import AI Insight components
+from app_core.ui.insight_components import (
+    inject_insight_styles,
+    render_mode_selector,
+    render_full_insight_panel,
+    render_supply_optimization_insights
+)
+from app_core.ai.recommendation_engine import SupplyRecommendationEngine
+
 # ============================================================================
 # AUTHENTICATION
 # ============================================================================
@@ -331,6 +340,12 @@ if "inv_optimization_done" not in st.session_state:
     st.session_state.inv_optimization_done = False
 if "inv_optimized_results" not in st.session_state:
     st.session_state.inv_optimized_results = None
+
+# AI Insight Mode: "rule_based" (Option A) or "llm" (Option B)
+if "supply_insight_mode" not in st.session_state:
+    st.session_state.supply_insight_mode = "rule_based"
+if "supply_llm_api_key" not in st.session_state:
+    st.session_state.supply_llm_api_key = None
 
 
 # =============================================================================
@@ -1538,19 +1553,91 @@ with tab4:
             fig.update_layout(template="plotly_dark", height=300)
             st.plotly_chart(fig, use_container_width=True)
 
-        # SUMMARY
-        st.success(f"""
-        ### 🎉 Optimization Summary
+        # =================================================================
+        # AI-POWERED OPTIMIZATION INSIGHTS
+        # =================================================================
+        st.markdown("---")
+        st.markdown('<div class="section-header">AI-Powered Optimization Insights</div>', unsafe_allow_html=True)
 
-        By applying **{opt['source']}** forecast-driven inventory management:
+        # Mode Selector
+        st.markdown("**Select Insight Mode:**")
+        mode_col1, mode_col2, mode_col3 = st.columns([2, 2, 1])
 
-        | Metric | Before | After | Change |
-        |--------|--------|-------|--------|
-        | Weekly Cost | ${opt['current_weekly_cost']:,.0f} | ${opt['optimized_weekly_cost']:,.0f} | **-${opt['weekly_savings']:,.0f}** ({savings_pct:.1f}%) |
-        | Annual Cost | ${opt['current_weekly_cost'] * 52:,.0f} | ${opt['optimized_weekly_cost'] * 52:,.0f} | **-${annual_savings:,.0f}** |
-        | Service Level | {service_level_before:.1f}% | 100% | **+{100 - service_level_before:.1f}%** |
-        | Stockout Risk | {inv_stats['avg_stockout_risk']:.1f}% | 0% | **Eliminated** |
-        """)
+        with mode_col1:
+            if st.button(
+                "Option A: Rule-Based (Fast, Free)",
+                type="primary" if st.session_state.supply_insight_mode == "rule_based" else "secondary",
+                use_container_width=True,
+                key="supply_mode_rule"
+            ):
+                st.session_state.supply_insight_mode = "rule_based"
+                st.rerun()
+
+        with mode_col2:
+            if st.button(
+                "Option B: LLM-Powered (Natural Language)",
+                type="primary" if st.session_state.supply_insight_mode == "llm" else "secondary",
+                use_container_width=True,
+                key="supply_mode_llm"
+            ):
+                st.session_state.supply_insight_mode = "llm"
+                st.rerun()
+
+        with mode_col3:
+            st.caption(f"Active: {'Rule-Based' if st.session_state.supply_insight_mode == 'rule_based' else 'LLM'}")
+
+        # API Key input for LLM mode
+        if st.session_state.supply_insight_mode == "llm":
+            with st.expander("LLM API Configuration", expanded=False):
+                api_key = st.text_input(
+                    "OpenAI API Key",
+                    type="password",
+                    value=st.session_state.supply_llm_api_key or "",
+                    help="Enter your OpenAI API key for natural language insights",
+                    key="supply_api_key_input"
+                )
+                if api_key:
+                    st.session_state.supply_llm_api_key = api_key
+
+        st.markdown("---")
+
+        # Generate and render insights
+        try:
+            inject_insight_styles()
+
+            engine = SupplyRecommendationEngine(
+                mode=st.session_state.supply_insight_mode,
+                api_key=st.session_state.supply_llm_api_key
+            )
+
+            insight_result = engine.generate_insights(
+                before_stats=inv_stats,
+                after_stats={},
+                optimization_results=opt,
+                cost_params=cost_params
+            )
+
+            render_full_insight_panel(
+                result=insight_result,
+                show_mode_info=True,
+                show_recommendations=True,
+                show_table=True
+            )
+
+        except Exception as e:
+            st.error(f"Error generating insights: {e}")
+            # Fallback to original summary
+            st.success(f"""
+            ### Optimization Summary
+
+            By applying **{opt['source']}** forecast-driven inventory management:
+
+            | Metric | Before | After | Change |
+            |--------|--------|-------|--------|
+            | Weekly Cost | ${opt['current_weekly_cost']:,.0f} | ${opt['optimized_weekly_cost']:,.0f} | **{'+' if opt['weekly_savings'] < 0 else '-'}${abs(opt['weekly_savings']):,.0f}** ({savings_pct:.1f}%) |
+            | Service Level | {service_level_before:.1f}% | 100% | **+{100 - service_level_before:.1f}%** |
+            | Stockout Risk | {inv_stats['avg_stockout_risk']:.1f}% | 0% | **Eliminated** |
+            """)
 
     elif st.session_state.inventory_data_loaded and st.session_state.inv_financial_data_loaded:
         st.info("📊 Go to **'After Optimization'** tab and click **'Apply Forecast Optimization'** to see the comparison.")

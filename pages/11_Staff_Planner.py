@@ -36,6 +36,15 @@ from app_core.ui.page_navigation import render_page_navigation
 from app_core.data.staff_scheduling_service import StaffSchedulingService
 from app_core.data.financial_service import FinancialService, get_financial_service
 
+# Import AI Insight components
+from app_core.ui.insight_components import (
+    inject_insight_styles,
+    render_mode_selector,
+    render_full_insight_panel,
+    render_staff_optimization_insights
+)
+from app_core.ai.recommendation_engine import StaffRecommendationEngine
+
 # ============================================================================
 # AUTHENTICATION
 # ============================================================================
@@ -322,6 +331,12 @@ if "optimization_done" not in st.session_state:
     st.session_state.optimization_done = False
 if "optimized_results" not in st.session_state:
     st.session_state.optimized_results = None
+
+# AI Insight Mode: "rule_based" (Option A) or "llm" (Option B)
+if "staff_insight_mode" not in st.session_state:
+    st.session_state.staff_insight_mode = "rule_based"
+if "staff_llm_api_key" not in st.session_state:
+    st.session_state.staff_llm_api_key = None
 
 
 # =============================================================================
@@ -1445,20 +1460,91 @@ with tab4:
             fig.update_layout(template="plotly_dark", height=300)
             st.plotly_chart(fig, use_container_width=True)
 
-        # SUMMARY
-        st.success(f"""
-        ### 🎉 Optimization Summary
+        # =================================================================
+        # AI-POWERED OPTIMIZATION INSIGHTS
+        # =================================================================
+        st.markdown("---")
+        st.markdown('<div class="section-header">AI-Powered Optimization Insights</div>', unsafe_allow_html=True)
 
-        By applying **{opt['source']}** forecast-driven staffing:
+        # Mode Selector
+        st.markdown("**Select Insight Mode:**")
+        mode_col1, mode_col2, mode_col3 = st.columns([2, 2, 1])
 
-        | Metric | Before | After | Change |
-        |--------|--------|-------|--------|
-        | Weekly Cost | ${opt['current_weekly_cost']:,.0f} | ${opt['optimized_weekly_cost']:,.0f} | **-${opt['weekly_savings']:,.0f}** ({savings_pct:.1f}%) |
-        | Annual Cost | ${opt['current_weekly_cost'] * 52:,.0f} | ${opt['optimized_weekly_cost'] * 52:,.0f} | **-${annual_savings:,.0f}** |
-        | Utilization | {staff_stats['avg_utilization']:.1f}% | 95% | **+{95 - staff_stats['avg_utilization']:.1f}%** |
-        | Overtime | {staff_stats['total_overtime']:.0f}h | 0h | **Eliminated** |
-        | Shortages | {staff_stats['shortage_days']} days | 0 days | **Eliminated** |
-        """)
+        with mode_col1:
+            if st.button(
+                "Option A: Rule-Based (Fast, Free)",
+                type="primary" if st.session_state.staff_insight_mode == "rule_based" else "secondary",
+                use_container_width=True,
+                key="staff_mode_rule"
+            ):
+                st.session_state.staff_insight_mode = "rule_based"
+                st.rerun()
+
+        with mode_col2:
+            if st.button(
+                "Option B: LLM-Powered (Natural Language)",
+                type="primary" if st.session_state.staff_insight_mode == "llm" else "secondary",
+                use_container_width=True,
+                key="staff_mode_llm"
+            ):
+                st.session_state.staff_insight_mode = "llm"
+                st.rerun()
+
+        with mode_col3:
+            st.caption(f"Active: {'Rule-Based' if st.session_state.staff_insight_mode == 'rule_based' else 'LLM'}")
+
+        # API Key input for LLM mode
+        if st.session_state.staff_insight_mode == "llm":
+            with st.expander("LLM API Configuration", expanded=False):
+                api_key = st.text_input(
+                    "OpenAI API Key",
+                    type="password",
+                    value=st.session_state.staff_llm_api_key or "",
+                    help="Enter your OpenAI API key for natural language insights"
+                )
+                if api_key:
+                    st.session_state.staff_llm_api_key = api_key
+
+        st.markdown("---")
+
+        # Generate and render insights
+        try:
+            inject_insight_styles()
+
+            engine = StaffRecommendationEngine(
+                mode=st.session_state.staff_insight_mode,
+                api_key=st.session_state.staff_llm_api_key
+            )
+
+            insight_result = engine.generate_insights(
+                before_stats=staff_stats,
+                after_stats={},
+                optimization_results=opt,
+                cost_params=cost_params
+            )
+
+            render_full_insight_panel(
+                result=insight_result,
+                show_mode_info=True,
+                show_recommendations=True,
+                show_table=True
+            )
+
+        except Exception as e:
+            st.error(f"Error generating insights: {e}")
+            # Fallback to original summary
+            st.success(f"""
+            ### Optimization Summary
+
+            By applying **{opt['source']}** forecast-driven staffing:
+
+            | Metric | Before | After | Change |
+            |--------|--------|-------|--------|
+            | Weekly Cost | ${opt['current_weekly_cost']:,.0f} | ${opt['optimized_weekly_cost']:,.0f} | **{'+' if opt['weekly_savings'] < 0 else '-'}${abs(opt['weekly_savings']):,.0f}** ({savings_pct:.1f}%) |
+            | Utilization | {staff_stats['avg_utilization']:.1f}% | 95% | **+{95 - staff_stats['avg_utilization']:.1f}%** |
+            | Overtime | {staff_stats['total_overtime']:.0f}h | 0h | **Eliminated** |
+            | Shortages | {staff_stats['shortage_days']} days | 0 days | **Eliminated** |
+            """)
 
     elif st.session_state.staff_data_loaded and st.session_state.financial_data_loaded:
         st.info("📊 Go to **'After Optimization'** tab and click **'Apply Forecast Optimization'** to see the comparison.")
