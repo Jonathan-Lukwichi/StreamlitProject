@@ -354,8 +354,16 @@ def load_staff_data() -> Dict[str, Any]:
         raw_avg_utilization = df["Staff_Utilization_Rate"].mean() if "Staff_Utilization_Rate" in df.columns else 0
         raw_shortage_days = df["Staff_Shortage_Flag"].sum() if "Staff_Shortage_Flag" in df.columns else 0
 
+        # FIX: Convert utilization from ratio format (0-2) to percentage (0-200%)
+        # If max utilization <= 2, it's stored as a ratio (e.g., 1.5 = 150%)
+        if "Staff_Utilization_Rate" in df.columns:
+            max_util = df["Staff_Utilization_Rate"].max()
+            if max_util <= 2.0:
+                # Data is in ratio format (1.5 means 150%), convert to percentage
+                raw_avg_utilization = raw_avg_utilization * 100
+
         # Validate stats - ensure no negative values
-        # Utilization should be 0-100%, others should be >= 0
+        # Utilization can exceed 100% (overstaffed/working overtime)
         result["stats"] = {
             "total_records": len(df),
             "date_start": df["Date"].min() if "Date" in df.columns else None,
@@ -364,7 +372,7 @@ def load_staff_data() -> Dict[str, Any]:
             "avg_nurses": max(0, raw_avg_nurses) if raw_avg_nurses else 0,
             "avg_support": max(0, raw_avg_support) if raw_avg_support else 0,
             "total_overtime": max(0, raw_total_overtime) if raw_total_overtime else 0,
-            "avg_utilization": max(0, min(100, abs(raw_avg_utilization))) if raw_avg_utilization else 0,
+            "avg_utilization": max(0, abs(raw_avg_utilization)) if raw_avg_utilization else 0,
             "shortage_days": max(0, int(raw_shortage_days)) if raw_shortage_days else 0,
             "max_doctors": max(0, df["Doctors_on_Duty"].max()) if "Doctors_on_Duty" in df.columns else 0,
             "min_doctors": max(0, df["Doctors_on_Duty"].min()) if "Doctors_on_Duty" in df.columns else 0,
