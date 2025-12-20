@@ -337,6 +337,8 @@ if "staff_insight_mode" not in st.session_state:
     st.session_state.staff_insight_mode = "rule_based"
 if "staff_llm_api_key" not in st.session_state:
     st.session_state.staff_llm_api_key = None
+if "staff_api_provider" not in st.session_state:
+    st.session_state.staff_api_provider = "anthropic"  # Default to Anthropic
 
 
 # =============================================================================
@@ -1499,19 +1501,47 @@ with tab4:
             has_api_key = bool(st.session_state.staff_llm_api_key)
 
             with st.expander("🔑 LLM API Configuration", expanded=not has_api_key):
-                st.markdown("**Configure OpenAI API for AI-Powered Insights**")
+                # Provider selection
+                st.markdown("**Select AI Provider:**")
+                provider_col1, provider_col2 = st.columns(2)
+
+                with provider_col1:
+                    if st.button(
+                        "🟣 Anthropic (Claude)",
+                        type="primary" if st.session_state.staff_api_provider == "anthropic" else "secondary",
+                        use_container_width=True,
+                        key="staff_provider_anthropic"
+                    ):
+                        st.session_state.staff_api_provider = "anthropic"
+                        st.rerun()
+
+                with provider_col2:
+                    if st.button(
+                        "🟢 OpenAI (GPT)",
+                        type="primary" if st.session_state.staff_api_provider == "openai" else "secondary",
+                        use_container_width=True,
+                        key="staff_provider_openai"
+                    ):
+                        st.session_state.staff_api_provider = "openai"
+                        st.rerun()
+
+                st.markdown("---")
+
+                # API Key input
+                provider_name = "Anthropic" if st.session_state.staff_api_provider == "anthropic" else "OpenAI"
+                model_name = "Claude Sonnet 4" if st.session_state.staff_api_provider == "anthropic" else "GPT-4o-mini"
 
                 api_key = st.text_input(
-                    "OpenAI API Key",
+                    f"{provider_name} API Key",
                     type="password",
                     value=st.session_state.staff_llm_api_key or "",
-                    help="Enter your OpenAI API key for natural language insights",
+                    help=f"Enter your {provider_name} API key for natural language insights",
                     key="staff_api_key_input"
                 )
 
                 if api_key:
                     st.session_state.staff_llm_api_key = api_key
-                    st.success("✅ API Key detected! AI-powered insights will use OpenAI GPT-4o-mini for natural language summaries.")
+                    st.success(f"✅ API Key detected! AI-powered insights will use {model_name} for natural language summaries.")
                 else:
                     st.warning("⚠️ No API key entered. Will use rule-based insights with an LLM note.")
 
@@ -1525,7 +1555,8 @@ with tab4:
 
             engine = StaffRecommendationEngine(
                 mode=st.session_state.staff_insight_mode,
-                api_key=st.session_state.staff_llm_api_key
+                api_key=st.session_state.staff_llm_api_key,
+                api_provider=st.session_state.staff_api_provider
             )
 
             insight_result = engine.generate_insights(

@@ -100,19 +100,32 @@ class InsightResult:
 # BASE ENGINE
 # =============================================================================
 
+class APIProvider(Enum):
+    """Supported LLM API providers."""
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+
+
 class BaseRecommendationEngine:
     """Base class for recommendation engines."""
 
-    def __init__(self, mode: str = "rule_based", api_key: Optional[str] = None):
+    def __init__(
+        self,
+        mode: str = "rule_based",
+        api_key: Optional[str] = None,
+        api_provider: str = "anthropic"
+    ):
         """
         Initialize the recommendation engine.
 
         Args:
             mode: "rule_based" (Option A) or "llm" (Option B)
             api_key: API key for LLM mode (OpenAI or Anthropic)
+            api_provider: "openai" or "anthropic" (default: anthropic)
         """
         self.mode = InsightMode(mode)
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+        self.api_provider = APIProvider(api_provider)
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
 
     def _format_currency(self, value: float) -> str:
         """Format a number as currency."""
@@ -456,65 +469,104 @@ class StaffRecommendationEngine(BaseRecommendationEngine):
             rule_based.executive_summary += "\n\n*Note: LLM mode selected but no API key configured. Using rule-based insights.*"
             return rule_based
 
-        try:
-            # Try OpenAI first
-            import openai
-            client = openai.OpenAI(api_key=self.api_key)
+        # Build context for LLM
+        context = self._build_llm_context(before_stats, opt, cost_params)
+        key_insight_prompt = self._build_key_insight_prompt(before_stats, opt)
 
-            # Build context for LLM
-            context = self._build_llm_context(before_stats, opt, cost_params)
+        system_prompt_summary = """You are a healthcare operations analyst expert.
+Analyze staffing optimization results and provide sophisticated, actionable insights.
+Be direct and focus on what matters to hospital administrators.
+Always explain WHY costs are changing, not just what changed.
+Use professional healthcare industry terminology.
+Focus on patient care quality, staff wellbeing, and operational efficiency."""
 
-            # First API call: Get enhanced executive summary and key insight
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",  # Use smaller model for cost efficiency
-                messages=[
-                    {"role": "system", "content": """You are a healthcare operations analyst expert.
-                    Analyze staffing optimization results and provide sophisticated, actionable insights.
-                    Be direct and focus on what matters to hospital administrators.
-                    Always explain WHY costs are changing, not just what changed.
-                    Use professional healthcare industry terminology.
-                    Focus on patient care quality, staff wellbeing, and operational efficiency."""},
-                    {"role": "user", "content": context}
-                ],
-                max_tokens=700,
-                temperature=0.3
-            )
+        system_prompt_insight = """You are a healthcare operations analyst.
+Write a concise but impactful 2-3 sentence explanation of the key finding.
+Be specific about numbers and percentages. Focus on the business impact.
+Do NOT use markdown formatting. Just plain text."""
 
-            llm_summary = response.choices[0].message.content
+        # Try Anthropic first (default), then OpenAI
+        if self.api_provider == APIProvider.ANTHROPIC:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=self.api_key)
 
-            # Second API call: Get an enhanced key insight message
-            key_insight_prompt = self._build_key_insight_prompt(before_stats, opt)
-            key_insight_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": """You are a healthcare operations analyst.
-                    Write a concise but impactful 2-3 sentence explanation of the key finding.
-                    Be specific about numbers and percentages. Focus on the business impact.
-                    Do NOT use markdown formatting. Just plain text."""},
-                    {"role": "user", "content": key_insight_prompt}
-                ],
-                max_tokens=150,
-                temperature=0.2
-            )
+                # First API call: Get enhanced executive summary
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=700,
+                    system=system_prompt_summary,
+                    messages=[{"role": "user", "content": context}]
+                )
+                llm_summary = response.content[0].text
 
-            enhanced_key_insight = key_insight_response.choices[0].message.content
+                # Second API call: Get enhanced key insight
+                key_response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=150,
+                    system=system_prompt_insight,
+                    messages=[{"role": "user", "content": key_insight_prompt}]
+                )
+                enhanced_key_insight = key_response.content[0].text
 
-            # Update the key insight with LLM-generated message
-            rule_based.key_insight.message = enhanced_key_insight
+                # Update results
+                rule_based.key_insight.message = enhanced_key_insight
+                rule_based.executive_summary = llm_summary
+                rule_based.raw_llm_response = llm_summary
+                rule_based.mode = InsightMode.LLM
 
-            # Use rule-based KPIs but LLM executive summary
-            rule_based.executive_summary = llm_summary
-            rule_based.raw_llm_response = llm_summary
-            rule_based.mode = InsightMode.LLM
+                return rule_based
 
-            return rule_based
+            except ImportError:
+                rule_based.executive_summary += "\n\n*Note: Anthropic package not installed. Run `pip install anthropic` to enable LLM mode.*"
+                return rule_based
+            except Exception as e:
+                rule_based.executive_summary += f"\n\n*Note: Anthropic API error: {str(e)}. Using rule-based insights.*"
+                return rule_based
 
-        except ImportError:
-            rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Run `pip install openai` to enable LLM mode.*"
-            return rule_based
-        except Exception as e:
-            rule_based.executive_summary += f"\n\n*Note: LLM error: {str(e)}. Using rule-based insights.*"
-            return rule_based
+        else:  # OpenAI
+            try:
+                import openai
+                client = openai.OpenAI(api_key=self.api_key)
+
+                # First API call: Get enhanced executive summary
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt_summary},
+                        {"role": "user", "content": context}
+                    ],
+                    max_tokens=700,
+                    temperature=0.3
+                )
+                llm_summary = response.choices[0].message.content
+
+                # Second API call: Get enhanced key insight
+                key_response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt_insight},
+                        {"role": "user", "content": key_insight_prompt}
+                    ],
+                    max_tokens=150,
+                    temperature=0.2
+                )
+                enhanced_key_insight = key_response.choices[0].message.content
+
+                # Update results
+                rule_based.key_insight.message = enhanced_key_insight
+                rule_based.executive_summary = llm_summary
+                rule_based.raw_llm_response = llm_summary
+                rule_based.mode = InsightMode.LLM
+
+                return rule_based
+
+            except ImportError:
+                rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Run `pip install openai` to enable LLM mode.*"
+                return rule_based
+            except Exception as e:
+                rule_based.executive_summary += f"\n\n*Note: OpenAI API error: {str(e)}. Using rule-based insights.*"
+                return rule_based
 
     def _build_key_insight_prompt(
         self,
@@ -824,61 +876,103 @@ class SupplyRecommendationEngine(BaseRecommendationEngine):
             rule_based.executive_summary += "\n\n*Note: LLM mode selected but no API key configured. Using rule-based insights.*"
             return rule_based
 
-        try:
-            import openai
-            client = openai.OpenAI(api_key=self.api_key)
+        # Build context for LLM
+        context = self._build_llm_context(before_stats, opt, cost_params)
+        key_insight_prompt = self._build_key_insight_prompt(before_stats, opt)
 
-            context = self._build_llm_context(before_stats, opt, cost_params)
+        system_prompt_summary = """You are a healthcare supply chain analyst expert.
+Analyze inventory optimization results and provide sophisticated, actionable insights.
+Focus on service levels, stockout prevention, and cost efficiency.
+Use professional supply chain terminology.
+Emphasize patient care continuity and operational resilience."""
 
-            # First API call: Get enhanced executive summary
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": """You are a healthcare supply chain analyst expert.
-                    Analyze inventory optimization results and provide sophisticated, actionable insights.
-                    Focus on service levels, stockout prevention, and cost efficiency.
-                    Use professional supply chain terminology.
-                    Emphasize patient care continuity and operational resilience."""},
-                    {"role": "user", "content": context}
-                ],
-                max_tokens=700,
-                temperature=0.3
-            )
+        system_prompt_insight = """You are a healthcare supply chain analyst.
+Write a concise but impactful 2-3 sentence explanation of the key finding.
+Be specific about numbers and percentages. Focus on patient care impact.
+Do NOT use markdown formatting. Just plain text."""
 
-            llm_summary = response.choices[0].message.content
+        # Try Anthropic first (default), then OpenAI
+        if self.api_provider == APIProvider.ANTHROPIC:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=self.api_key)
 
-            # Second API call: Get an enhanced key insight message
-            key_insight_prompt = self._build_key_insight_prompt(before_stats, opt)
-            key_insight_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": """You are a healthcare supply chain analyst.
-                    Write a concise but impactful 2-3 sentence explanation of the key finding.
-                    Be specific about numbers and percentages. Focus on patient care impact.
-                    Do NOT use markdown formatting. Just plain text."""},
-                    {"role": "user", "content": key_insight_prompt}
-                ],
-                max_tokens=150,
-                temperature=0.2
-            )
+                # First API call: Get enhanced executive summary
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=700,
+                    system=system_prompt_summary,
+                    messages=[{"role": "user", "content": context}]
+                )
+                llm_summary = response.content[0].text
 
-            enhanced_key_insight = key_insight_response.choices[0].message.content
+                # Second API call: Get enhanced key insight
+                key_response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=150,
+                    system=system_prompt_insight,
+                    messages=[{"role": "user", "content": key_insight_prompt}]
+                )
+                enhanced_key_insight = key_response.content[0].text
 
-            # Update the key insight with LLM-generated message
-            rule_based.key_insight.message = enhanced_key_insight
+                # Update results
+                rule_based.key_insight.message = enhanced_key_insight
+                rule_based.executive_summary = llm_summary
+                rule_based.raw_llm_response = llm_summary
+                rule_based.mode = InsightMode.LLM
 
-            rule_based.executive_summary = llm_summary
-            rule_based.raw_llm_response = llm_summary
-            rule_based.mode = InsightMode.LLM
+                return rule_based
 
-            return rule_based
+            except ImportError:
+                rule_based.executive_summary += "\n\n*Note: Anthropic package not installed. Run `pip install anthropic` to enable LLM mode.*"
+                return rule_based
+            except Exception as e:
+                rule_based.executive_summary += f"\n\n*Note: Anthropic API error: {str(e)}. Using rule-based insights.*"
+                return rule_based
 
-        except ImportError:
-            rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Run `pip install openai` to enable LLM mode.*"
-            return rule_based
-        except Exception as e:
-            rule_based.executive_summary += f"\n\n*Note: LLM error: {str(e)}. Using rule-based insights.*"
-            return rule_based
+        else:  # OpenAI
+            try:
+                import openai
+                client = openai.OpenAI(api_key=self.api_key)
+
+                # First API call: Get enhanced executive summary
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt_summary},
+                        {"role": "user", "content": context}
+                    ],
+                    max_tokens=700,
+                    temperature=0.3
+                )
+                llm_summary = response.choices[0].message.content
+
+                # Second API call: Get enhanced key insight
+                key_response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt_insight},
+                        {"role": "user", "content": key_insight_prompt}
+                    ],
+                    max_tokens=150,
+                    temperature=0.2
+                )
+                enhanced_key_insight = key_response.choices[0].message.content
+
+                # Update results
+                rule_based.key_insight.message = enhanced_key_insight
+                rule_based.executive_summary = llm_summary
+                rule_based.raw_llm_response = llm_summary
+                rule_based.mode = InsightMode.LLM
+
+                return rule_based
+
+            except ImportError:
+                rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Run `pip install openai` to enable LLM mode.*"
+                return rule_based
+            except Exception as e:
+                rule_based.executive_summary += f"\n\n*Note: OpenAI API error: {str(e)}. Using rule-based insights.*"
+                return rule_based
 
     def _build_key_insight_prompt(
         self,

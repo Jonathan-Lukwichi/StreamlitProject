@@ -25,6 +25,7 @@ from .recommendation_engine import (
     StaffRecommendationEngine,
     SupplyRecommendationEngine,
     InsightMode,
+    APIProvider,
     Insight,
     Recommendation,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "StaffRecommendationEngine",
     "SupplyRecommendationEngine",
     "InsightMode",
+    "APIProvider",
     "Insight",
     "Recommendation",
 ]
