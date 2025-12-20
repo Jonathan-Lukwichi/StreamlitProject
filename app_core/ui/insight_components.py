@@ -351,26 +351,20 @@ def render_key_insight(insight: Insight):
     else:
         box_class = "savings"
 
-    details_html = ""
-    if insight.details:
+    # Build details section if present
+    details_section = ""
+    if insight.details and len(insight.details) > 0:
         details_items = "".join([f"<li>{d}</li>" for d in insight.details])
-        details_html = f"""
-        <div class="key-insight-details">
-            <ul>{details_items}</ul>
-        </div>
-        """
+        details_section = f'<div class="key-insight-details"><ul>{details_items}</ul></div>'
 
-    st.markdown(f"""
-    <div class="key-insight-box {box_class}">
-        <div class="key-insight-title">
-            {insight.icon} {insight.title}
-        </div>
-        <div class="key-insight-message">
-            {insight.message}
-        </div>
-        {details_html}
-    </div>
-    """, unsafe_allow_html=True)
+    # Build the complete HTML (no leading whitespace to avoid rendering issues)
+    html_content = f'''<div class="key-insight-box {box_class}">
+<div class="key-insight-title">{insight.icon} {insight.title}</div>
+<div class="key-insight-message">{insight.message}</div>
+{details_section}
+</div>'''
+
+    st.markdown(html_content, unsafe_allow_html=True)
 
 
 def render_recommendations(recommendations: List[Recommendation]):

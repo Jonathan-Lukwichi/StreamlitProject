@@ -464,22 +464,45 @@ class StaffRecommendationEngine(BaseRecommendationEngine):
             # Build context for LLM
             context = self._build_llm_context(before_stats, opt, cost_params)
 
+            # First API call: Get enhanced executive summary and key insight
             response = client.chat.completions.create(
                 model="gpt-4o-mini",  # Use smaller model for cost efficiency
                 messages=[
-                    {"role": "system", "content": """You are a healthcare operations analyst.
-                    Analyze staffing optimization results and provide clear, actionable insights.
+                    {"role": "system", "content": """You are a healthcare operations analyst expert.
+                    Analyze staffing optimization results and provide sophisticated, actionable insights.
                     Be direct and focus on what matters to hospital administrators.
-                    Always explain WHY costs are changing, not just what changed."""},
+                    Always explain WHY costs are changing, not just what changed.
+                    Use professional healthcare industry terminology.
+                    Focus on patient care quality, staff wellbeing, and operational efficiency."""},
                     {"role": "user", "content": context}
                 ],
-                max_tokens=500,
+                max_tokens=700,
                 temperature=0.3
             )
 
             llm_summary = response.choices[0].message.content
 
-            # Use rule-based KPIs and recommendations, but LLM executive summary
+            # Second API call: Get an enhanced key insight message
+            key_insight_prompt = self._build_key_insight_prompt(before_stats, opt)
+            key_insight_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": """You are a healthcare operations analyst.
+                    Write a concise but impactful 2-3 sentence explanation of the key finding.
+                    Be specific about numbers and percentages. Focus on the business impact.
+                    Do NOT use markdown formatting. Just plain text."""},
+                    {"role": "user", "content": key_insight_prompt}
+                ],
+                max_tokens=150,
+                temperature=0.2
+            )
+
+            enhanced_key_insight = key_insight_response.choices[0].message.content
+
+            # Update the key insight with LLM-generated message
+            rule_based.key_insight.message = enhanced_key_insight
+
+            # Use rule-based KPIs but LLM executive summary
             rule_based.executive_summary = llm_summary
             rule_based.raw_llm_response = llm_summary
             rule_based.mode = InsightMode.LLM
@@ -487,11 +510,39 @@ class StaffRecommendationEngine(BaseRecommendationEngine):
             return rule_based
 
         except ImportError:
-            rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Using rule-based insights.*"
+            rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Run `pip install openai` to enable LLM mode.*"
             return rule_based
         except Exception as e:
             rule_based.executive_summary += f"\n\n*Note: LLM error: {str(e)}. Using rule-based insights.*"
             return rule_based
+
+    def _build_key_insight_prompt(
+        self,
+        before_stats: Dict[str, Any],
+        opt: Dict[str, Any]
+    ) -> str:
+        """Build prompt for key insight generation."""
+        cost_before = opt.get("current_weekly_cost", 0)
+        cost_after = opt.get("optimized_weekly_cost", 0)
+        cost_diff = cost_after - cost_before
+        cost_pct = (cost_diff / cost_before * 100) if cost_before > 0 else 0
+
+        doctors_before = before_stats.get("avg_doctors", 0)
+        doctors_after = opt.get("avg_opt_doctors", 0)
+        util_before = before_stats.get("avg_utilization", 0)
+
+        return f"""
+Based on this staffing optimization:
+- Cost change: ${cost_diff:,.0f}/week ({cost_pct:+.1f}%)
+- Doctor change: {doctors_before:.0f} → {doctors_after:.0f}
+- Current utilization: {util_before:.1f}%
+- Target utilization: 95%
+- Current overtime: {before_stats.get('total_overtime', 0):,.0f} hours
+- Current shortage days: {before_stats.get('shortage_days', 0)}
+
+Write a 2-3 sentence key finding that explains the IMPACT of this optimization.
+Focus on patient care and operational efficiency. Be specific with numbers.
+"""
 
     def _build_llm_context(
         self,
@@ -779,19 +830,43 @@ class SupplyRecommendationEngine(BaseRecommendationEngine):
 
             context = self._build_llm_context(before_stats, opt, cost_params)
 
+            # First API call: Get enhanced executive summary
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": """You are a healthcare supply chain analyst.
-                    Analyze inventory optimization results and provide clear, actionable insights.
-                    Focus on service levels, stockout prevention, and cost efficiency."""},
+                    {"role": "system", "content": """You are a healthcare supply chain analyst expert.
+                    Analyze inventory optimization results and provide sophisticated, actionable insights.
+                    Focus on service levels, stockout prevention, and cost efficiency.
+                    Use professional supply chain terminology.
+                    Emphasize patient care continuity and operational resilience."""},
                     {"role": "user", "content": context}
                 ],
-                max_tokens=500,
+                max_tokens=700,
                 temperature=0.3
             )
 
             llm_summary = response.choices[0].message.content
+
+            # Second API call: Get an enhanced key insight message
+            key_insight_prompt = self._build_key_insight_prompt(before_stats, opt)
+            key_insight_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": """You are a healthcare supply chain analyst.
+                    Write a concise but impactful 2-3 sentence explanation of the key finding.
+                    Be specific about numbers and percentages. Focus on patient care impact.
+                    Do NOT use markdown formatting. Just plain text."""},
+                    {"role": "user", "content": key_insight_prompt}
+                ],
+                max_tokens=150,
+                temperature=0.2
+            )
+
+            enhanced_key_insight = key_insight_response.choices[0].message.content
+
+            # Update the key insight with LLM-generated message
+            rule_based.key_insight.message = enhanced_key_insight
+
             rule_based.executive_summary = llm_summary
             rule_based.raw_llm_response = llm_summary
             rule_based.mode = InsightMode.LLM
@@ -799,11 +874,37 @@ class SupplyRecommendationEngine(BaseRecommendationEngine):
             return rule_based
 
         except ImportError:
-            rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Using rule-based insights.*"
+            rule_based.executive_summary += "\n\n*Note: OpenAI package not installed. Run `pip install openai` to enable LLM mode.*"
             return rule_based
         except Exception as e:
             rule_based.executive_summary += f"\n\n*Note: LLM error: {str(e)}. Using rule-based insights.*"
             return rule_based
+
+    def _build_key_insight_prompt(
+        self,
+        before_stats: Dict[str, Any],
+        opt: Dict[str, Any]
+    ) -> str:
+        """Build prompt for key insight generation."""
+        cost_before = opt.get("current_weekly_cost", 0)
+        cost_after = opt.get("optimized_weekly_cost", 0)
+        cost_diff = cost_after - cost_before
+        cost_pct = (cost_diff / cost_before * 100) if cost_before > 0 else 0
+
+        stockout_risk = before_stats.get("avg_stockout_risk", 0)
+        service_level = 100 - stockout_risk
+
+        return f"""
+Based on this inventory optimization:
+- Cost change: ${cost_diff:,.0f}/week ({cost_pct:+.1f}%)
+- Current stockout risk: {stockout_risk:.1f}%
+- Current service level: {service_level:.1f}%
+- Target service level: 100%
+- Restock events: {before_stats.get('restock_events', 0)}
+
+Write a 2-3 sentence key finding that explains the IMPACT of this optimization.
+Focus on patient care continuity and supply chain reliability. Be specific with numbers.
+"""
 
     def _build_llm_context(
         self,

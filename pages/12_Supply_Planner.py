@@ -1588,7 +1588,12 @@ with tab4:
 
         # API Key input for LLM mode
         if st.session_state.supply_insight_mode == "llm":
-            with st.expander("LLM API Configuration", expanded=False):
+            # Check if API key is already set
+            has_api_key = bool(st.session_state.supply_llm_api_key)
+
+            with st.expander("🔑 LLM API Configuration", expanded=not has_api_key):
+                st.markdown("**Configure OpenAI API for AI-Powered Insights**")
+
                 api_key = st.text_input(
                     "OpenAI API Key",
                     type="password",
@@ -1596,8 +1601,14 @@ with tab4:
                     help="Enter your OpenAI API key for natural language insights",
                     key="supply_api_key_input"
                 )
+
                 if api_key:
                     st.session_state.supply_llm_api_key = api_key
+                    st.success("✅ API Key detected! AI-powered insights will use OpenAI GPT-4o-mini for natural language summaries.")
+                else:
+                    st.warning("⚠️ No API key entered. Will use rule-based insights with an LLM note.")
+
+                st.caption("💡 Your API key is stored securely in session only and is never saved to disk.")
 
         st.markdown("---")
 
