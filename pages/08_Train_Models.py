@@ -2766,6 +2766,11 @@ def page_ml():
                         # Store results in session state
                         st.session_state["ml_mh_results"] = results
 
+                        # Also save to individual model key for hybrid model detection
+                        # This allows multiple models to be detected even when trained separately
+                        model_key = f"ml_mh_results_{cfg['ml_choice'].lower()}"
+                        st.session_state[model_key] = results
+
                         # Auto-save to cache for persistence
                         try:
                             cache_mgr = get_cache_manager()
