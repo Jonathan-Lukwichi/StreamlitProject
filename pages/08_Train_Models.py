@@ -4946,33 +4946,6 @@ def page_hybrid():
         unsafe_allow_html=True,
     )
 
-    # Dataset Selection (Feature Engineering Integration) - Moved before diagnostics
-    st.markdown("### 🎨 Dataset Selection")
-
-    # Check if feature engineering has been run
-    feature_eng_data = st.session_state.get("feature_engineering", {})
-    has_variant_a = "A" in feature_eng_data and isinstance(feature_eng_data["A"], pd.DataFrame) and not feature_eng_data["A"].empty
-    has_variant_b = "B" in feature_eng_data and isinstance(feature_eng_data["B"], pd.DataFrame) and not feature_eng_data["B"].empty
-
-    dataset_options = ["📊 Original Dataset (Basic Features)"]
-    if has_variant_a:
-        dataset_options.append("🔢 Variant A (OHE + Calendar Features)")
-    if has_variant_b:
-        dataset_options.append("🌀 Variant B (Cyclical + Harmonic Features)")
-
-    if len(dataset_options) > 1:
-        st.info("✨ **Feature-engineered datasets detected!** Select a dataset with advanced features to improve base model performance.")
-
-    selected_dataset = st.selectbox(
-        "Choose dataset for hybrid models",
-        options=dataset_options,
-        index=0,
-        help="Original: Basic time series data | Variant A: One-hot encoded calendar features | Variant B: Cyclical sin/cos encoded features"
-    )
-
-    # Store selected dataset in session state for hybrid functions to access
-    st.session_state["hybrid_selected_dataset"] = selected_dataset
-
     # ==========================================================================
     # HYBRID MODEL DIAGNOSTIC PIPELINE (Available for ALL hybrid strategies)
     # Diagnoses all trained models BEFORE selecting ensemble strategy
@@ -5305,7 +5278,7 @@ def _render_hybrid_diagnostic_pipeline():
         st.info(f"✅ Found **{len(trained_models)}** trained model(s): {', '.join(trained_models.keys())}")
 
         # =========================================================================
-        # OPTIONAL MODEL SELECTION (Analyze All by default)
+        # OPTIONAL MODEL SELECTION (Multiselect Dropdown)
         # =========================================================================
         st.markdown("""
         <div style='background: rgba(16, 185, 129, 0.1);
@@ -5314,31 +5287,29 @@ def _render_hybrid_diagnostic_pipeline():
                     border-radius: 8px;
                     margin: 0.5rem 0;'>
             <span style='color: #10B981; font-weight: 600;'>📋 Model Selection</span>
-            <span style='color: #9CA3AF; font-size: 0.9rem;'> — All models are analyzed by default. Uncheck to exclude specific models.</span>
+            <span style='color: #9CA3AF; font-size: 0.9rem;'> — Select models to include in the diagnostic analysis</span>
         </div>
         """, unsafe_allow_html=True)
 
-        # Create checkboxes for each model (default = all selected)
-        selected_models = {}
-        num_models = len(trained_models)
-        num_cols = min(num_models, 4)  # Max 4 columns
-        cols = st.columns(num_cols)
-
-        for i, (model_name, _) in enumerate(trained_models.items()):
+        # Create multiselect dropdown with all trained models as default
+        available_model_options = []
+        for model_name in trained_models.keys():
             icon = model_icons.get(model_name, "✅")
-            with cols[i % num_cols]:
-                # Checkbox with model name - default is checked (include in analysis)
-                is_selected = st.checkbox(
-                    f"{icon} **{model_name}**",
-                    value=True,  # Default: analyze all models
-                    key=f"diag_model_select_{model_name}",
-                    help=f"Include {model_name} in diagnostic analysis"
-                )
-                selected_models[model_name] = is_selected
+            available_model_options.append(f"{icon} {model_name}")
 
-        # Count selected models
-        num_selected = sum(selected_models.values())
-        selected_names = [name for name, selected in selected_models.items() if selected]
+        # Multiselect dropdown - default is all models selected
+        selected_model_labels = st.multiselect(
+            "Select Models for Analysis",
+            options=available_model_options,
+            default=available_model_options,  # All selected by default
+            help="Choose which trained models to include in the diagnostic analysis",
+            key="diag_model_multiselect"
+        )
+
+        # Extract model names from selected labels (remove emoji prefix)
+        selected_names = [label.split(" ", 1)[1] if " " in label else label for label in selected_model_labels]
+        selected_models = {name: (name in selected_names) for name in trained_models.keys()}
+        num_selected = len(selected_names)
 
         if num_selected == 0:
             st.warning("⚠️ Please select at least one model to analyze.")
@@ -5596,6 +5567,10 @@ def _extract_predictions_for_diagnostic(source_model: str):
     """
     Extract y_true, y_pred, and dates from a trained model's results.
 
+    Uses the per_h structure which contains:
+    - SARIMAX: y_test, forecast, fitted, ci_lo, ci_hi
+    - ML models: y_test, forecast, datetime, ci_lo, ci_hi
+
     Returns:
         Tuple of (y_true, y_pred, dates) or (None, None, None) if extraction fails.
     """
@@ -5606,24 +5581,38 @@ def _extract_predictions_for_diagnostic(source_model: str):
             results = st.session_state.get("sarimax_results", {})
             per_h = results.get("per_h", {})
             if per_h:
-                # Get first horizon's results
+                # Get first horizon's results (or aggregate all horizons)
                 first_horizon = list(per_h.values())[0]
-                df_pred = first_horizon.get("df_pred")
-                if df_pred is not None and not df_pred.empty:
-                    # Try to find actual and predicted columns
-                    actual_col = None
-                    pred_col = None
-                    for col in df_pred.columns:
-                        if "actual" in col.lower() or "y_true" in col.lower() or "true" in col.lower():
-                            actual_col = col
-                        elif "pred" in col.lower() or "forecast" in col.lower():
-                            pred_col = col
 
-                    if actual_col and pred_col:
-                        y_true = df_pred[actual_col].values
-                        y_pred = df_pred[pred_col].values
-                        dates = df_pred.index if isinstance(df_pred.index, pd.DatetimeIndex) else None
-                        return y_true, y_pred, dates
+                # Extract from per_h structure: y_test and forecast keys
+                y_test = first_horizon.get("y_test")
+                forecast = first_horizon.get("forecast")
+
+                if y_test is not None and forecast is not None:
+                    # Convert to numpy arrays if needed
+                    if hasattr(y_test, 'values'):
+                        y_true = y_test.values
+                    else:
+                        y_true = np.array(y_test)
+
+                    if hasattr(forecast, 'values'):
+                        y_pred = forecast.values
+                    else:
+                        y_pred = np.array(forecast)
+
+                    # Try to get dates from y_test index
+                    dates = None
+                    if hasattr(y_test, 'index') and isinstance(y_test.index, pd.DatetimeIndex):
+                        dates = y_test.index
+
+                    # Ensure same length (forecast might be shorter due to horizon)
+                    min_len = min(len(y_true), len(y_pred))
+                    y_true = y_true[:min_len]
+                    y_pred = y_pred[:min_len]
+                    if dates is not None:
+                        dates = dates[:min_len]
+
+                    return y_true, y_pred, dates
 
         elif source_model in ["ML Model (XGBoost/LSTM/ANN)", "XGBoost", "LSTM", "ANN"]:
             # Try individual model key first
@@ -5636,20 +5625,40 @@ def _extract_predictions_for_diagnostic(source_model: str):
             per_h = results.get("per_h", {})
             if per_h:
                 first_horizon = list(per_h.values())[0]
-                df_pred = first_horizon.get("df_pred")
-                if df_pred is not None and not df_pred.empty:
-                    actual_col = None
-                    pred_col = None
-                    for col in df_pred.columns:
-                        if "actual" in col.lower() or "y_true" in col.lower() or "true" in col.lower():
-                            actual_col = col
-                        elif "pred" in col.lower() or "forecast" in col.lower():
-                            pred_col = col
 
-                    if actual_col and pred_col:
-                        y_true = df_pred[actual_col].values
-                        y_pred = df_pred[pred_col].values
-                        dates = df_pred.index if isinstance(df_pred.index, pd.DatetimeIndex) else None
+                # Extract from per_h structure: y_test and forecast keys
+                y_test = first_horizon.get("y_test")
+                forecast = first_horizon.get("forecast")
+                datetime_arr = first_horizon.get("datetime")
+
+                if y_test is not None and forecast is not None:
+                    # Convert to numpy arrays if needed
+                    if hasattr(y_test, 'values'):
+                        y_true = y_test.values
+                    else:
+                        y_true = np.array(y_test) if y_test is not None else None
+
+                    if hasattr(forecast, 'values'):
+                        y_pred = forecast.values
+                    else:
+                        y_pred = np.array(forecast) if forecast is not None else None
+
+                    # Get dates from datetime array or index
+                    dates = None
+                    if datetime_arr is not None:
+                        if hasattr(datetime_arr, 'values'):
+                            dates = pd.to_datetime(datetime_arr.values)
+                        else:
+                            dates = pd.to_datetime(datetime_arr)
+
+                    if y_true is not None and y_pred is not None:
+                        # Ensure same length
+                        min_len = min(len(y_true), len(y_pred))
+                        y_true = y_true[:min_len]
+                        y_pred = y_pred[:min_len]
+                        if dates is not None:
+                            dates = dates[:min_len]
+
                         return y_true, y_pred, dates
 
         # If we couldn't find predictions from model results, try to compute from raw data
