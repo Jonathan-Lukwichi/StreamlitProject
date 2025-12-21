@@ -4946,39 +4946,7 @@ def page_hybrid():
         unsafe_allow_html=True,
     )
 
-    # Ensemble Strategy Selection
-    st.markdown(
-        f"""
-        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
-                    border-left: 4px solid #A855F7;
-                    padding: 1.5rem;
-                    border-radius: 12px;
-                    margin: 1.5rem 0;
-                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
-            <h3 style='color: #A855F7; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
-                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
-                🎯 Select Ensemble Strategy
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    ensemble_type = st.radio(
-        "Choose your hybrid modeling approach",
-        options=[
-            "⚖️ Weighted Ensemble (Combine Trained Models)",
-            "🔬 Decomposition + Ensemble (Component-Based Modeling)",
-            "🔗 Stacking Ensemble (Meta-Learning)",
-            "🧠 LSTM-SARIMAX Hybrid (Neural + Statistical)",
-            "🚀 LSTM-XGBoost Hybrid (Neural + Gradient Boosting)",
-            "🎯 LSTM-ANN Hybrid (Neural + Neural Residuals)"
-        ],
-        index=0,
-        help="Weighted: Combine trained models | Decomposition: Component-based | Stacking: Meta-learning | LSTM-SARIMAX: LSTM + ARIMA residuals | LSTM-XGBoost: LSTM + XGBoost residuals | LSTM-ANN: LSTM + ANN residual network"
-    )
-
-    # Dataset Selection (Feature Engineering Integration)
+    # Dataset Selection (Feature Engineering Integration) - Moved before diagnostics
     st.markdown("### 🎨 Dataset Selection")
 
     # Check if feature engineering has been run
@@ -5007,8 +4975,48 @@ def page_hybrid():
 
     # ==========================================================================
     # HYBRID MODEL DIAGNOSTIC PIPELINE (Available for ALL hybrid strategies)
+    # Diagnoses all trained models BEFORE selecting ensemble strategy
     # ==========================================================================
     _render_hybrid_diagnostic_pipeline()
+
+    st.divider()
+
+    # ==========================================================================
+    # ENSEMBLE STRATEGY SELECTION (Now AFTER diagnostics)
+    # ==========================================================================
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
+                    border-left: 4px solid #A855F7;
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
+            <h3 style='color: #A855F7; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
+                🎯 Select Ensemble Strategy
+            </h3>
+            <p style='color: #D1D5DB; margin: 0; font-size: 0.95rem;'>
+                Based on the diagnostic results above, choose the best hybrid approach for your data
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    ensemble_type = st.radio(
+        "Choose your hybrid modeling approach",
+        options=[
+            "⚖️ Weighted Ensemble (Combine Trained Models)",
+            "🔬 Decomposition + Ensemble (Component-Based Modeling)",
+            "🔗 Stacking Ensemble (Meta-Learning)",
+            "🧠 LSTM-SARIMAX Hybrid (Neural + Statistical)",
+            "🚀 LSTM-XGBoost Hybrid (Neural + Gradient Boosting)",
+            "🎯 LSTM-ANN Hybrid (Neural + Neural Residuals)"
+        ],
+        index=0,
+        help="Weighted: Combine trained models | Decomposition: Component-based | Stacking: Meta-learning | LSTM-SARIMAX: LSTM + ARIMA residuals | LSTM-XGBoost: LSTM + XGBoost residuals | LSTM-ANN: LSTM + ANN residual network"
+    )
 
     st.divider()
 
