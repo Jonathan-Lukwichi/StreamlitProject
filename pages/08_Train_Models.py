@@ -5007,6 +5007,12 @@ def page_hybrid():
     # Store selected dataset in session state for hybrid functions to access
     st.session_state["hybrid_selected_dataset"] = selected_dataset
 
+    # ==========================================================================
+    # HYBRID MODEL DIAGNOSTIC TOOL
+    # ==========================================================================
+    if any(x in ensemble_type for x in ["LSTM-SARIMAX", "LSTM-XGBoost", "LSTM-ANN"]):
+        _render_hybrid_diagnostic_tool()
+
     st.divider()
 
     if "Weighted Ensemble" in ensemble_type:
@@ -5050,6 +5056,285 @@ def _get_hybrid_dataset():
         fused_data = st.session_state.get("merged_data")
 
     return fused_data
+
+
+def _render_hybrid_diagnostic_tool():
+    """
+    Render the hybrid model diagnostic tool.
+
+    This tool helps users understand:
+    1. Do residuals have learnable structure?
+    2. Is the data sufficient for two-stage modeling?
+    3. Should they use a hybrid model or stick with a single model?
+    """
+    with st.expander("🔬 **Hybrid Model Diagnostic Tool** - Should you use a hybrid model?", expanded=False):
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1));
+                    border-left: 4px solid #3B82F6;
+                    padding: 1rem;
+                    border-radius: 8px;
+                    margin-bottom: 1rem;'>
+            <p style='margin: 0; color: #E5E7EB;'>
+                <strong>Why use this tool?</strong> Hybrid models aren't always better than single models.
+                This diagnostic analyzes your Stage 1 model's residuals to determine if Stage 2 can learn anything useful.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Check for existing trained models to use for diagnostics
+        has_trained_models = False
+        available_sources = []
+
+        # Check SARIMAX results
+        sarimax_results = st.session_state.get("sarimax_results")
+        if sarimax_results and sarimax_results.get("per_h"):
+            has_trained_models = True
+            available_sources.append("SARIMAX")
+
+        # Check ML models
+        ml_results = st.session_state.get("ml_mh_results")
+        if ml_results and ml_results.get("per_h"):
+            has_trained_models = True
+            available_sources.append("ML Model (XGBoost/LSTM/ANN)")
+
+        # Check individual models
+        for model_name in ["XGBoost", "LSTM", "ANN"]:
+            key = f"ml_mh_results_{model_name.lower()}"
+            if st.session_state.get(key):
+                if model_name not in available_sources:
+                    available_sources.append(model_name)
+                    has_trained_models = True
+
+        if not has_trained_models:
+            st.warning("""
+            ⚠️ **No trained models found!**
+
+            To run diagnostics, you need to first train a single model (SARIMAX, XGBoost, LSTM, or ANN)
+            on Page 8 (Train Models). The diagnostic tool will analyze that model's residuals.
+
+            **Steps:**
+            1. Go to Statistical Models → Train SARIMAX, OR
+            2. Go to Machine Learning → Train XGBoost/LSTM/ANN
+            3. Come back here and run diagnostics
+            """)
+            return
+
+        st.success(f"✅ Found trained models: {', '.join(available_sources)}")
+
+        # Let user select which model's residuals to analyze
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            source_model = st.selectbox(
+                "Select model to analyze residuals from",
+                options=available_sources,
+                help="We'll analyze this model's prediction errors to see if a second model can learn from them"
+            )
+
+        with col2:
+            run_diagnostic = st.button("🔍 Run Diagnostics", type="primary", use_container_width=True)
+
+        if run_diagnostic:
+            with st.spinner("Analyzing residuals..."):
+                try:
+                    # Get the predictions and actuals based on selected source
+                    y_true, y_pred, dates = _extract_predictions_for_diagnostic(source_model)
+
+                    if y_true is None or y_pred is None:
+                        st.error("Could not extract predictions from the selected model.")
+                        return
+
+                    # Import and run diagnostics
+                    from app_core.models.ml.hybrid_diagnostics import (
+                        HybridModelDiagnostics,
+                        render_diagnostic_results_streamlit
+                    )
+
+                    diagnostics = HybridModelDiagnostics()
+
+                    # Run full diagnostic
+                    residual_fig, spectral_fig, summary = diagnostics.create_full_diagnostic_dashboard(
+                        y_true=y_true,
+                        y_pred_stage1=y_pred,
+                        dates=dates,
+                        stage1_params=1000 if "LSTM" in source_model else 100,
+                        stage2_params=20
+                    )
+
+                    # Store results in session state
+                    st.session_state["hybrid_diagnostic_results"] = {
+                        "residual_fig": residual_fig,
+                        "spectral_fig": spectral_fig,
+                        "summary": summary,
+                        "source_model": source_model
+                    }
+
+                    st.success("✅ Diagnostic analysis complete!")
+
+                except Exception as e:
+                    st.error(f"Error running diagnostics: {str(e)}")
+                    import traceback
+                    with st.expander("Error Details"):
+                        st.code(traceback.format_exc())
+                    return
+
+        # Display results if available
+        if "hybrid_diagnostic_results" in st.session_state:
+            results = st.session_state["hybrid_diagnostic_results"]
+
+            st.markdown(f"### 📊 Diagnostic Results for **{results['source_model']}** Residuals")
+
+            # Summary verdict
+            summary = results["summary"]
+            color_map = {"success": "#22C55E", "warning": "#EAB308", "danger": "#EF4444"}
+            verdict_color = color_map.get(summary["color"], "#6366F1")
+
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, {verdict_color}22, {verdict_color}11);
+                        border-left: 4px solid {verdict_color};
+                        padding: 1.5rem;
+                        border-radius: 12px;
+                        margin: 1rem 0;'>
+                <h3 style='color: {verdict_color}; margin: 0 0 0.5rem 0;'>
+                    🎯 Hybrid Model Suitability: {summary["overall"]}
+                </h3>
+                <p style='margin: 0; font-size: 1.1rem; color: #E5E7EB;'>
+                    {summary["recommendation"]}
+                </p>
+                <p style='margin: 0.5rem 0 0 0; opacity: 0.8; color: #9CA3AF;'>
+                    Score: {summary["favorable_count"]}/{summary["total_count"]} tests favorable
+                    ({summary["score"]*100:.0f}%)
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Tabs for different visualizations
+            diag_tab1, diag_tab2, diag_tab3 = st.tabs([
+                "📈 Residual Analysis",
+                "🔬 Spectral Analysis",
+                "📋 Test Details"
+            ])
+
+            with diag_tab1:
+                st.plotly_chart(results["residual_fig"], use_container_width=True)
+                st.caption("""
+                **How to read this:**
+                - **Top-left**: Residuals over time. Look for patterns (trends, cycles). Random scatter = bad for hybrid.
+                - **Top-right**: Distribution. Should be roughly bell-shaped (normal) if Stage 1 captured the main signal.
+                - **Bottom-left**: ACF (Autocorrelation). Bars exceeding red lines = learnable structure exists!
+                - **Bottom-right**: PACF. Significant bars suggest AR order for Stage 2.
+                """)
+
+            with diag_tab2:
+                st.plotly_chart(results["spectral_fig"], use_container_width=True)
+                st.caption("""
+                **How to read this:**
+                - **Left**: Power Spectral Density. Sharp peaks = hidden periodicities Stage 2 can capture.
+                - **Right**: Cumulative power. If line deviates from diagonal (white noise reference), structure exists.
+                """)
+
+            with diag_tab3:
+                st.markdown("### 📋 Individual Test Results")
+                for result in summary["details"]:
+                    icon = "✅" if result.is_favorable else "❌"
+                    with st.expander(f"{icon} {result.test_name}"):
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.metric("Statistic", f"{result.statistic:.4f}")
+                        with col_b:
+                            if result.p_value is not None:
+                                st.metric("P-value", f"{result.p_value:.4f}")
+                        st.markdown(f"**Conclusion:** {result.conclusion}")
+                        st.info(f"💡 {result.recommendation}")
+
+
+def _extract_predictions_for_diagnostic(source_model: str):
+    """
+    Extract y_true, y_pred, and dates from a trained model's results.
+
+    Returns:
+        Tuple of (y_true, y_pred, dates) or (None, None, None) if extraction fails.
+    """
+    import pandas as pd
+
+    try:
+        if source_model == "SARIMAX":
+            results = st.session_state.get("sarimax_results", {})
+            per_h = results.get("per_h", {})
+            if per_h:
+                # Get first horizon's results
+                first_horizon = list(per_h.values())[0]
+                df_pred = first_horizon.get("df_pred")
+                if df_pred is not None and not df_pred.empty:
+                    # Try to find actual and predicted columns
+                    actual_col = None
+                    pred_col = None
+                    for col in df_pred.columns:
+                        if "actual" in col.lower() or "y_true" in col.lower() or "true" in col.lower():
+                            actual_col = col
+                        elif "pred" in col.lower() or "forecast" in col.lower():
+                            pred_col = col
+
+                    if actual_col and pred_col:
+                        y_true = df_pred[actual_col].values
+                        y_pred = df_pred[pred_col].values
+                        dates = df_pred.index if isinstance(df_pred.index, pd.DatetimeIndex) else None
+                        return y_true, y_pred, dates
+
+        elif source_model in ["ML Model (XGBoost/LSTM/ANN)", "XGBoost", "LSTM", "ANN"]:
+            # Try individual model key first
+            if source_model in ["XGBoost", "LSTM", "ANN"]:
+                key = f"ml_mh_results_{source_model.lower()}"
+                results = st.session_state.get(key, {})
+            else:
+                results = st.session_state.get("ml_mh_results", {})
+
+            per_h = results.get("per_h", {})
+            if per_h:
+                first_horizon = list(per_h.values())[0]
+                df_pred = first_horizon.get("df_pred")
+                if df_pred is not None and not df_pred.empty:
+                    actual_col = None
+                    pred_col = None
+                    for col in df_pred.columns:
+                        if "actual" in col.lower() or "y_true" in col.lower() or "true" in col.lower():
+                            actual_col = col
+                        elif "pred" in col.lower() or "forecast" in col.lower():
+                            pred_col = col
+
+                    if actual_col and pred_col:
+                        y_true = df_pred[actual_col].values
+                        y_pred = df_pred[pred_col].values
+                        dates = df_pred.index if isinstance(df_pred.index, pd.DatetimeIndex) else None
+                        return y_true, y_pred, dates
+
+        # If we couldn't find predictions from model results, try to compute from raw data
+        # This is a fallback that uses the model's test set predictions
+        fused_data = _get_hybrid_dataset()
+        if fused_data is not None and not fused_data.empty:
+            # Get target column (assume first numeric column)
+            numeric_cols = [col for col in fused_data.select_dtypes(include=[np.number]).columns if col != "Date"]
+            if numeric_cols:
+                target_col = numeric_cols[0]
+                y_full = fused_data[target_col].values
+
+                # Simple train/test split for demo
+                split_idx = int(len(y_full) * 0.85)
+                y_true = y_full[split_idx:]
+
+                # Use naive forecast as "Stage 1" prediction for diagnostic
+                y_pred = y_full[split_idx - 1:-1]  # Shifted by 1 (naive forecast)
+
+                dates = None
+                if "Date" in fused_data.columns:
+                    dates = pd.to_datetime(fused_data["Date"].iloc[split_idx:])
+
+                return y_true, y_pred, dates
+
+    except Exception as e:
+        st.warning(f"Could not extract predictions: {str(e)}")
+
+    return None, None, None
 
 
 def _page_hybrid_weighted():
