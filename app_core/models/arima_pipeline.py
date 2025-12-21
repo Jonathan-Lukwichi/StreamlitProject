@@ -92,6 +92,88 @@ def optimize_arima_order_with_pmdarima(
 
 
 # ===========================================
+# RMSE-Only optimization (Pure out-of-sample RMSE)
+# ===========================================
+def optimize_arima_order_rmse_only(
+    y_train: np.ndarray,
+    n_folds: int = 3,
+) -> Tuple[int, int, int]:
+    """
+    Find optimal ARIMA order by minimizing PURE CV-RMSE (no AIC penalty).
+
+    Uses expanding window cross-validation for robust RMSE estimation.
+    This method prioritizes out-of-sample prediction accuracy over model complexity.
+
+    Args:
+        y_train: Training data array
+        n_folds: Number of CV folds (default 3)
+
+    Returns:
+        Tuple (p, d, q) with optimal ARIMA order (lowest CV-RMSE)
+    """
+    # Define search grid
+    common = [(1, 1, 1), (0, 1, 1), (1, 1, 0), (2, 1, 2), (1, 0, 1), (0, 0, 0)]
+    grid = [(p, d, q) for p in range(0, 4) for d in range(0, 3) for q in range(0, 4)]
+    candidates = list(set(common + grid))  # Remove duplicates
+
+    results = []
+
+    for order in candidates:
+        try:
+            # Time Series Cross-Validation for RMSE
+            cv_rmses = []
+            fold_size = max(12, len(y_train) // (n_folds + 1))
+
+            for i in range(n_folds):
+                # Expanding window
+                train_end = fold_size * (i + 2)
+                if train_end > len(y_train):
+                    break
+
+                test_start = train_end
+                test_end = min(train_end + fold_size, len(y_train))
+
+                if test_end <= test_start or test_start >= len(y_train):
+                    continue
+
+                y_cv_train = y_train[:train_end]
+                y_cv_test = y_train[test_start:test_end]
+
+                if len(y_cv_train) < 10 or len(y_cv_test) == 0:
+                    continue
+
+                # Fit and forecast
+                cv_model = ARIMA(y_cv_train, order=order).fit()
+                cv_forecast = cv_model.forecast(steps=len(y_cv_test))
+
+                # Calculate RMSE for this fold
+                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
+                cv_rmses.append(rmse_fold)
+
+            # Average CV-RMSE across folds
+            avg_cv_rmse = float(np.mean(cv_rmses)) if cv_rmses else float('inf')
+
+            if np.isfinite(avg_cv_rmse):
+                results.append({
+                    'order': order,
+                    'cv_rmse': avg_cv_rmse,
+                })
+
+        except Exception:
+            continue
+
+    if not results:
+        return (1, 1, 1)
+
+    # Select order with lowest CV-RMSE (pure RMSE, no AIC)
+    df = pd.DataFrame(results)
+    best_idx = df['cv_rmse'].idxmin()
+    best_order = df.loc[best_idx, 'order']
+
+    return tuple(best_order)
+
+
+# ===========================================
 # Hybrid AIC + CV-RMSE optimization
 # ===========================================
 def optimize_arima_order_hybrid(
@@ -276,7 +358,7 @@ def run_arima_pipeline(
     auto_select: bool = True,
     target_col: str = "Target_1",
     # NEW selector knobs:
-    search_mode: str = "aic_only",          # "aic_only" (default) or "pmdarima_oos"
+    search_mode: str = "rmse_only",          # "rmse_only" (default), "aic_only", "hybrid", "pmdarima_oos"
     cv_strategy: str = "expanding",
     n_folds: int = 3,
     max_candidates: int = 20,
@@ -341,7 +423,19 @@ def run_arima_pipeline(
     # ---------------- Order selection ----------------
     results = None
 
-    # Path A-Hybrid: AIC + CV-RMSE optimization
+    # Path RMSE-Only: Pure CV-RMSE optimization (DEFAULT - seeks lowest RMSE)
+    if search_mode == "rmse_only" and order is None:
+        try:
+            order = optimize_arima_order_rmse_only(
+                y_train=y_train,
+                n_folds=n_folds,
+            )
+            auto_select = False
+        except Exception:
+            # will fall back to AIC mini-grid
+            pass
+
+    # Path Hybrid: AIC + CV-RMSE optimization
     if search_mode == "hybrid" and order is None:
         try:
             order = optimize_arima_order_hybrid(
@@ -355,7 +449,7 @@ def run_arima_pipeline(
             # will fall back to AIC mini-grid
             pass
 
-    # Path A: pmdarima-backed selector
+    # Path pmdarima: pmdarima-backed selector
     if search_mode == "pmdarima_oos" and order is None:
         try:
             order = optimize_arima_order_with_pmdarima(
@@ -500,7 +594,7 @@ def run_arima_multi_horizon_pipeline(
     auto_select: bool = False,
     target_col: str = "Target_1",
     # allow same selector in MH too (optional)
-    search_mode: str = "aic_only",
+    search_mode: str = "rmse_only",  # "rmse_only" (default), "aic_only", "hybrid", "pmdarima_oos"
     cv_strategy: str = "expanding",
     n_folds: int = 3,
     max_candidates: int = 20,
@@ -535,6 +629,18 @@ def run_arima_multi_horizon_pipeline(
         max_horizon = H_eff
 
     # Optional global order selection (once)
+    # Path RMSE-Only: Pure CV-RMSE optimization (DEFAULT)
+    if search_mode == "rmse_only" and order is None:
+        try:
+            y0 = y[:train_size]
+            order = optimize_arima_order_rmse_only(
+                y_train=y0,
+                n_folds=n_folds,
+            )
+            auto_select = False
+        except Exception:
+            pass
+
     if search_mode == "pmdarima_oos" and order is None:
         try:
             order = optimize_arima_order_with_pmdarima(
@@ -937,7 +1043,7 @@ def run_arima_multi_target_pipeline(
     order: Optional[Tuple[int, int, int]] = None,
     train_ratio: float = 0.8,
     auto_select: bool = True,
-    search_mode: str = "aic_only",
+    search_mode: str = "rmse_only",  # "rmse_only" (default), "aic_only", "hybrid", "pmdarima_oos"
     cv_strategy: str = "expanding",
     n_folds: int = 3,
     max_candidates: int = 20,
