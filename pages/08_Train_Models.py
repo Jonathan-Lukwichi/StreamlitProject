@@ -4984,6 +4984,47 @@ def page_hybrid():
     # ==========================================================================
     # ENSEMBLE STRATEGY SELECTION (Now AFTER diagnostics)
     # ==========================================================================
+
+    # -------------------------------------------------------------------------
+    # DETECT TRAINED MODELS FROM SESSION STATE
+    # -------------------------------------------------------------------------
+    trained_models_status = {
+        "SARIMAX": False,
+        "LSTM": False,
+        "XGBoost": False,
+        "ANN": False,
+    }
+
+    # Check SARIMAX
+    sarimax_results = st.session_state.get("sarimax_results")
+    if sarimax_results and sarimax_results.get("per_h"):
+        trained_models_status["SARIMAX"] = True
+
+    # Check individual ML models
+    for model_name in ["LSTM", "XGBoost", "ANN"]:
+        key = f"ml_mh_results_{model_name.lower()}"
+        results = st.session_state.get(key, {})
+        if results and results.get("per_h"):
+            trained_models_status[model_name] = True
+
+    # Also check general ML results
+    ml_results = st.session_state.get("ml_mh_results")
+    if ml_results and ml_results.get("per_h"):
+        model_type = ml_results.get("model_type", "")
+        if "LSTM" in model_type:
+            trained_models_status["LSTM"] = True
+        elif "XGBoost" in model_type:
+            trained_models_status["XGBoost"] = True
+        elif "ANN" in model_type:
+            trained_models_status["ANN"] = True
+
+    # Count trained models
+    num_trained = sum(trained_models_status.values())
+    trained_list = [name for name, is_trained in trained_models_status.items() if is_trained]
+
+    # -------------------------------------------------------------------------
+    # DISPLAY TRAINED MODELS STATUS
+    # -------------------------------------------------------------------------
     st.markdown(
         f"""
         <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
@@ -5004,18 +5045,119 @@ def page_hybrid():
         unsafe_allow_html=True
     )
 
+    # Show trained models status
+    model_icons = {"SARIMAX": "📈", "LSTM": "🧠", "XGBoost": "🚀", "ANN": "🎯"}
+
+    st.markdown("""
+    <div style='background: rgba(99, 102, 241, 0.1);
+                border-left: 3px solid #6366F1;
+                padding: 0.8rem;
+                border-radius: 8px;
+                margin: 0.5rem 0;'>
+        <span style='color: #6366F1; font-weight: 600;'>📋 Trained Models Detected</span>
+        <span style='color: #9CA3AF; font-size: 0.9rem;'> — Hybrid options are based on available models</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    status_cols = st.columns(4)
+    for i, (model_name, is_trained) in enumerate(trained_models_status.items()):
+        icon = model_icons.get(model_name, "✅")
+        with status_cols[i]:
+            if is_trained:
+                st.success(f"{icon} **{model_name}** ✓")
+            else:
+                st.warning(f"{icon} {model_name} ✗")
+
+    if num_trained == 0:
+        st.error("""
+        ⚠️ **No trained models found!**
+
+        To use hybrid strategies, first train models:
+        1. Go to **Statistical Models** → Train SARIMAX
+        2. Go to **Machine Learning** → Train LSTM, XGBoost, or ANN
+        3. Return here to select a hybrid strategy
+        """)
+        return
+
+    # -------------------------------------------------------------------------
+    # BUILD DYNAMIC ENSEMBLE OPTIONS
+    # -------------------------------------------------------------------------
+    ensemble_options = []
+    option_requirements = {}
+
+    # Always available options (work with any trained models)
+    ensemble_options.append("⚖️ Weighted Ensemble (Combine Trained Models)")
+    option_requirements["Weighted Ensemble"] = "Requires 1+ trained models"
+
+    ensemble_options.append("🔬 Decomposition + Ensemble (Component-Based Modeling)")
+    option_requirements["Decomposition"] = "Works with any dataset"
+
+    # Stacking requires 2+ models
+    if num_trained >= 2:
+        ensemble_options.append("🔗 Stacking Ensemble (Meta-Learning)")
+        option_requirements["Stacking"] = f"Using {num_trained} trained models"
+    else:
+        option_requirements["Stacking"] = "⚠️ Requires 2+ trained models"
+
+    # LSTM-SARIMAX requires both LSTM and SARIMAX
+    if trained_models_status["LSTM"] and trained_models_status["SARIMAX"]:
+        ensemble_options.append("🧠 LSTM-SARIMAX Hybrid (Neural + Statistical)")
+        option_requirements["LSTM-SARIMAX"] = "✓ Both models trained"
+    else:
+        missing = []
+        if not trained_models_status["LSTM"]:
+            missing.append("LSTM")
+        if not trained_models_status["SARIMAX"]:
+            missing.append("SARIMAX")
+        option_requirements["LSTM-SARIMAX"] = f"⚠️ Missing: {', '.join(missing)}"
+
+    # LSTM-XGBoost requires both LSTM and XGBoost
+    if trained_models_status["LSTM"] and trained_models_status["XGBoost"]:
+        ensemble_options.append("🚀 LSTM-XGBoost Hybrid (Neural + Gradient Boosting)")
+        option_requirements["LSTM-XGBoost"] = "✓ Both models trained"
+    else:
+        missing = []
+        if not trained_models_status["LSTM"]:
+            missing.append("LSTM")
+        if not trained_models_status["XGBoost"]:
+            missing.append("XGBoost")
+        option_requirements["LSTM-XGBoost"] = f"⚠️ Missing: {', '.join(missing)}"
+
+    # LSTM-ANN requires both LSTM and ANN
+    if trained_models_status["LSTM"] and trained_models_status["ANN"]:
+        ensemble_options.append("🎯 LSTM-ANN Hybrid (Neural + Neural Residuals)")
+        option_requirements["LSTM-ANN"] = "✓ Both models trained"
+    else:
+        missing = []
+        if not trained_models_status["LSTM"]:
+            missing.append("LSTM")
+        if not trained_models_status["ANN"]:
+            missing.append("ANN")
+        option_requirements["LSTM-ANN"] = f"⚠️ Missing: {', '.join(missing)}"
+
+    # Show available vs unavailable strategies
+    with st.expander("📊 **Strategy Availability** - See which hybrids you can use", expanded=False):
+        st.markdown("**Available Strategies:**")
+        for opt in ensemble_options:
+            st.markdown(f"✅ {opt}")
+
+        st.markdown("---")
+        st.markdown("**Strategy Requirements:**")
+
+        for strategy, req in option_requirements.items():
+            if "⚠️" in req:
+                st.markdown(f"❌ **{strategy}**: {req}")
+            else:
+                st.markdown(f"✅ **{strategy}**: {req}")
+
+    # -------------------------------------------------------------------------
+    # ENSEMBLE TYPE SELECTION
+    # -------------------------------------------------------------------------
     ensemble_type = st.radio(
         "Choose your hybrid modeling approach",
-        options=[
-            "⚖️ Weighted Ensemble (Combine Trained Models)",
-            "🔬 Decomposition + Ensemble (Component-Based Modeling)",
-            "🔗 Stacking Ensemble (Meta-Learning)",
-            "🧠 LSTM-SARIMAX Hybrid (Neural + Statistical)",
-            "🚀 LSTM-XGBoost Hybrid (Neural + Gradient Boosting)",
-            "🎯 LSTM-ANN Hybrid (Neural + Neural Residuals)"
-        ],
+        options=ensemble_options,
         index=0,
-        help="Weighted: Combine trained models | Decomposition: Component-based | Stacking: Meta-learning | LSTM-SARIMAX: LSTM + ARIMA residuals | LSTM-XGBoost: LSTM + XGBoost residuals | LSTM-ANN: LSTM + ANN residual network"
+        help="Only strategies with required models trained are shown. Train more models to unlock additional hybrid options."
     )
 
     st.divider()
