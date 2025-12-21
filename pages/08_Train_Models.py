@@ -5151,7 +5151,7 @@ def _render_hybrid_diagnostic_pipeline():
             """)
             return
 
-        # Display found models
+        # Display found models with optional selection checkboxes
         model_icons = {
             "SARIMAX": "📈",
             "LSTM": "🧠",
@@ -5160,15 +5160,49 @@ def _render_hybrid_diagnostic_pipeline():
             "ML": "🤖"
         }
 
-        col1, col2, col3, col4 = st.columns(4)
-        cols = [col1, col2, col3, col4]
+        st.info(f"✅ Found **{len(trained_models)}** trained model(s): {', '.join(trained_models.keys())}")
+
+        # =========================================================================
+        # OPTIONAL MODEL SELECTION (Analyze All by default)
+        # =========================================================================
+        st.markdown("""
+        <div style='background: rgba(16, 185, 129, 0.1);
+                    border-left: 3px solid #10B981;
+                    padding: 0.8rem;
+                    border-radius: 8px;
+                    margin: 0.5rem 0;'>
+            <span style='color: #10B981; font-weight: 600;'>📋 Model Selection</span>
+            <span style='color: #9CA3AF; font-size: 0.9rem;'> — All models are analyzed by default. Uncheck to exclude specific models.</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Create checkboxes for each model (default = all selected)
+        selected_models = {}
+        num_models = len(trained_models)
+        num_cols = min(num_models, 4)  # Max 4 columns
+        cols = st.columns(num_cols)
 
         for i, (model_name, _) in enumerate(trained_models.items()):
             icon = model_icons.get(model_name, "✅")
-            with cols[i % 4]:
-                st.success(f"{icon} **{model_name}**")
+            with cols[i % num_cols]:
+                # Checkbox with model name - default is checked (include in analysis)
+                is_selected = st.checkbox(
+                    f"{icon} **{model_name}**",
+                    value=True,  # Default: analyze all models
+                    key=f"diag_model_select_{model_name}",
+                    help=f"Include {model_name} in diagnostic analysis"
+                )
+                selected_models[model_name] = is_selected
 
-        st.info(f"✅ Found **{len(trained_models)}** trained model(s): {', '.join(trained_models.keys())}")
+        # Count selected models
+        num_selected = sum(selected_models.values())
+        selected_names = [name for name, selected in selected_models.items() if selected]
+
+        if num_selected == 0:
+            st.warning("⚠️ Please select at least one model to analyze.")
+            return
+        elif num_selected < len(trained_models):
+            st.caption(f"🔍 Will analyze **{num_selected}** of {len(trained_models)} models: {', '.join(selected_names)}")
 
         # =========================================================================
         # STEP 2: LLM CONFIGURATION (OPTIONAL)
@@ -5223,7 +5257,7 @@ def _render_hybrid_diagnostic_pipeline():
                 st.error("Could not extract predictions from trained models. Please ensure models have prediction results.")
                 return
 
-            with st.spinner("🔬 Running diagnostic pipeline... Analyzing all models..."):
+            with st.spinner(f"🔬 Running diagnostic pipeline... Analyzing {num_selected} model(s)..."):
                 try:
                     from app_core.models.ml.hybrid_diagnostics import HybridDiagnosticPipeline
 
@@ -5233,8 +5267,11 @@ def _render_hybrid_diagnostic_pipeline():
                         api_provider=api_provider
                     )
 
-                    # Prepare predictions (exclude y_true and dates)
-                    preds_only = {k: v for k, v in model_predictions.items() if k not in ["y_true", "dates"]}
+                    # Prepare predictions (exclude y_true, dates, and unselected models)
+                    preds_only = {
+                        k: v for k, v in model_predictions.items()
+                        if k not in ["y_true", "dates"] and selected_models.get(k, False)
+                    }
 
                     # Run pipeline
                     results = pipeline.run_full_pipeline(
