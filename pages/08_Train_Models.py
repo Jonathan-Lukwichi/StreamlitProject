@@ -5006,10 +5006,9 @@ def page_hybrid():
     st.session_state["hybrid_selected_dataset"] = selected_dataset
 
     # ==========================================================================
-    # HYBRID MODEL DIAGNOSTIC TOOL
+    # HYBRID MODEL DIAGNOSTIC PIPELINE (Available for ALL hybrid strategies)
     # ==========================================================================
-    if any(x in ensemble_type for x in ["LSTM-SARIMAX", "LSTM-XGBoost", "LSTM-ANN"]):
-        _render_hybrid_diagnostic_tool()
+    _render_hybrid_diagnostic_pipeline()
 
     st.divider()
 
@@ -5056,194 +5055,354 @@ def _get_hybrid_dataset():
     return fused_data
 
 
-def _render_hybrid_diagnostic_tool():
+def _render_hybrid_diagnostic_pipeline():
     """
-    Render the hybrid model diagnostic tool.
+    Render the enhanced hybrid model diagnostic pipeline with RAG-powered recommendations.
 
-    This tool helps users understand:
-    1. Do residuals have learnable structure?
-    2. Is the data sufficient for two-stage modeling?
-    3. Should they use a hybrid model or stick with a single model?
+    This pipeline:
+    1. Analyzes ALL trained models (SARIMAX, LSTM, ANN, XGBoost) individually
+    2. Compares residual patterns across models
+    3. Uses RAG approach to provide intelligent recommendations
+    4. Suggests best hybrid strategies and model combinations
     """
-    with st.expander("🔬 **Hybrid Model Diagnostic Tool** - Should you use a hybrid model?", expanded=False):
-        st.markdown("""
-        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1));
-                    border-left: 4px solid #3B82F6;
-                    padding: 1rem;
-                    border-radius: 8px;
-                    margin-bottom: 1rem;'>
-            <p style='margin: 0; color: #E5E7EB;'>
-                <strong>Why use this tool?</strong> Hybrid models aren't always better than single models.
-                This diagnostic analyzes your Stage 1 model's residuals to determine if Stage 2 can learn anything useful.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+                border-left: 4px solid #6366F1;
+                padding: 1.5rem;
+                border-radius: 12px;
+                margin: 1rem 0;
+                box-shadow: 0 0 25px rgba(99, 102, 241, 0.2);'>
+        <h3 style='color: #6366F1; margin: 0 0 0.5rem 0; font-size: 1.4rem;
+                   text-shadow: 0 0 15px rgba(99, 102, 241, 0.5);'>
+            🔬 Hybrid Model Diagnostic Pipeline
+        </h3>
+        <p style='margin: 0; color: #E5E7EB; font-size: 1rem;'>
+            Analyzes ALL trained models, compares residual patterns, and recommends the best hybrid strategy
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        # Check for existing trained models to use for diagnostics
-        has_trained_models = False
-        available_sources = []
+    with st.expander("📊 **Run Diagnostic Pipeline** - Analyze all models and get recommendations", expanded=True):
+        # =========================================================================
+        # STEP 1: CHECK FOR TRAINED MODELS
+        # =========================================================================
+        st.markdown("### Step 1: Detect Trained Models")
 
-        # Check SARIMAX results
+        trained_models = {}
+        model_predictions = {}
+
+        # Check SARIMAX
         sarimax_results = st.session_state.get("sarimax_results")
         if sarimax_results and sarimax_results.get("per_h"):
-            has_trained_models = True
-            available_sources.append("SARIMAX")
+            trained_models["SARIMAX"] = sarimax_results
+            y_true, y_pred, dates = _extract_predictions_for_diagnostic("SARIMAX")
+            if y_true is not None and y_pred is not None:
+                model_predictions["SARIMAX"] = y_pred
+                if "y_true" not in model_predictions:
+                    model_predictions["y_true"] = y_true
+                    model_predictions["dates"] = dates
 
-        # Check ML models
-        ml_results = st.session_state.get("ml_mh_results")
-        if ml_results and ml_results.get("per_h"):
-            has_trained_models = True
-            available_sources.append("ML Model (XGBoost/LSTM/ANN)")
-
-        # Check individual models
+        # Check individual ML models
         for model_name in ["XGBoost", "LSTM", "ANN"]:
             key = f"ml_mh_results_{model_name.lower()}"
-            if st.session_state.get(key):
-                if model_name not in available_sources:
-                    available_sources.append(model_name)
-                    has_trained_models = True
+            results = st.session_state.get(key, {})
+            if results and results.get("per_h"):
+                trained_models[model_name] = results
+                y_true, y_pred, dates = _extract_predictions_for_diagnostic(model_name)
+                if y_true is not None and y_pred is not None:
+                    model_predictions[model_name] = y_pred
+                    if "y_true" not in model_predictions:
+                        model_predictions["y_true"] = y_true
+                        model_predictions["dates"] = dates
 
-        if not has_trained_models:
+        # Also check general ML results
+        ml_results = st.session_state.get("ml_mh_results")
+        if ml_results and ml_results.get("per_h"):
+            model_type = ml_results.get("model_type", "ML")
+            if model_type not in trained_models:
+                trained_models[model_type] = ml_results
+                y_true, y_pred, dates = _extract_predictions_for_diagnostic("ML Model (XGBoost/LSTM/ANN)")
+                if y_true is not None and y_pred is not None:
+                    model_predictions[model_type] = y_pred
+                    if "y_true" not in model_predictions:
+                        model_predictions["y_true"] = y_true
+                        model_predictions["dates"] = dates
+
+        if not trained_models:
             st.warning("""
             ⚠️ **No trained models found!**
 
-            To run diagnostics, you need to first train a single model (SARIMAX, XGBoost, LSTM, or ANN)
-            on Page 8 (Train Models). The diagnostic tool will analyze that model's residuals.
+            To run the diagnostic pipeline, you need to first train models on this page:
 
             **Steps:**
-            1. Go to Statistical Models → Train SARIMAX, OR
-            2. Go to Machine Learning → Train XGBoost/LSTM/ANN
-            3. Come back here and run diagnostics
+            1. Go to **Statistical Models** → Train SARIMAX
+            2. Go to **Machine Learning** → Train XGBoost, LSTM, or ANN
+            3. Return here to run the diagnostic pipeline
+
+            The pipeline will analyze ALL trained models and recommend the best hybrid approach.
             """)
             return
 
-        st.success(f"✅ Found trained models: {', '.join(available_sources)}")
+        # Display found models
+        model_icons = {
+            "SARIMAX": "📈",
+            "LSTM": "🧠",
+            "XGBoost": "🚀",
+            "ANN": "🎯",
+            "ML": "🤖"
+        }
 
-        # Let user select which model's residuals to analyze
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3, col4 = st.columns(4)
+        cols = [col1, col2, col3, col4]
 
-        with col1:
-            source_model = st.selectbox(
-                "Select model to analyze residuals from",
-                options=available_sources,
-                help="We'll analyze this model's prediction errors to see if a second model can learn from them"
-            )
+        for i, (model_name, _) in enumerate(trained_models.items()):
+            icon = model_icons.get(model_name, "✅")
+            with cols[i % 4]:
+                st.success(f"{icon} **{model_name}**")
 
-        with col2:
-            run_diagnostic = st.button("🔍 Run Diagnostics", type="primary", use_container_width=True)
+        st.info(f"✅ Found **{len(trained_models)}** trained model(s): {', '.join(trained_models.keys())}")
 
-        if run_diagnostic:
-            with st.spinner("Analyzing residuals..."):
+        # =========================================================================
+        # STEP 2: LLM CONFIGURATION (OPTIONAL)
+        # =========================================================================
+        st.markdown("### Step 2: Configure Analysis Mode")
+
+        use_llm = st.checkbox(
+            "🧠 Enable AI-Powered Recommendations (LLM)",
+            value=False,
+            help="Uses Claude or GPT to provide enhanced natural language recommendations"
+        )
+
+        api_key = None
+        api_provider = "anthropic"
+
+        if use_llm:
+            with st.container():
+                llm_col1, llm_col2 = st.columns(2)
+
+                with llm_col1:
+                    api_provider = st.selectbox(
+                        "Select AI Provider",
+                        options=["anthropic", "openai"],
+                        format_func=lambda x: "🟣 Anthropic (Claude)" if x == "anthropic" else "🟢 OpenAI (GPT)",
+                        help="Choose your preferred LLM provider"
+                    )
+
+                with llm_col2:
+                    api_key = st.text_input(
+                        f"{'Anthropic' if api_provider == 'anthropic' else 'OpenAI'} API Key",
+                        type="password",
+                        help="Enter your API key for enhanced AI recommendations"
+                    )
+
+                if not api_key:
+                    st.caption("💡 Without API key, rule-based recommendations will be used (still very useful!)")
+
+        # =========================================================================
+        # STEP 3: RUN PIPELINE
+        # =========================================================================
+        st.markdown("### Step 3: Run Diagnostic Pipeline")
+
+        run_pipeline = st.button(
+            "🚀 **Run Full Diagnostic Pipeline**",
+            type="primary",
+            use_container_width=True,
+            help="Analyzes all trained models, compares residuals, and generates recommendations"
+        )
+
+        if run_pipeline:
+            if "y_true" not in model_predictions or len(model_predictions) <= 1:
+                st.error("Could not extract predictions from trained models. Please ensure models have prediction results.")
+                return
+
+            with st.spinner("🔬 Running diagnostic pipeline... Analyzing all models..."):
                 try:
-                    # Get the predictions and actuals based on selected source
-                    y_true, y_pred, dates = _extract_predictions_for_diagnostic(source_model)
+                    from app_core.models.ml.hybrid_diagnostics import HybridDiagnosticPipeline
 
-                    if y_true is None or y_pred is None:
-                        st.error("Could not extract predictions from the selected model.")
-                        return
-
-                    # Import and run diagnostics
-                    from app_core.models.ml.hybrid_diagnostics import (
-                        HybridModelDiagnostics,
-                        render_diagnostic_results_streamlit
+                    # Create pipeline
+                    pipeline = HybridDiagnosticPipeline(
+                        api_key=api_key if use_llm else None,
+                        api_provider=api_provider
                     )
 
-                    diagnostics = HybridModelDiagnostics()
+                    # Prepare predictions (exclude y_true and dates)
+                    preds_only = {k: v for k, v in model_predictions.items() if k not in ["y_true", "dates"]}
 
-                    # Run full diagnostic
-                    residual_fig, spectral_fig, summary = diagnostics.create_full_diagnostic_dashboard(
-                        y_true=y_true,
-                        y_pred_stage1=y_pred,
-                        dates=dates,
-                        stage1_params=1000 if "LSTM" in source_model else 100,
-                        stage2_params=20
+                    # Run pipeline
+                    results = pipeline.run_full_pipeline(
+                        y_true=model_predictions["y_true"],
+                        model_predictions=preds_only,
+                        dates=model_predictions.get("dates"),
+                        use_llm=use_llm and bool(api_key)
                     )
 
-                    # Store results in session state
-                    st.session_state["hybrid_diagnostic_results"] = {
-                        "residual_fig": residual_fig,
-                        "spectral_fig": spectral_fig,
-                        "summary": summary,
-                        "source_model": source_model
-                    }
+                    # Store in session state
+                    st.session_state["hybrid_pipeline_results"] = results
 
-                    st.success("✅ Diagnostic analysis complete!")
+                    st.success("✅ Diagnostic pipeline complete!")
 
                 except Exception as e:
-                    st.error(f"Error running diagnostics: {str(e)}")
+                    st.error(f"Error running pipeline: {str(e)}")
                     import traceback
                     with st.expander("Error Details"):
                         st.code(traceback.format_exc())
                     return
 
-        # Display results if available
-        if "hybrid_diagnostic_results" in st.session_state:
-            results = st.session_state["hybrid_diagnostic_results"]
+        # =========================================================================
+        # STEP 4: DISPLAY RESULTS
+        # =========================================================================
+        if "hybrid_pipeline_results" in st.session_state:
+            results = st.session_state["hybrid_pipeline_results"]
 
-            st.markdown(f"### 📊 Diagnostic Results for **{results['source_model']}** Residuals")
+            st.markdown("---")
+            st.markdown("## 📊 Pipeline Results")
 
-            # Summary verdict
-            summary = results["summary"]
-            color_map = {"success": "#22C55E", "warning": "#EAB308", "danger": "#EF4444"}
-            verdict_color = color_map.get(summary["color"], "#6366F1")
-
-            st.markdown(f"""
-            <div style='background: linear-gradient(135deg, {verdict_color}22, {verdict_color}11);
-                        border-left: 4px solid {verdict_color};
-                        padding: 1.5rem;
-                        border-radius: 12px;
-                        margin: 1rem 0;'>
-                <h3 style='color: {verdict_color}; margin: 0 0 0.5rem 0;'>
-                    🎯 Hybrid Model Suitability: {summary["overall"]}
-                </h3>
-                <p style='margin: 0; font-size: 1.1rem; color: #E5E7EB;'>
-                    {summary["recommendation"]}
-                </p>
-                <p style='margin: 0.5rem 0 0 0; opacity: 0.8; color: #9CA3AF;'>
-                    Score: {summary["favorable_count"]}/{summary["total_count"]} tests favorable
-                    ({summary["score"]*100:.0f}%)
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Tabs for different visualizations
-            diag_tab1, diag_tab2, diag_tab3 = st.tabs([
-                "📈 Residual Analysis",
-                "🔬 Spectral Analysis",
-                "📋 Test Details"
+            # Tab layout for results
+            result_tabs = st.tabs([
+                "🎯 Recommendations",
+                "📈 Model Comparison",
+                "📋 Individual Analysis",
+                "🔬 RAG Context"
             ])
 
-            with diag_tab1:
-                st.plotly_chart(results["residual_fig"], use_container_width=True)
+            # ---- TAB 1: RECOMMENDATIONS ----
+            with result_tabs[0]:
+                st.markdown("### 🎯 Hybrid Strategy Recommendations")
+
+                recommendations = results.get("recommendations", [])
+
+                if not recommendations:
+                    st.info("No recommendations generated. This may indicate insufficient data or model results.")
+                else:
+                    for i, rec in enumerate(recommendations):
+                        # Determine color based on confidence
+                        if rec.confidence >= 0.75:
+                            color = "#22C55E"  # Green
+                            badge = "HIGH CONFIDENCE"
+                        elif rec.confidence >= 0.5:
+                            color = "#EAB308"  # Yellow
+                            badge = "MODERATE"
+                        else:
+                            color = "#EF4444"  # Red
+                            badge = "LOW CONFIDENCE"
+
+                        risk_color = {"low": "#22C55E", "medium": "#EAB308", "high": "#EF4444"}.get(rec.risk_level, "#6366F1")
+
+                        st.markdown(f"""
+                        <div style='background: linear-gradient(135deg, {color}15, {color}08);
+                                    border-left: 4px solid {color};
+                                    padding: 1.25rem;
+                                    border-radius: 12px;
+                                    margin: 1rem 0;'>
+                            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;'>
+                                <h4 style='color: {color}; margin: 0; font-size: 1.2rem;'>
+                                    #{i+1} {rec.strategy}
+                                </h4>
+                                <span style='background: {color}; color: white; padding: 0.25rem 0.75rem;
+                                             border-radius: 20px; font-size: 0.75rem; font-weight: 600;'>
+                                    {badge} ({rec.confidence*100:.0f}%)
+                                </span>
+                            </div>
+                            <div style='margin: 0.75rem 0;'>
+                                <p style='margin: 0.25rem 0; color: #E5E7EB;'>
+                                    <strong>Stage 1:</strong> {rec.stage1_model}
+                                </p>
+                                <p style='margin: 0.25rem 0; color: #E5E7EB;'>
+                                    <strong>Stage 2:</strong> {rec.stage2_model}
+                                </p>
+                            </div>
+                            <p style='margin: 0.75rem 0; color: #D1D5DB; font-style: italic;'>
+                                {rec.rationale}
+                            </p>
+                            <div style='display: flex; gap: 2rem; margin-top: 0.75rem;'>
+                                <span style='color: #9CA3AF;'>
+                                    📈 Expected: <strong style='color: #22C55E;'>{rec.expected_improvement}</strong>
+                                </span>
+                                <span style='color: #9CA3AF;'>
+                                    ⚠️ Risk: <strong style='color: {risk_color};'>{rec.risk_level.upper()}</strong>
+                                </span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # ---- TAB 2: MODEL COMPARISON ----
+            with result_tabs[1]:
+                st.markdown("### 📈 Multi-Model Comparison")
+
+                comparison_plot = results.get("comparison_plot")
+                if comparison_plot:
+                    st.plotly_chart(comparison_plot, use_container_width=True)
+
                 st.caption("""
                 **How to read this:**
-                - **Top-left**: Residuals over time. Look for patterns (trends, cycles). Random scatter = bad for hybrid.
-                - **Top-right**: Distribution. Should be roughly bell-shaped (normal) if Stage 1 captured the main signal.
-                - **Bottom-left**: ACF (Autocorrelation). Bars exceeding red lines = learnable structure exists!
-                - **Bottom-right**: PACF. Significant bars suggest AR order for Stage 2.
+                - **Top-left (RMSE)**: Lower is better. Best model for Stage 1.
+                - **Top-right (Distributions)**: Overlapping = similar errors; Different = diverse models.
+                - **Bottom-left (ACF)**: Bars exceeding red lines = learnable structure.
+                - **Bottom-right (Entropy)**: Below 0.7 = concentrated frequencies (good for hybrid).
                 """)
 
-            with diag_tab2:
-                st.plotly_chart(results["spectral_fig"], use_container_width=True)
-                st.caption("""
-                **How to read this:**
-                - **Left**: Power Spectral Density. Sharp peaks = hidden periodicities Stage 2 can capture.
-                - **Right**: Cumulative power. If line deviates from diagonal (white noise reference), structure exists.
-                """)
+            # ---- TAB 3: INDIVIDUAL ANALYSIS ----
+            with result_tabs[2]:
+                st.markdown("### 📋 Individual Model Analysis")
 
-            with diag_tab3:
-                st.markdown("### 📋 Individual Test Results")
-                for result in summary["details"]:
-                    icon = "✅" if result.is_favorable else "❌"
-                    with st.expander(f"{icon} {result.test_name}"):
-                        col_a, col_b = st.columns(2)
-                        with col_a:
-                            st.metric("Statistic", f"{result.statistic:.4f}")
-                        with col_b:
-                            if result.p_value is not None:
-                                st.metric("P-value", f"{result.p_value:.4f}")
-                        st.markdown(f"**Conclusion:** {result.conclusion}")
-                        st.info(f"💡 {result.recommendation}")
+                model_results = results.get("model_results", {})
+
+                if not model_results:
+                    st.info("No model results available.")
+                else:
+                    for model_name, result in model_results.items():
+                        icon = "✅" if result.has_learnable_structure else "❌"
+                        status = "Learnable Structure" if result.has_learnable_structure else "Random Residuals"
+
+                        with st.expander(f"{icon} **{model_name}** - {status}", expanded=False):
+                            # Metrics row
+                            m1, m2, m3, m4 = st.columns(4)
+                            with m1:
+                                st.metric("MAE", f"{result.mae:.4f}")
+                            with m2:
+                                st.metric("RMSE", f"{result.rmse:.4f}")
+                            with m3:
+                                st.metric("MAPE", f"{result.mape:.2f}%")
+                            with m4:
+                                st.metric("Significant ACF Lags", result.autocorr_significant_lags)
+
+                            # Statistical tests
+                            st.markdown("**Statistical Tests:**")
+                            test_cols = st.columns(3)
+                            with test_cols[0]:
+                                ljung_icon = "✅" if result.ljung_box_pvalue < 0.05 else "❌"
+                                st.write(f"{ljung_icon} Ljung-Box p-value: `{result.ljung_box_pvalue:.4f}`")
+                            with test_cols[1]:
+                                runs_icon = "✅" if result.runs_test_pvalue < 0.05 else "❌"
+                                st.write(f"{runs_icon} Runs Test p-value: `{result.runs_test_pvalue:.4f}`")
+                            with test_cols[2]:
+                                entropy_icon = "✅" if result.spectral_entropy < 0.7 else "❌"
+                                st.write(f"{entropy_icon} Spectral Entropy: `{result.spectral_entropy:.3f}`")
+
+                            # Recommendation
+                            st.info(f"💡 **Analysis:** {result.recommendation}")
+
+            # ---- TAB 4: RAG CONTEXT ----
+            with result_tabs[3]:
+                st.markdown("### 🔬 RAG Analysis Context")
+
+                context = results.get("context", "No context available.")
+
+                st.markdown("""
+                <div style='background: rgba(30, 30, 40, 0.5); padding: 1rem; border-radius: 8px;
+                            border: 1px solid rgba(99, 102, 241, 0.3);'>
+                    <p style='color: #9CA3AF; margin-bottom: 0.5rem;'>
+                        This is the context used for generating recommendations. If LLM mode is enabled,
+                        this context is sent to the AI for enhanced analysis.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.code(context, language="text")
+
+                best_model = results.get("best_single_model")
+                if best_model:
+                    st.success(f"🏆 **Best Single Model:** {best_model}")
 
 
 def _extract_predictions_for_diagnostic(source_model: str):

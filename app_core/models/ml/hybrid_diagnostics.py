@@ -647,3 +647,635 @@ def render_diagnostic_results_streamlit(summary: Dict[str, Any]):
                 st.markdown(f"**P-value:** {result.p_value:.4f}")
             st.markdown(f"**Conclusion:** {result.conclusion}")
             st.info(f"💡 {result.recommendation}")
+
+
+# =============================================================================
+# MULTI-MODEL DIAGNOSTIC PIPELINE WITH RAG
+# =============================================================================
+
+@dataclass
+class ModelDiagnosticResult:
+    """Container for individual model diagnostic analysis."""
+    model_name: str
+    mae: float
+    rmse: float
+    mape: float
+    residual_mean: float
+    residual_std: float
+    ljung_box_pvalue: float
+    runs_test_pvalue: float
+    spectral_entropy: float
+    has_learnable_structure: bool
+    autocorr_significant_lags: int
+    recommendation: str
+
+
+@dataclass
+class HybridRecommendation:
+    """Container for hybrid model recommendations."""
+    strategy: str
+    stage1_model: str
+    stage2_model: str
+    confidence: float  # 0-1
+    rationale: str
+    expected_improvement: str
+    risk_level: str  # "low", "medium", "high"
+
+
+class HybridDiagnosticPipeline:
+    """
+    Multi-model diagnostic pipeline with RAG-powered recommendations.
+
+    This pipeline:
+    1. Analyzes ALL trained models individually (SARIMAX, LSTM, ANN, XGBoost)
+    2. Compares residual patterns across models
+    3. Uses RAG approach to build context and provide intelligent recommendations
+    4. Suggests best hybrid strategies and model combinations
+
+    Usage:
+        pipeline = HybridDiagnosticPipeline()
+        results = pipeline.run_full_pipeline(
+            y_true=actual_values,
+            model_predictions={
+                "SARIMAX": sarimax_preds,
+                "LSTM": lstm_preds,
+                "XGBoost": xgb_preds,
+                "ANN": ann_preds
+            },
+            dates=date_index
+        )
+    """
+
+    def __init__(self, api_key: Optional[str] = None, api_provider: str = "anthropic"):
+        self.diagnostics = HybridModelDiagnostics()
+        self.api_key = api_key
+        self.api_provider = api_provider
+        self.colors = {
+            "sarimax": "#22C55E",   # Green
+            "lstm": "#3B82F6",      # Blue
+            "xgboost": "#F97316",   # Orange
+            "ann": "#A855F7",       # Purple
+            "primary": "#6366F1",
+            "success": "#22C55E",
+            "warning": "#EAB308",
+            "danger": "#EF4444",
+        }
+
+    def _compute_metrics(
+        self,
+        y_true: np.ndarray,
+        y_pred: np.ndarray
+    ) -> Dict[str, float]:
+        """Compute regression metrics."""
+        errors = y_true - y_pred
+        mae = np.mean(np.abs(errors))
+        rmse = np.sqrt(np.mean(errors ** 2))
+
+        # MAPE (handle zero values)
+        mask = y_true != 0
+        if np.sum(mask) > 0:
+            mape = np.mean(np.abs(errors[mask] / y_true[mask])) * 100
+        else:
+            mape = np.nan
+
+        return {"mae": mae, "rmse": rmse, "mape": mape}
+
+    def _count_significant_acf_lags(
+        self,
+        residuals: np.ndarray,
+        max_lag: int = 20
+    ) -> int:
+        """Count number of significant autocorrelation lags."""
+        acf, conf = self.diagnostics.compute_autocorrelation(residuals, max_lag=max_lag)
+        # Skip lag 0 (always 1)
+        return sum(1 for a in acf[1:] if abs(a) > conf)
+
+    def analyze_single_model(
+        self,
+        model_name: str,
+        y_true: np.ndarray,
+        y_pred: np.ndarray
+    ) -> ModelDiagnosticResult:
+        """
+        Run full diagnostic analysis on a single model.
+
+        Returns a comprehensive diagnostic result including:
+        - Performance metrics (MAE, RMSE, MAPE)
+        - Residual statistics
+        - Statistical tests for learnable structure
+        - Recommendations
+        """
+        residuals = self.diagnostics.compute_residuals(y_true, y_pred)
+        metrics = self._compute_metrics(y_true, y_pred)
+
+        # Run diagnostic tests
+        ljung_box = self.diagnostics.ljung_box_test(residuals)
+        runs = self.diagnostics.runs_test(residuals)
+        spectral = self.diagnostics.spectral_entropy(residuals)
+
+        # Count significant ACF lags
+        significant_lags = self._count_significant_acf_lags(residuals)
+
+        # Determine if residuals have learnable structure
+        has_structure = (
+            ljung_box.is_favorable or
+            runs.is_favorable or
+            (spectral.is_favorable and spectral.statistic < 0.8)
+        )
+
+        # Generate recommendation
+        if has_structure:
+            if significant_lags >= 5:
+                recommendation = f"Strong learnable structure detected ({significant_lags} significant ACF lags). Good Stage 1 candidate."
+            else:
+                recommendation = f"Moderate learnable structure. Hybrid may improve by {5 + significant_lags}%."
+        else:
+            recommendation = "Residuals appear random. Using as Stage 1 likely won't benefit from Stage 2."
+
+        return ModelDiagnosticResult(
+            model_name=model_name,
+            mae=metrics["mae"],
+            rmse=metrics["rmse"],
+            mape=metrics["mape"],
+            residual_mean=np.mean(residuals),
+            residual_std=np.std(residuals),
+            ljung_box_pvalue=ljung_box.p_value,
+            runs_test_pvalue=runs.p_value,
+            spectral_entropy=spectral.statistic,
+            has_learnable_structure=has_structure,
+            autocorr_significant_lags=significant_lags,
+            recommendation=recommendation
+        )
+
+    def analyze_all_models(
+        self,
+        y_true: np.ndarray,
+        model_predictions: Dict[str, np.ndarray]
+    ) -> Dict[str, ModelDiagnosticResult]:
+        """
+        Analyze all trained models and return diagnostic results.
+
+        Args:
+            y_true: Actual target values
+            model_predictions: Dict mapping model name to predictions
+
+        Returns:
+            Dict mapping model name to ModelDiagnosticResult
+        """
+        results = {}
+        for model_name, y_pred in model_predictions.items():
+            if y_pred is not None and len(y_pred) == len(y_true):
+                results[model_name] = self.analyze_single_model(model_name, y_true, y_pred)
+        return results
+
+    def _build_rag_context(
+        self,
+        y_true: np.ndarray,
+        model_results: Dict[str, ModelDiagnosticResult],
+        data_stats: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Build RAG context from all diagnostic results.
+
+        This creates a comprehensive context string that can be used for
+        intelligent recommendations (either rule-based or LLM-powered).
+        """
+        n_samples = len(y_true)
+
+        context = f"""
+=== HYBRID MODEL DIAGNOSTIC ANALYSIS ===
+
+DATA CHARACTERISTICS:
+- Sample size: {n_samples}
+- Target mean: {np.mean(y_true):.2f}
+- Target std: {np.std(y_true):.2f}
+- Target range: [{np.min(y_true):.2f}, {np.max(y_true):.2f}]
+
+MODEL PERFORMANCE COMPARISON:
+"""
+        # Sort models by RMSE
+        sorted_models = sorted(model_results.items(), key=lambda x: x[1].rmse)
+
+        for i, (name, result) in enumerate(sorted_models, 1):
+            context += f"""
+{i}. {name}:
+   - MAE: {result.mae:.4f} | RMSE: {result.rmse:.4f} | MAPE: {result.mape:.2f}%
+   - Residual Mean: {result.residual_mean:.4f} (bias indicator)
+   - Residual Std: {result.residual_std:.4f}
+   - Ljung-Box p-value: {result.ljung_box_pvalue:.4f} (< 0.05 = learnable structure)
+   - Runs Test p-value: {result.runs_test_pvalue:.4f} (< 0.05 = non-random)
+   - Spectral Entropy: {result.spectral_entropy:.3f} (< 0.7 = concentrated frequencies)
+   - Significant ACF Lags: {result.autocorr_significant_lags}
+   - Has Learnable Structure: {'YES' if result.has_learnable_structure else 'NO'}
+"""
+
+        # Add hybrid strategy context
+        context += """
+HYBRID STRATEGY OPTIONS:
+1. LSTM-SARIMAX: LSTM captures non-linear patterns, SARIMAX models residual autocorrelation
+2. LSTM-XGBoost: LSTM for sequences, XGBoost for complex residual relationships
+3. LSTM-ANN: Deep learning + feedforward for residual patterns
+4. Weighted Ensemble: Combine multiple model predictions with optimized weights
+5. Stacking: Meta-learner trained on base model predictions
+6. Decomposition: Separate trend/seasonality/residual components
+
+DECISION CRITERIA:
+- Choose Stage 1 model with LOWEST RMSE but residuals with learnable structure
+- If residuals are random (high entropy, no ACF significance), hybrid won't help
+- XGBoost Stage 2 works best with many features and complex residuals
+- SARIMAX Stage 2 works best with clear autocorrelation patterns
+- ANN Stage 2 works best with non-linear residual relationships
+"""
+
+        return context
+
+    def generate_recommendations(
+        self,
+        model_results: Dict[str, ModelDiagnosticResult],
+        y_true: np.ndarray,
+        use_llm: bool = False
+    ) -> List[HybridRecommendation]:
+        """
+        Generate hybrid model recommendations based on diagnostic results.
+
+        Uses either rule-based logic or LLM (if API key provided and use_llm=True).
+        """
+        recommendations = []
+
+        # Build RAG context
+        context = self._build_rag_context(y_true, model_results)
+
+        if use_llm and self.api_key:
+            # Use LLM for intelligent recommendations
+            recommendations = self._generate_llm_recommendations(context, model_results)
+        else:
+            # Use rule-based recommendations
+            recommendations = self._generate_rule_based_recommendations(model_results)
+
+        return recommendations
+
+    def _generate_rule_based_recommendations(
+        self,
+        model_results: Dict[str, ModelDiagnosticResult]
+    ) -> List[HybridRecommendation]:
+        """Generate recommendations using rule-based logic."""
+        recommendations = []
+
+        if not model_results:
+            return recommendations
+
+        # Sort by RMSE (best first)
+        sorted_models = sorted(model_results.items(), key=lambda x: x[1].rmse)
+
+        # Find models with learnable residual structure
+        models_with_structure = [
+            (name, result) for name, result in sorted_models
+            if result.has_learnable_structure
+        ]
+
+        # Best overall model
+        best_model_name, best_result = sorted_models[0]
+
+        # Rule 1: If best model has learnable structure, recommend hybrid
+        if best_result.has_learnable_structure:
+            # Determine best Stage 2 based on residual characteristics
+            if best_result.autocorr_significant_lags >= 3:
+                # Strong autocorrelation → SARIMAX
+                stage2 = "SARIMAX"
+                strategy = f"LSTM-{stage2}" if "LSTM" in best_model_name else f"{best_model_name}-{stage2}"
+                rationale = f"Residuals show {best_result.autocorr_significant_lags} significant ACF lags, indicating strong temporal patterns that SARIMAX can capture."
+            elif best_result.spectral_entropy < 0.6:
+                # Concentrated frequencies → Could benefit from XGBoost
+                stage2 = "XGBoost"
+                strategy = f"LSTM-{stage2}" if "LSTM" in best_model_name else f"{best_model_name}-{stage2}"
+                rationale = f"Low spectral entropy ({best_result.spectral_entropy:.2f}) suggests hidden periodicities. XGBoost can learn complex residual patterns."
+            else:
+                # General non-linear patterns → ANN
+                stage2 = "ANN"
+                strategy = f"LSTM-{stage2}" if "LSTM" in best_model_name else f"{best_model_name}-{stage2}"
+                rationale = "Residuals show non-random patterns but unclear structure. ANN can learn flexible residual relationships."
+
+            confidence = min(0.9, 0.5 + (best_result.autocorr_significant_lags * 0.05))
+
+            recommendations.append(HybridRecommendation(
+                strategy=strategy,
+                stage1_model=best_model_name,
+                stage2_model=stage2,
+                confidence=confidence,
+                rationale=rationale,
+                expected_improvement=f"{5 + best_result.autocorr_significant_lags * 2}% RMSE reduction",
+                risk_level="low" if confidence > 0.7 else "medium"
+            ))
+
+        # Rule 2: If multiple models exist, consider weighted ensemble
+        if len(model_results) >= 2:
+            model_names = [name for name, _ in sorted_models[:3]]
+            avg_rmse = np.mean([r.rmse for _, r in sorted_models[:3]])
+            best_rmse = sorted_models[0][1].rmse
+
+            # Ensemble helps when models have similar performance
+            rmse_spread = (sorted_models[-1][1].rmse - best_rmse) / best_rmse if best_rmse > 0 else 0
+
+            if rmse_spread < 0.3:  # Models are within 30% of each other
+                recommendations.append(HybridRecommendation(
+                    strategy="Weighted Ensemble",
+                    stage1_model=", ".join(model_names),
+                    stage2_model="N/A (combined)",
+                    confidence=0.75,
+                    rationale=f"Models have similar performance (spread: {rmse_spread*100:.1f}%). Ensemble can reduce variance by combining diverse predictions.",
+                    expected_improvement="3-8% RMSE reduction through diversification",
+                    risk_level="low"
+                ))
+
+        # Rule 3: If NO models have learnable structure, recommend against hybrid
+        if not models_with_structure:
+            recommendations.append(HybridRecommendation(
+                strategy="Single Model (No Hybrid)",
+                stage1_model=best_model_name,
+                stage2_model="None",
+                confidence=0.85,
+                rationale="None of the model residuals show learnable structure. Hybrid approaches would likely overfit.",
+                expected_improvement="N/A - Stay with single model",
+                risk_level="low"
+            ))
+
+        # Rule 4: Check for stacking potential
+        if len(model_results) >= 3:
+            # Calculate correlation between model predictions (via residuals)
+            residual_vars = [r.residual_std for _, r in sorted_models]
+            var_spread = np.std(residual_vars) / np.mean(residual_vars) if np.mean(residual_vars) > 0 else 0
+
+            if var_spread > 0.2:  # Models capture different aspects
+                recommendations.append(HybridRecommendation(
+                    strategy="Stacking Ensemble",
+                    stage1_model="All models as base learners",
+                    stage2_model="Meta-learner (Ridge/XGBoost)",
+                    confidence=0.65,
+                    rationale=f"Models have diverse error patterns (variance spread: {var_spread*100:.1f}%). Stacking can learn optimal combination.",
+                    expected_improvement="5-12% RMSE reduction",
+                    risk_level="medium"
+                ))
+
+        # Sort by confidence
+        recommendations.sort(key=lambda x: x.confidence, reverse=True)
+
+        return recommendations
+
+    def _generate_llm_recommendations(
+        self,
+        context: str,
+        model_results: Dict[str, ModelDiagnosticResult]
+    ) -> List[HybridRecommendation]:
+        """Generate recommendations using LLM (RAG approach)."""
+        # First get rule-based as fallback
+        rule_based = self._generate_rule_based_recommendations(model_results)
+
+        prompt = f"""
+{context}
+
+Based on this diagnostic analysis, recommend the TOP 3 hybrid strategies.
+
+For each recommendation, provide:
+1. Strategy name
+2. Stage 1 model
+3. Stage 2 model (if applicable)
+4. Confidence score (0-1)
+5. Rationale (2-3 sentences)
+6. Expected improvement
+7. Risk level (low/medium/high)
+
+Focus on PRACTICAL recommendations that will actually improve forecasting.
+If hybrid won't help, say so clearly.
+
+Format each recommendation clearly.
+"""
+
+        system_prompt = """You are an expert in time series forecasting and ensemble methods.
+Analyze diagnostic results and provide practical hybrid model recommendations.
+Be specific about WHY each strategy would work based on the residual analysis.
+If the data suggests hybrid won't help, be honest about it."""
+
+        try:
+            if self.api_provider == "anthropic":
+                import anthropic
+                client = anthropic.Anthropic(api_key=self.api_key)
+
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=1000,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                llm_text = response.content[0].text
+
+                # Parse LLM response and enhance rule-based recommendations
+                # For now, add LLM insight to the top recommendation
+                if rule_based:
+                    rule_based[0].rationale = f"[AI Enhanced] {llm_text[:500]}..."
+
+            else:  # OpenAI
+                import openai
+                client = openai.OpenAI(api_key=self.api_key)
+
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.3
+                )
+                llm_text = response.choices[0].message.content
+
+                if rule_based:
+                    rule_based[0].rationale = f"[AI Enhanced] {llm_text[:500]}..."
+
+        except Exception as e:
+            # Fallback to rule-based if LLM fails
+            if rule_based:
+                rule_based[0].rationale += f" (Note: LLM analysis unavailable: {str(e)[:50]})"
+
+        return rule_based
+
+    def create_comparison_plot(
+        self,
+        y_true: np.ndarray,
+        model_predictions: Dict[str, np.ndarray],
+        dates: Optional[pd.DatetimeIndex] = None
+    ) -> go.Figure:
+        """Create a comparison plot of all model residuals."""
+        n_models = len(model_predictions)
+        if n_models == 0:
+            return go.Figure()
+
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                "Model RMSE Comparison",
+                "Residual Distributions",
+                "ACF Comparison (Lag 1-10)",
+                "Spectral Entropy"
+            ),
+            vertical_spacing=0.15,
+            horizontal_spacing=0.12
+        )
+
+        model_colors = {
+            "SARIMAX": self.colors["sarimax"],
+            "LSTM": self.colors["lstm"],
+            "XGBoost": self.colors["xgboost"],
+            "ANN": self.colors["ann"],
+        }
+
+        rmse_values = []
+        model_names = []
+        entropy_values = []
+
+        for model_name, y_pred in model_predictions.items():
+            if y_pred is None or len(y_pred) != len(y_true):
+                continue
+
+            residuals = y_true - y_pred
+            metrics = self._compute_metrics(y_true, y_pred)
+
+            color = model_colors.get(model_name, self.colors["primary"])
+
+            # Store for bar chart
+            model_names.append(model_name)
+            rmse_values.append(metrics["rmse"])
+
+            # Spectral entropy
+            spectral = self.diagnostics.spectral_entropy(residuals)
+            entropy_values.append(spectral.statistic)
+
+            # 2. Residual distribution (violin plot style via histogram)
+            fig.add_trace(
+                go.Histogram(
+                    x=residuals,
+                    name=model_name,
+                    opacity=0.6,
+                    marker_color=color,
+                    nbinsx=20,
+                ),
+                row=1, col=2
+            )
+
+            # 3. ACF bars
+            acf, _ = self.diagnostics.compute_autocorrelation(residuals, max_lag=10)
+            fig.add_trace(
+                go.Bar(
+                    x=[f"Lag {i}" for i in range(1, 11)],
+                    y=acf[1:11],
+                    name=f"{model_name} ACF",
+                    marker_color=color,
+                    opacity=0.7,
+                ),
+                row=2, col=1
+            )
+
+        # 1. RMSE bar chart
+        fig.add_trace(
+            go.Bar(
+                x=model_names,
+                y=rmse_values,
+                marker_color=[model_colors.get(n, self.colors["primary"]) for n in model_names],
+                text=[f"{v:.2f}" for v in rmse_values],
+                textposition="auto",
+                name="RMSE",
+            ),
+            row=1, col=1
+        )
+
+        # 4. Spectral entropy bar chart
+        fig.add_trace(
+            go.Bar(
+                x=model_names,
+                y=entropy_values,
+                marker_color=[model_colors.get(n, self.colors["primary"]) for n in model_names],
+                text=[f"{v:.2f}" for v in entropy_values],
+                textposition="auto",
+                name="Entropy",
+            ),
+            row=2, col=2
+        )
+
+        # Add entropy threshold line
+        fig.add_hline(y=0.7, line_dash="dash", line_color=self.colors["warning"],
+                      annotation_text="Learnable threshold", row=2, col=2)
+
+        # Add ACF confidence band
+        n = len(y_true)
+        conf = 1.96 / np.sqrt(n)
+        fig.add_hline(y=conf, line_dash="dash", line_color=self.colors["danger"], row=2, col=1)
+        fig.add_hline(y=-conf, line_dash="dash", line_color=self.colors["danger"], row=2, col=1)
+
+        fig.update_layout(
+            template="plotly_dark",
+            height=650,
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            title=dict(
+                text="📊 Multi-Model Diagnostic Comparison",
+                font=dict(size=20)
+            ),
+            barmode="group"
+        )
+
+        return fig
+
+    def run_full_pipeline(
+        self,
+        y_true: np.ndarray,
+        model_predictions: Dict[str, np.ndarray],
+        dates: Optional[pd.DatetimeIndex] = None,
+        use_llm: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Run the complete diagnostic pipeline.
+
+        Args:
+            y_true: Actual target values
+            model_predictions: Dict mapping model name to predictions
+            dates: Optional date index for time plots
+            use_llm: Whether to use LLM for enhanced recommendations
+
+        Returns:
+            Dict containing:
+            - model_results: Individual model diagnostics
+            - recommendations: List of HybridRecommendation
+            - comparison_plot: Plotly figure comparing models
+            - best_single_model: Name of best performing model
+            - context: RAG context string
+        """
+        # 1. Analyze all models
+        model_results = self.analyze_all_models(y_true, model_predictions)
+
+        if not model_results:
+            return {
+                "model_results": {},
+                "recommendations": [],
+                "comparison_plot": go.Figure(),
+                "best_single_model": None,
+                "context": "No models to analyze."
+            }
+
+        # 2. Build RAG context
+        context = self._build_rag_context(y_true, model_results)
+
+        # 3. Generate recommendations
+        recommendations = self.generate_recommendations(model_results, y_true, use_llm)
+
+        # 4. Create comparison plot
+        comparison_plot = self.create_comparison_plot(y_true, model_predictions, dates)
+
+        # 5. Find best single model
+        best_model = min(model_results.items(), key=lambda x: x[1].rmse)
+
+        return {
+            "model_results": model_results,
+            "recommendations": recommendations,
+            "comparison_plot": comparison_plot,
+            "best_single_model": best_model[0],
+            "context": context
+        }
