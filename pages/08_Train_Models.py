@@ -5238,13 +5238,22 @@ def _render_hybrid_diagnostic_pipeline():
                         model_predictions["y_true"] = y_true
                         model_predictions["dates"] = dates
 
-        # Also check general ML results
+        # Also check general ML results (for single model training mode)
         ml_results = st.session_state.get("ml_mh_results")
         if ml_results and ml_results.get("per_h"):
-            model_type = ml_results.get("model_type", "ML")
+            # Extract actual model name from results_df (e.g., "XGBoost", "LSTM", "ANN")
+            results_df = ml_results.get("results_df")
+            if results_df is not None and not results_df.empty and "Model" in results_df.columns:
+                model_type = results_df["Model"].iloc[0]  # Get model name from first row
+            else:
+                model_type = "ML"  # Fallback
+
+            # Only add if not already detected via individual keys
             if model_type not in trained_models:
                 trained_models[model_type] = ml_results
-                y_true, y_pred, dates = _extract_predictions_for_diagnostic("ML Model (XGBoost/LSTM/ANN)")
+                # Use specific model name for extraction
+                source_model = model_type if model_type in ["XGBoost", "LSTM", "ANN"] else "ML Model (XGBoost/LSTM/ANN)"
+                y_true, y_pred, dates = _extract_predictions_for_diagnostic(source_model)
                 if y_true is not None and y_pred is not None:
                     model_predictions[model_type] = y_pred
                     if "y_true" not in model_predictions:
@@ -5615,10 +5624,15 @@ def _extract_predictions_for_diagnostic(source_model: str):
                     return y_true, y_pred, dates
 
         elif source_model in ["ML Model (XGBoost/LSTM/ANN)", "XGBoost", "LSTM", "ANN"]:
-            # Try individual model key first
+            # Try individual model key first, then fall back to general ml_mh_results
+            results = {}
             if source_model in ["XGBoost", "LSTM", "ANN"]:
+                # First try individual key
                 key = f"ml_mh_results_{source_model.lower()}"
                 results = st.session_state.get(key, {})
+                # Fall back to general ml_mh_results if individual key not found
+                if not results or not results.get("per_h"):
+                    results = st.session_state.get("ml_mh_results", {})
             else:
                 results = st.session_state.get("ml_mh_results", {})
 
