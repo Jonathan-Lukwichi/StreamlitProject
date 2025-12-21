@@ -1796,44 +1796,42 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
         y = df[target_col].values
 
         # =====================================================================
-        # Check for Feature Engineering split indices (3-way split for CQR)
+        # Check for Feature Engineering split indices (80/20 split from Feature Studio)
         # =====================================================================
         fe = st.session_state.get("feature_engineering", {})
         train_idx = fe.get("train_idx")
-        cal_idx = fe.get("cal_idx")
         test_idx = fe.get("test_idx")
 
-        # Check if 3-way split is available and indices are valid for this dataframe
+        # Check if Feature Studio split is available and valid for this dataframe
         use_fe_split = (
             train_idx is not None and
-            cal_idx is not None and
             test_idx is not None and
             isinstance(train_idx, np.ndarray) and
-            isinstance(cal_idx, np.ndarray) and
             isinstance(test_idx, np.ndarray) and
-            len(cal_idx) > 0 and
+            len(train_idx) > 0 and
+            len(test_idx) > 0 and
             max(train_idx.max() if len(train_idx) > 0 else 0,
-                cal_idx.max() if len(cal_idx) > 0 else 0,
                 test_idx.max() if len(test_idx) > 0 else 0) < len(df)
         )
 
         if use_fe_split:
-            # Use Feature Engineering 3-way split (train/calibration/test)
+            # Use Feature Studio split (80/20 by default)
             X_train, y_train = X[train_idx], y[train_idx]
-            X_cal, y_cal = X[cal_idx], y[cal_idx]
             X_val, y_val = X[test_idx], y[test_idx]
 
             # Extract datetime values
             if datetime_col:
                 val_datetime = df[datetime_col].iloc[test_idx].values
-                cal_datetime = df[datetime_col].iloc[cal_idx].values
             else:
                 val_datetime = test_idx.tolist()
-                cal_datetime = cal_idx.tolist()
 
-            has_calibration = True
+            # No calibration set in simple 80/20 split
+            X_cal, y_cal = None, None
+            cal_datetime = None
+            has_calibration = False
+
         else:
-            # Fallback to 2-way split (train/validation)
+            # Fallback to slider-based split (if Feature Studio not run)
             split_idx = int(len(df) * split_ratio)
             X_train, X_val = X[:split_idx], X[split_idx:]
             y_train, y_val = y[:split_idx], y[split_idx:]

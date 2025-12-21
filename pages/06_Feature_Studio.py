@@ -359,63 +359,43 @@ def page_feature_engineering():
     ])
 
     with tab_split:
-        st.markdown("#### Configure Temporal Data Split")
+        st.markdown("#### Configure Train/Test Split")
 
-        if TEMPORAL_SPLIT_AVAILABLE:
-            col_split1, col_split2 = st.columns(2)
-            with col_split1:
-                train_ratio = st.slider(
-                    "Training Set Ratio",
-                    min_value=0.50,
-                    max_value=0.80,
-                    value=0.70,
-                    step=0.05,
-                    help="Proportion of data for training (recommended: 70%)"
-                )
-            with col_split2:
-                cal_ratio = st.slider(
-                    "Calibration Set Ratio",
-                    min_value=0.05,
-                    max_value=0.25,
-                    value=0.15,
-                    step=0.05,
-                    help="Proportion for calibration (needed for Conformal Prediction)"
-                )
+        st.info("""
+        **Data Leakage Prevention:** Scalers and encoders are fitted on training data ONLY,
+        then applied to test data. This ensures no information from the test set leaks into training.
+        """)
 
-            # Compute test ratio
-            test_ratio = 1.0 - train_ratio - cal_ratio
-            if test_ratio < 0.05:
-                st.warning(f"⚠️ Test set too small ({test_ratio:.0%}). Reduce train or calibration ratio.")
-                test_ratio = 0.05
+        # Simple 80/20 split
+        train_ratio = st.slider(
+            "Training Set Ratio",
+            min_value=0.60,
+            max_value=0.90,
+            value=0.80,
+            step=0.05,
+            help="Proportion of data for training (recommended: 80%)"
+        )
 
-            # Show split preview
-            min_date = base[date_col].min()
-            max_date = base[date_col].max()
-            total_days = (max_date - min_date).days
+        test_ratio = 1.0 - train_ratio
 
-            from datetime import timedelta
-            train_end = min_date + timedelta(days=int(total_days * train_ratio))
-            cal_end = min_date + timedelta(days=int(total_days * (train_ratio + cal_ratio)))
+        # Show split preview
+        min_date = base[date_col].min()
+        max_date = base[date_col].max()
+        total_days = (max_date - min_date).days
 
-            col_prev1, col_prev2, col_prev3 = st.columns(3)
-            with col_prev1:
-                st.metric("Train", f"{train_ratio:.0%}", f"{min_date.strftime('%Y-%m-%d')} → {train_end.strftime('%Y-%m-%d')}")
-            with col_prev2:
-                st.metric("Calibration", f"{cal_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {cal_end.strftime('%Y-%m-%d')}")
-            with col_prev3:
-                st.metric("Test", f"{test_ratio:.0%}", f"{cal_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
+        from datetime import timedelta
+        train_end = min_date + timedelta(days=int(total_days * train_ratio))
 
-            # Compute temporal split
-            train_idx, cal_idx, test_idx, split_result = _get_temporal_split(
-                base, date_col, train_ratio, cal_ratio
-            )
+        col_prev1, col_prev2 = st.columns(2)
+        with col_prev1:
+            st.metric("Train", f"{train_ratio:.0%}", f"{min_date.strftime('%Y-%m-%d')} → {train_end.strftime('%Y-%m-%d')}")
+        with col_prev2:
+            st.metric("Test", f"{test_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
 
-        else:
-            st.warning("⚠️ Temporal split module not available. Using legacy ratio-based split.")
-            train_ratio = st.slider("Train ratio", 0.5, 0.95, 0.8, 0.05)
-            train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
-            cal_idx = np.array([], dtype=int)
-            split_result = None
+        # Compute simple 2-way split (no calibration set)
+        train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
+        cal_idx = np.array([], dtype=int)  # No calibration set
+        split_result = None
 
     with tab_options:
         st.markdown("#### Feature Engineering Options")
@@ -463,7 +443,7 @@ def page_feature_engineering():
                         st.warning(warning)
 
         # =========================================================================
-        # STORE IN SESSION STATE (with cal_idx for Conformal Prediction)
+        # STORE IN SESSION STATE (Simple 80/20 split for Train Models page)
         # =========================================================================
         st.session_state["feature_engineering"] = {
             "summary": {
@@ -471,23 +451,18 @@ def page_feature_engineering():
                 "apply_scaling": apply_scaling,
                 "skip_engineering": skip_engineering,
                 "train_size": len(train_idx),
-                "cal_size": len(cal_idx),
                 "test_size": len(test_idx),
-                "train_ratio": train_ratio if TEMPORAL_SPLIT_AVAILABLE else train_ratio,
-                "cal_ratio": cal_ratio if TEMPORAL_SPLIT_AVAILABLE else 0.0,
+                "train_ratio": train_ratio,
+                "test_ratio": test_ratio,
                 "transformers_saved": save_transformers and not skip_engineering,
             },
             "A": A_full,
             "B": B_full,
             "train_idx": train_idx,
-            "cal_idx": cal_idx,    # NEW: Calibration indices for Conformal Prediction
+            "cal_idx": cal_idx,    # Empty array (no calibration set)
             "test_idx": test_idx,
-            "split_result": split_result,  # Full TemporalSplitResult object
+            "split_result": split_result,
         }
-
-        # Also store split result at top level for easy access by other pages
-        if split_result is not None:
-            st.session_state["temporal_split"] = split_result
 
         # =========================================================================
         # DISPLAY RESULTS
@@ -495,17 +470,14 @@ def page_feature_engineering():
         st.success(f"✅ Dataset ready: {variant_used}")
 
         # Show split summary
-        if TEMPORAL_SPLIT_AVAILABLE:
-            col_sum1, col_sum2, col_sum3 = st.columns(3)
-            with col_sum1:
-                st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
-            with col_sum2:
-                st.metric("Calibration Records", f"{len(cal_idx):,}", f"{len(cal_idx)/len(base)*100:.1f}%")
-            with col_sum3:
-                st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
+        col_sum1, col_sum2 = st.columns(2)
+        with col_sum1:
+            st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
+        with col_sum2:
+            st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
 
-            if save_transformers and not skip_engineering:
-                st.info(f"💾 Transformers saved to: `{TRANSFORMERS_DIR}/`")
+        if save_transformers and not skip_engineering:
+            st.info(f"💾 Transformers saved to: `{TRANSFORMERS_DIR}/`")
 
         result_tab1, result_tab2, result_tab3 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)", "Split Details"])
         with result_tab1:
@@ -515,22 +487,33 @@ def page_feature_engineering():
             st.dataframe(B_full.head(20), use_container_width=True)
             st.download_button("⬇️ Download Variant B", B_full.to_csv(index=False).encode(), "variant_B.csv", "text/csv")
         with result_tab3:
-            if split_result is not None:
-                st.markdown("#### Temporal Split Summary")
-                st.json({
-                    "date_column": split_result.date_col,
-                    "train_start": str(split_result.train_start),
-                    "train_end": str(split_result.train_end),
-                    "cal_start": str(split_result.cal_start),
-                    "cal_end": str(split_result.cal_end),
-                    "test_start": str(split_result.test_start),
-                    "test_end": str(split_result.test_end),
-                    "train_records": len(split_result.train_idx),
-                    "cal_records": len(split_result.cal_idx),
-                    "test_records": len(split_result.test_idx),
-                })
-            else:
-                st.info("Temporal split details not available (using legacy split).")
+            st.markdown("#### Train/Test Split Summary")
+
+            # Get date boundaries
+            train_dates = base.iloc[train_idx][date_col]
+            test_dates = base.iloc[test_idx][date_col]
+
+            st.json({
+                "date_column": date_col,
+                "train_start": str(train_dates.min()),
+                "train_end": str(train_dates.max()),
+                "test_start": str(test_dates.min()),
+                "test_end": str(test_dates.max()),
+                "train_records": len(train_idx),
+                "test_records": len(test_idx),
+                "train_ratio": f"{train_ratio:.0%}",
+                "test_ratio": f"{test_ratio:.0%}",
+            })
+
+            st.markdown("---")
+            st.markdown("#### Data Leakage Prevention")
+            st.success("""
+            ✅ **Scalers fitted on TRAIN data only** → Applied to both train and test
+
+            ✅ **Encoders fitted on TRAIN data only** → Applied to both train and test
+
+            ✅ **No future information leaked** → Test data is strictly after train data
+            """)
 
 # === ENTRYPOINT ===============================================================
 def main():
