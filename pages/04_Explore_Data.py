@@ -1019,6 +1019,168 @@ def page_eda():
             except Exception as e:
                 st.error(f"FFT analysis failed: {e}")
 
+        # PROPORTION STABILITY ANALYSIS SECTION
+        st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin-bottom: 1.5rem;'>
+              <span style='font-size: 2rem;'>📊</span>
+              <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Category Proportion Stability</h3>
+              <p class='hf-feature-description'>Analyze if clinical category proportions are stable enough for probability-based forecasting</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _render_proportion_stability_analysis(df)
+
+
+def _render_proportion_stability_analysis(df: pd.DataFrame):
+    """Render proportion stability analysis for clinical categories."""
+    try:
+        from app_core.analytics.proportion_stability import (
+            analyze_proportion_stability,
+            generate_stability_report,
+            create_stability_visualizations,
+            CLINICAL_CATEGORIES
+        )
+    except ImportError as e:
+        st.error(f"Proportion stability module not available: {e}")
+        return
+
+    # Check if clinical category columns exist
+    category_cols = [c for c in CLINICAL_CATEGORIES if c in df.columns]
+
+    if not category_cols:
+        st.info(
+            "📋 **Clinical category columns not found in dataset.**\n\n"
+            "Expected columns: RESPIRATORY, CARDIAC, TRAUMA, GASTROINTESTINAL, INFECTIOUS, NEUROLOGICAL, OTHER\n\n"
+            "This analysis requires aggregated clinical category data from the Data Preparation step."
+        )
+        return
+
+    st.success(f"✅ Found {len(category_cols)} clinical categories: {', '.join(category_cols)}")
+
+    # Run analysis button
+    if st.button("🔬 Analyze Proportion Stability", type="primary", use_container_width=True):
+        with st.spinner("Analyzing category proportions over time..."):
+            try:
+                # Ensure datetime index
+                df_analysis = df.copy()
+                if "datetime" in df_analysis.columns:
+                    date_col = "datetime"
+                elif "Date" in df_analysis.columns:
+                    date_col = "Date"
+                else:
+                    date_col = None
+
+                results = analyze_proportion_stability(
+                    df_analysis,
+                    date_col=date_col if date_col else "datetime",
+                    category_cols=category_cols
+                )
+
+                if "error" in results:
+                    st.error(f"Analysis failed: {results['error']}")
+                    return
+
+                # Store results in session state
+                st.session_state["proportion_stability_results"] = results
+
+            except Exception as e:
+                st.error(f"Analysis failed: {e}")
+                return
+
+    # Display results if available
+    if "proportion_stability_results" in st.session_state:
+        results = st.session_state["proportion_stability_results"]
+
+        # Summary metrics
+        summary = results["summary"]
+        metrics = results["stability_metrics"]
+
+        # Recommendation card
+        stability_color = (
+            SUCCESS_COLOR if summary["stability_level"] == "VERY_STABLE"
+            else WARNING_COLOR if summary["stability_level"] == "MODERATELY_STABLE"
+            else DANGER_COLOR
+        )
+
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='border-left: 4px solid {stability_color}; padding: 1rem;'>
+              <h4 style='margin: 0 0 0.5rem 0;'>Analysis Result</h4>
+              <pre style='white-space: pre-wrap; font-size: 0.875rem;'>{results["recommendation"]}</pre>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Key metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Avg CV", f"{summary['avg_cv']:.1f}%",
+                     delta="Stable" if summary['avg_cv'] < 10 else "Variable",
+                     delta_color="normal" if summary['avg_cv'] < 10 else "inverse")
+        with col2:
+            st.metric("Max CV", f"{summary['max_cv']:.1f}%",
+                     delta="OK" if summary['max_cv'] < 20 else "High",
+                     delta_color="normal" if summary['max_cv'] < 20 else "inverse")
+        with col3:
+            st.metric("Categories", summary['n_categories'])
+        with col4:
+            st.metric("Months Analyzed", summary['n_months'])
+
+        # Detailed metrics table
+        with st.expander("📊 Detailed Stability Metrics by Category", expanded=True):
+            metrics_df = pd.DataFrame([
+                {
+                    "Category": cat,
+                    "Mean %": m["mean"],
+                    "CV %": m["cv_percent"],
+                    "Range %": m["range"],
+                    "Min %": m["min"],
+                    "Max %": m["max"],
+                    "Status": "✅ Stable" if m["cv_percent"] < 10 else ("⚠️ Moderate" if m["cv_percent"] < 20 else "❌ Unstable")
+                }
+                for cat, m in metrics.items()
+            ])
+            st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+
+        # Visualizations
+        with st.expander("📈 Proportion Visualizations", expanded=False):
+            try:
+                figures = create_stability_visualizations(results)
+
+                if "timeline" in figures:
+                    st.plotly_chart(figures["timeline"], use_container_width=True)
+
+                if "stability" in figures:
+                    st.plotly_chart(figures["stability"], use_container_width=True)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if "heatmap" in figures:
+                        st.plotly_chart(figures["heatmap"], use_container_width=True)
+                with col2:
+                    if "distribution" in figures:
+                        st.plotly_chart(figures["distribution"], use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Visualization error: {e}")
+
+        # Seasonal patterns
+        with st.expander("🌡️ Seasonal Patterns Detected", expanded=False):
+            patterns = results.get("seasonal_patterns", {})
+            for cat, p in patterns.items():
+                if p.get("has_seasonality"):
+                    st.warning(
+                        f"**{cat}**: Seasonal pattern detected\n"
+                        f"- Peak: {p['peak_month']}, Low: {p['trough_month']}\n"
+                        f"- Amplitude: {p['amplitude_percent']:.1f}%"
+                    )
+                else:
+                    st.success(f"**{cat}**: No significant seasonality")
+
 
 init_state()
 page_eda()
