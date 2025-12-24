@@ -1132,6 +1132,8 @@ def run_ml_multihorizon(
     per_h = {}
     successful = []
     errors = {}  # Store errors for each horizon
+    pipelines = {}  # Store trained pipelines for SHAP/LIME
+    explainability_data = {}  # Store X_train, X_val, feature_names for SHAP/LIME
 
     # Parameter sharing: find optimal parameters once for h=1, reuse for h>1 (if using auto mode)
     shared_params = None
@@ -1189,6 +1191,15 @@ def run_ml_multihorizon(
                 "params": result.get("params", {}),
             }
 
+            # Store pipeline and explainability data for SHAP/LIME
+            if result.get("pipeline") is not None:
+                pipelines[h] = result["pipeline"]
+                explainability_data[h] = {
+                    "X_train": result.get("X_train"),
+                    "X_val": result.get("X_val"),
+                    "feature_names": result.get("feature_names", []),
+                }
+
             successful.append(h)
 
         except Exception as e:
@@ -1215,6 +1226,9 @@ def run_ml_multihorizon(
         "per_h": per_h,
         "successful": successful,
         "errors": errors,
+        # SHAP/LIME explainability data
+        "pipelines": pipelines,
+        "explainability_data": explainability_data,
     }
 
 def ml_to_multihorizon_artifacts(ml_out: dict):
@@ -1509,6 +1523,11 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             "n_features": len(numeric_feature_cols),
             "n_train": len(y_train),
             "n_val": len(y_val),
+            # Store for SHAP/LIME explainability
+            "pipeline": pipeline,
+            "X_train": X_train,
+            "X_val": X_val,
+            "feature_names": numeric_feature_cols,
         }
 
         return result

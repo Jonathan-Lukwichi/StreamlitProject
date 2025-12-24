@@ -11,6 +11,24 @@ from typing import Dict, List, Optional, Tuple, Any
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
+import io
+import base64
+
+# =============================================================================
+# SHAP AND LIME IMPORTS (Model Explainability)
+# =============================================================================
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
+
+try:
+    from lime.lime_tabular import LimeTabularExplainer
+    LIME_AVAILABLE = True
+except ImportError:
+    LIME_AVAILABLE = False
 
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
@@ -1221,8 +1239,8 @@ st.markdown(
 )
 
 # Main tabs
-tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_hyperparams, tab_thesis = st.tabs([
-    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "🔬 Hyperparameter Tuning", "📝 Thesis Export"
+tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_hyperparams, tab_explainability, tab_thesis = st.tabs([
+    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "🔬 Hyperparameter Tuning", "🔍 Explainability", "📝 Thesis Export"
 ])
 
 # -----------------------------------------------------------------------------
@@ -1745,7 +1763,328 @@ with tab_hyperparams:
                         st.json(export_data)
 
 # -----------------------------------------------------------------------------
-# TAB 6: THESIS EXPORT
+# TAB 6: MODEL EXPLAINABILITY (SHAP & LIME)
+# -----------------------------------------------------------------------------
+with tab_explainability:
+    st.markdown("### 🔍 Model Explainability")
+    st.caption("SHAP (SHapley Additive exPlanations) and LIME (Local Interpretable Model-agnostic Explanations)")
+
+    # Check if SHAP/LIME are available
+    if not SHAP_AVAILABLE and not LIME_AVAILABLE:
+        st.error(
+            "⚠️ **SHAP and LIME libraries are not installed.**\n\n"
+            "Please install them using:\n"
+            "```\npip install shap lime\n```"
+        )
+        st.stop()
+
+    # Check for available ML models with explainability data
+    available_models = []
+    for model_name in ["XGBoost", "LSTM", "ANN"]:
+        ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+        if ml_results and ml_results.get("pipelines"):
+            available_models.append(model_name)
+
+    # Also check single model results
+    ml_mh = st.session_state.get("ml_mh_results")
+    if ml_mh and ml_mh.get("pipelines"):
+        model_type = ml_mh.get("results_df", pd.DataFrame()).get("Model", pd.Series()).iloc[0] if not ml_mh.get("results_df", pd.DataFrame()).empty else "ML Model"
+        if model_type not in available_models:
+            available_models.append(model_type)
+
+    if not available_models:
+        st.warning(
+            "⚠️ **No ML models with explainability data found.**\n\n"
+            "Please train ML models (XGBoost, LSTM, or ANN) from the **Train Models** page first.\n\n"
+            "The models need to be re-trained after installing SHAP/LIME to capture the required data."
+        )
+    else:
+        # Model selection
+        col1, col2 = st.columns(2)
+
+        with col1:
+            selected_model = st.selectbox(
+                "Select Model:",
+                options=available_models,
+                key="explainability_model_select"
+            )
+
+        # Get the selected model's results
+        if selected_model in ["XGBoost", "LSTM", "ANN"]:
+            ml_results = st.session_state.get(f"ml_mh_results_{selected_model}")
+            if not ml_results:
+                ml_results = st.session_state.get("ml_mh_results")
+        else:
+            ml_results = st.session_state.get("ml_mh_results")
+
+        if ml_results:
+            pipelines = ml_results.get("pipelines", {})
+            explainability_data = ml_results.get("explainability_data", {})
+            successful = ml_results.get("successful", [])
+
+            with col2:
+                if successful:
+                    selected_horizon = st.selectbox(
+                        "Select Horizon:",
+                        options=successful,
+                        format_func=lambda x: f"Horizon {x} (Day {x})",
+                        key="explainability_horizon_select"
+                    )
+                else:
+                    st.warning("No successful horizons found.")
+                    selected_horizon = None
+
+            if selected_horizon and selected_horizon in pipelines:
+                pipeline = pipelines[selected_horizon]
+                exp_data = explainability_data.get(selected_horizon, {})
+                X_train = exp_data.get("X_train")
+                X_val = exp_data.get("X_val")
+                feature_names = exp_data.get("feature_names", [])
+
+                if X_val is None or len(feature_names) == 0:
+                    st.error("Explainability data not available for this horizon. Please re-train the model.")
+                else:
+                    st.divider()
+
+                    # SHAP Section
+                    if SHAP_AVAILABLE:
+                        st.markdown("#### 📊 SHAP Analysis")
+                        st.caption("Global feature importance and individual prediction explanations")
+
+                        with st.spinner("Computing SHAP values... (this may take a moment)"):
+                            try:
+                                # Get the underlying model for SHAP
+                                if selected_model == "XGBoost":
+                                    # XGBoost uses TreeExplainer (fast)
+                                    if hasattr(pipeline, 'model') and hasattr(pipeline.model, 'named_steps'):
+                                        model_for_shap = pipeline.model.named_steps.get('model', pipeline.model)
+                                    elif hasattr(pipeline, 'model'):
+                                        model_for_shap = pipeline.model
+                                    else:
+                                        model_for_shap = pipeline
+
+                                    explainer = shap.TreeExplainer(model_for_shap)
+                                    shap_values = explainer.shap_values(X_val)
+                                else:
+                                    # LSTM/ANN use KernelExplainer (slower, use sampling)
+                                    # Create a prediction function
+                                    def predict_fn(X):
+                                        return pipeline.predict(X)
+
+                                    # Sample background data for efficiency
+                                    background_samples = min(100, len(X_train)) if X_train is not None else 50
+                                    background = shap.sample(X_train, background_samples) if X_train is not None else X_val[:50]
+
+                                    explainer = shap.KernelExplainer(predict_fn, background)
+                                    # Limit test samples for speed
+                                    X_val_sample = X_val[:min(50, len(X_val))]
+                                    shap_values = explainer.shap_values(X_val_sample)
+                                    X_val = X_val_sample  # Use sampled data for plots
+
+                                # Store SHAP values in session state for caching
+                                shap_cache_key = f"shap_values_{selected_model}_{selected_horizon}"
+                                st.session_state[shap_cache_key] = {
+                                    "shap_values": shap_values,
+                                    "X_val": X_val,
+                                    "feature_names": feature_names,
+                                }
+
+                                # SHAP Summary Plot
+                                st.markdown("##### Feature Importance (Summary Plot)")
+
+                                fig_summary, ax_summary = plt.subplots(figsize=(10, 6))
+                                shap.summary_plot(
+                                    shap_values,
+                                    X_val,
+                                    feature_names=feature_names,
+                                    show=False,
+                                    plot_size=None
+                                )
+                                plt.tight_layout()
+
+                                # Convert matplotlib to streamlit
+                                buf = io.BytesIO()
+                                plt.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                                           facecolor='#0f172a', edgecolor='none')
+                                buf.seek(0)
+                                st.image(buf, use_container_width=True)
+                                plt.close()
+
+                                # SHAP Bar Plot (Mean absolute SHAP values)
+                                st.markdown("##### Mean Feature Importance (Bar Plot)")
+
+                                fig_bar, ax_bar = plt.subplots(figsize=(10, 6))
+                                shap.summary_plot(
+                                    shap_values,
+                                    X_val,
+                                    feature_names=feature_names,
+                                    plot_type="bar",
+                                    show=False,
+                                    plot_size=None
+                                )
+                                plt.tight_layout()
+
+                                buf2 = io.BytesIO()
+                                plt.savefig(buf2, format='png', dpi=150, bbox_inches='tight',
+                                           facecolor='#0f172a', edgecolor='none')
+                                buf2.seek(0)
+                                st.image(buf2, use_container_width=True)
+                                plt.close()
+
+                                # Individual prediction explanation
+                                with st.expander("🔍 Explain Individual Prediction", expanded=False):
+                                    pred_idx = st.slider(
+                                        "Select prediction to explain:",
+                                        min_value=0,
+                                        max_value=len(X_val) - 1,
+                                        value=0,
+                                        key="shap_pred_idx"
+                                    )
+
+                                    st.markdown(f"**Explaining prediction #{pred_idx}**")
+
+                                    # Force plot for single prediction
+                                    if hasattr(explainer, 'expected_value'):
+                                        expected_value = explainer.expected_value
+                                        if isinstance(expected_value, np.ndarray):
+                                            expected_value = expected_value[0]
+
+                                        # Create force plot
+                                        force_plot = shap.force_plot(
+                                            expected_value,
+                                            shap_values[pred_idx],
+                                            X_val[pred_idx],
+                                            feature_names=feature_names,
+                                            matplotlib=True,
+                                            show=False
+                                        )
+                                        plt.tight_layout()
+
+                                        buf3 = io.BytesIO()
+                                        plt.savefig(buf3, format='png', dpi=150, bbox_inches='tight',
+                                                   facecolor='white', edgecolor='none')
+                                        buf3.seek(0)
+                                        st.image(buf3, use_container_width=True)
+                                        plt.close()
+
+                                    # Feature contributions table
+                                    contrib_df = pd.DataFrame({
+                                        "Feature": feature_names,
+                                        "Value": X_val[pred_idx],
+                                        "SHAP Value": shap_values[pred_idx]
+                                    }).sort_values("SHAP Value", key=abs, ascending=False)
+
+                                    st.dataframe(
+                                        contrib_df.style.format({"Value": "{:.4f}", "SHAP Value": "{:.4f}"}).background_gradient(
+                                            subset=["SHAP Value"],
+                                            cmap="RdYlGn",
+                                            vmin=-abs(shap_values[pred_idx]).max(),
+                                            vmax=abs(shap_values[pred_idx]).max()
+                                        ),
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
+
+                            except Exception as e:
+                                st.error(f"Error computing SHAP values: {str(e)}")
+                                import traceback
+                                with st.expander("Error Details"):
+                                    st.code(traceback.format_exc())
+                    else:
+                        st.info("📊 **SHAP not available.** Install with: `pip install shap`")
+
+                    st.divider()
+
+                    # LIME Section
+                    if LIME_AVAILABLE:
+                        st.markdown("#### 🍋 LIME Analysis")
+                        st.caption("Local Interpretable Model-agnostic Explanations for individual predictions")
+
+                        with st.expander("🔍 Generate LIME Explanation", expanded=True):
+                            lime_pred_idx = st.slider(
+                                "Select prediction to explain with LIME:",
+                                min_value=0,
+                                max_value=len(X_val) - 1,
+                                value=0,
+                                key="lime_pred_idx"
+                            )
+
+                            if st.button("Generate LIME Explanation", key="lime_generate_btn"):
+                                with st.spinner("Generating LIME explanation..."):
+                                    try:
+                                        # Create LIME explainer
+                                        lime_explainer = LimeTabularExplainer(
+                                            X_train if X_train is not None else X_val,
+                                            feature_names=feature_names,
+                                            mode='regression',
+                                            verbose=False
+                                        )
+
+                                        # Create prediction function
+                                        def predict_fn(X):
+                                            return pipeline.predict(X)
+
+                                        # Generate explanation
+                                        explanation = lime_explainer.explain_instance(
+                                            X_val[lime_pred_idx],
+                                            predict_fn,
+                                            num_features=min(10, len(feature_names))
+                                        )
+
+                                        # Display as bar chart using Plotly
+                                        exp_list = explanation.as_list()
+                                        exp_df = pd.DataFrame(exp_list, columns=["Feature", "Contribution"])
+                                        exp_df = exp_df.sort_values("Contribution", key=abs, ascending=True)
+
+                                        # Create horizontal bar chart
+                                        colors = [SUCCESS_COLOR if c > 0 else DANGER_COLOR for c in exp_df["Contribution"]]
+
+                                        fig_lime = go.Figure(go.Bar(
+                                            x=exp_df["Contribution"],
+                                            y=exp_df["Feature"],
+                                            orientation='h',
+                                            marker_color=colors,
+                                            text=[f"{c:.4f}" for c in exp_df["Contribution"]],
+                                            textposition="auto"
+                                        ))
+
+                                        fig_lime.update_layout(
+                                            title=f"LIME Explanation for Prediction #{lime_pred_idx}",
+                                            xaxis_title="Feature Contribution",
+                                            yaxis_title="Feature",
+                                            paper_bgcolor="rgba(0,0,0,0)",
+                                            plot_bgcolor="rgba(0,0,0,0)",
+                                            height=400,
+                                            font=dict(color=TEXT_COLOR)
+                                        )
+
+                                        st.plotly_chart(fig_lime, use_container_width=True)
+
+                                        # Show feature values
+                                        st.markdown("**Feature Values for this Prediction:**")
+                                        feature_vals_df = pd.DataFrame({
+                                            "Feature": feature_names,
+                                            "Value": X_val[lime_pred_idx]
+                                        })
+                                        st.dataframe(
+                                            feature_vals_df.style.format({"Value": "{:.4f}"}),
+                                            use_container_width=True,
+                                            hide_index=True
+                                        )
+
+                                    except Exception as e:
+                                        st.error(f"Error generating LIME explanation: {str(e)}")
+                                        import traceback
+                                        with st.expander("Error Details"):
+                                            st.code(traceback.format_exc())
+                    else:
+                        st.info("🍋 **LIME not available.** Install with: `pip install lime`")
+
+            elif selected_horizon:
+                st.warning(f"No pipeline data found for Horizon {selected_horizon}. Please re-train the model.")
+
+# -----------------------------------------------------------------------------
+# TAB 7: THESIS EXPORT
 # -----------------------------------------------------------------------------
 with tab_thesis:
     st.markdown("### Thesis-Quality Summary")
