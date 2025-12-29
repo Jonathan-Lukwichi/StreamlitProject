@@ -2158,7 +2158,7 @@ def page_ml():
         selected_model = MLUIComponents.render_model_selector(cfg.get("ml_choice", "XGBoost"))
         cfg["ml_choice"] = selected_model
     else:
-        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially with default configurations")
+        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially using the current configurations from the UI.")
         selected_model = None  # Not needed for all models mode
 
     # 2. Dataset Selection (from Feature Selection results)
@@ -2412,13 +2412,15 @@ def page_ml():
 
                     with st.spinner(f"Training {model_name} for {cfg.get('ml_horizons', 7)} horizons..."):
                         try:
+                            # Pass a copy of the config to prevent any potential state pollution between runs
+                            current_run_config = cfg.copy()
                             results = run_ml_multihorizon(
                                 model_type=model_name,
-                                config=cfg,
+                                config=current_run_config,
                                 df=selected_df,
-                                feature_cols=cfg['ml_feature_cols'],
-                                split_ratio=cfg.get('split_ratio', 0.8),
-                                horizons=cfg.get('ml_horizons', 7),
+                                feature_cols=current_run_config['ml_feature_cols'],
+                                split_ratio=current_run_config.get('split_ratio', 0.8),
+                                horizons=current_run_config.get('ml_horizons', 7),
                             )
 
                             # Store results for each model
