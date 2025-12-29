@@ -2209,26 +2209,27 @@ def page_benchmarks():
                                         sp_config = st.session_state.get("seasonal_proportions_config")
                                         sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
 
-                                        # Get forecast dates (last 7 days of best horizon forecast)
+                                        # Extract forecast from per_h structure
                                         best_h = int(best_row.get('Horizon', 7))
-                                        if 'forecasts' in arima_mh_out and best_h in arima_mh_out['forecasts']:
-                                            forecast_series = arima_mh_out['forecasts'][best_h]
-                                            if isinstance(forecast_series, pd.Series):
-                                                forecast_dates = forecast_series.index
-                                            else:
-                                                # Generate date range for forecast
-                                                last_date = pd.to_datetime(data['Date'].max())
-                                                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=best_h, freq='D')
-                                                forecast_series = pd.Series(forecast_series, index=forecast_dates)
+                                        if 'per_h' in arima_mh_out and best_h in arima_mh_out['per_h']:
+                                            forecast_series = arima_mh_out['per_h'][best_h].get('forecast')
 
-                                            # Distribute forecast to categories
-                                            category_forecasts = distribute_forecast_to_categories(
-                                                forecast_series,
-                                                sp_result.dow_proportions,
-                                                sp_result.monthly_proportions
-                                            )
+                                            if forecast_series is not None and len(forecast_series) > 0:
+                                                # forecast_series should already be a pandas Series with dates
+                                                if not isinstance(forecast_series, pd.Series):
+                                                    # Convert to Series if needed
+                                                    last_date = pd.to_datetime(data['Date'].max())
+                                                    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
+                                                    forecast_series = pd.Series(forecast_series, index=forecast_dates)
 
-                                            sp_result.category_forecasts = category_forecasts
+                                                # Distribute forecast to categories
+                                                category_forecasts = distribute_forecast_to_categories(
+                                                    forecast_series,
+                                                    sp_result.dow_proportions,
+                                                    sp_result.monthly_proportions
+                                                )
+
+                                                sp_result.category_forecasts = category_forecasts
 
                                         # Store results
                                         st.session_state["seasonal_proportions_result"] = sp_result
@@ -2319,28 +2320,30 @@ def page_benchmarks():
 
                                         # Get forecast from first successful target as reference
                                         successful_targets = multi_results.get("successful_targets", [])
-                                        if successful_targets and 'target_results' in multi_results:
+                                        if successful_targets:
                                             first_target = successful_targets[0]
-                                            target_result = multi_results['target_results'].get(first_target, {})
+                                            target_data = multi_results.get(first_target, {})
 
-                                            if 'forecast' in target_result:
-                                                forecast_data = target_result['forecast']
-                                                if isinstance(forecast_data, pd.Series):
-                                                    forecast_series = forecast_data
-                                                else:
-                                                    # Generate date range
-                                                    last_date = pd.to_datetime(data['Date'].max())
-                                                    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_data), freq='D')
-                                                    forecast_series = pd.Series(forecast_data, index=forecast_dates)
+                                            if target_data.get("status") == "success":
+                                                target_results = target_data.get("results", {})
+                                                forecast_series = target_results.get("forecasts")
 
-                                                # Distribute forecast to categories
-                                                category_forecasts = distribute_forecast_to_categories(
-                                                    forecast_series,
-                                                    sp_result.dow_proportions,
-                                                    sp_result.monthly_proportions
-                                                )
+                                                if forecast_series is not None and len(forecast_series) > 0:
+                                                    # forecast_series should already be a pandas Series with dates
+                                                    if not isinstance(forecast_series, pd.Series):
+                                                        # Convert to Series if needed
+                                                        last_date = pd.to_datetime(data['Date'].max())
+                                                        forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
+                                                        forecast_series = pd.Series(forecast_series, index=forecast_dates)
 
-                                                sp_result.category_forecasts = category_forecasts
+                                                    # Distribute forecast to categories
+                                                    category_forecasts = distribute_forecast_to_categories(
+                                                        forecast_series,
+                                                        sp_result.dow_proportions,
+                                                        sp_result.monthly_proportions
+                                                    )
+
+                                                    sp_result.category_forecasts = category_forecasts
 
                                         # Store results
                                         st.session_state["seasonal_proportions_result"] = sp_result
@@ -2424,26 +2427,27 @@ def page_benchmarks():
                                         sp_config = st.session_state.get("seasonal_proportions_config")
                                         sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
 
-                                        # Get forecast from results
+                                        # Extract forecast from per_h structure
                                         best_h = int(best_row.get('Horizon', 7))
-                                        if 'forecasts' in sarimax_out and best_h in sarimax_out['forecasts']:
-                                            forecast_data = sarimax_out['forecasts'][best_h]
-                                            if isinstance(forecast_data, pd.Series):
-                                                forecast_series = forecast_data
-                                            else:
-                                                # Generate date range
-                                                last_date = pd.to_datetime(data['Date'].max())
-                                                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=best_h, freq='D')
-                                                forecast_series = pd.Series(forecast_data, index=forecast_dates)
+                                        if 'per_h' in sarimax_out and best_h in sarimax_out['per_h']:
+                                            forecast_series = sarimax_out['per_h'][best_h].get('forecast')
 
-                                            # Distribute forecast to categories
-                                            category_forecasts = distribute_forecast_to_categories(
-                                                forecast_series,
-                                                sp_result.dow_proportions,
-                                                sp_result.monthly_proportions
-                                            )
+                                            if forecast_series is not None and len(forecast_series) > 0:
+                                                # forecast_series should already be a pandas Series with dates
+                                                if not isinstance(forecast_series, pd.Series):
+                                                    # Convert to Series if needed
+                                                    last_date = pd.to_datetime(data['Date'].max())
+                                                    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
+                                                    forecast_series = pd.Series(forecast_series, index=forecast_dates)
 
-                                            sp_result.category_forecasts = category_forecasts
+                                                # Distribute forecast to categories
+                                                category_forecasts = distribute_forecast_to_categories(
+                                                    forecast_series,
+                                                    sp_result.dow_proportions,
+                                                    sp_result.monthly_proportions
+                                                )
+
+                                                sp_result.category_forecasts = category_forecasts
 
                                         # Store results
                                         st.session_state["seasonal_proportions_result"] = sp_result
