@@ -611,258 +611,52 @@ def _extract_ml_metrics():
     }
 
 # -----------------------------------------------------------------------------
-# PROBABILITY-BASED CATEGORY FORECASTING UTILITIES
+# SEASONAL-PROPORTION-BASED CATEGORY FORECASTING
 # -----------------------------------------------------------------------------
-
-# Category configuration (icons and colors for clinical categories)
-CATEGORY_CONFIG = {
-    "RESPIRATORY": {"icon": "🫁", "color": "#3b82f6"},
-    "CARDIAC": {"icon": "❤️", "color": "#ef4444"},
-    "TRAUMA": {"icon": "🩹", "color": "#f59e0b"},
-    "GASTROINTESTINAL": {"icon": "🤢", "color": "#10b981"},
-    "INFECTIOUS": {"icon": "🦠", "color": "#8b5cf6"},
-    "NEUROLOGICAL": {"icon": "🧠", "color": "#ec4899"},
-    "OTHER": {"icon": "📋", "color": "#6b7280"},
-}
-
-def _get_category_proportions():
+def _render_seasonal_category_forecast(predictions: list, dates: list, title: str):
     """
-    Calculate historical proportions for clinical categories from processed_df.
-    Returns a dict of {category: proportion} where proportions sum to 1.0
+    Calculates and renders the clinical category breakdown using the seasonal proportions method.
+    This is the same advanced statistical distribution method used in the Baseline Models page.
     """
-    category_proportions = {}
-
-    # Use processed_df which contains the aggregated clinical categories
-    merged_df = st.session_state.get("processed_df")
-    if merged_df is None or (hasattr(merged_df, 'empty') and merged_df.empty):
-        # Fallback to merged_data if processed_df not available
-        merged_df = st.session_state.get("merged_data")
-
-    if merged_df is None or (hasattr(merged_df, 'empty') and merged_df.empty):
-        return {}
-
-    # Build uppercase column map for case-insensitive matching
-    col_map = {col.upper(): col for col in merged_df.columns}
-
-    # Sum up historical values for each category
-    cat_totals = {}
-    for cat in CATEGORY_CONFIG.keys():
-        cat_upper = cat.upper()
-
-        # Look for columns that match this category (case-insensitive)
-        matching_cols = []
-        for col_upper, original_col in col_map.items():
-            # Match exact category name or category with suffix (e.g., RESPIRATORY_1)
-            if col_upper == cat_upper or col_upper.startswith(cat_upper + "_"):
-                matching_cols.append(original_col)
-
-        # Sum all matching columns for this category
-        if matching_cols:
-            total_for_cat = 0
-            for col in matching_cols:
-                col_sum = merged_df[col].sum()
-                if pd.notna(col_sum):
-                    total_for_cat += col_sum
-            if total_for_cat > 0:
-                cat_totals[cat] = total_for_cat
-
-    # Calculate proportions
-    total_cat_sum = sum(cat_totals.values()) if cat_totals else 0
-    if total_cat_sum > 0:
-        for cat, cat_sum in cat_totals.items():
-            category_proportions[cat] = cat_sum / total_cat_sum
-
-    return category_proportions
-
-def _distribute_with_smart_rounding(total: int, proportions: dict) -> dict:
-    """
-    Distribute total into categories using proportions with smart rounding.
-    Ensures the sum of distributed values equals the total exactly.
-    """
-    if not proportions:
-        return {}
-
-    # Calculate initial values (floored)
-    result = {}
-    remainders = {}
-    allocated = 0
-
-    for cat, prop in proportions.items():
-        exact_val = total * prop
-        floored_val = int(exact_val)
-        result[cat] = floored_val
-        remainders[cat] = exact_val - floored_val
-        allocated += floored_val
-
-    # Distribute remaining units based on largest remainders
-    remaining = total - allocated
-    sorted_cats = sorted(remainders.keys(), key=lambda x: remainders[x], reverse=True)
-
-    for i in range(min(remaining, len(sorted_cats))):
-        result[sorted_cats[i]] += 1
-
-    return result
-
-def _render_category_forecast_section(predictions: list, title: str = "Category Breakdown"):
-    """
-    Render the probability-based category forecast section for ML model predictions.
-
-    Args:
-        predictions: List of prediction values (one per horizon/day)
-        title: Section title
-    """
-    proportions = _get_category_proportions()
-
-    if not proportions:
-        return  # No category data available
-
-    st.markdown(f"""
-    <div style='background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 211, 238, 0.05));
-                border-left: 4px solid #10b981;
-                padding: 1rem;
-                border-radius: 8px;
-                margin: 1rem 0;'>
-        <h4 style='color: #10b981; margin: 0 0 0.5rem 0;'>📊 {title}</h4>
-        <p style='color: {TEXT_COLOR}; margin: 0; font-size: 0.875rem;'>
-            Category distribution based on historical proportions (probability-based approach)
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Calculate category breakdown for each prediction
-    num_predictions = min(len(predictions), 7)
-
-    if num_predictions > 0:
-        # Create columns for forecast cards
-        cols = st.columns(num_predictions, gap="small")
-
-        for idx, pred_val in enumerate(predictions[:num_predictions]):
-            total_forecast = int(round(float(pred_val)))
-            category_breakdown = _distribute_with_smart_rounding(total_forecast, proportions)
-
-            with cols[idx]:
-                # Day card
-                st.markdown(f"""
-                <div style='
-                    background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
-                    border-radius: 12px;
-                    padding: 1rem;
-                    text-align: center;
-                    border: 1px solid rgba(34, 211, 238, 0.3);
-                    margin-bottom: 0.5rem;
-                '>
-                    <div style='font-size: 0.75rem; color: #64748b; text-transform: uppercase;'>Day {idx + 1}</div>
-                    <div style='font-size: 1.5rem; font-weight: 800; color: #22d3ee;'>{total_forecast}</div>
-                    <div style='font-size: 0.625rem; color: #94a3b8;'>Total Patients</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Category breakdown expander
-                with st.expander("📊 Categories", expanded=False):
-                    for cat, cfg in CATEGORY_CONFIG.items():
-                        cat_val = category_breakdown.get(cat, 0)
-                        if cat_val > 0:
-                            st.markdown(f"""
-                            <div style='display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(100, 116, 139, 0.1);'>
-                                <span style='display: flex; align-items: center; gap: 6px;'>
-                                    <span style='font-size: 0.875rem;'>{cfg['icon']}</span>
-                                    <span style='color: #94a3b8; font-size: 0.75rem; font-weight: 600;'>{cat[:4]}</span>
-                                </span>
-                                <span style='color: {cfg["color"]}; font-weight: 700; font-size: 0.875rem;'>{cat_val}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-
-    # Category Statistics Section
-    st.markdown("""
-    <div style='margin-top: 1rem;'>
-        <div style='font-size: 0.875rem; font-weight: 700; color: #e2e8f0; margin-bottom: 0.75rem;'>
-            📈 Category Proportions (Historical)
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Display proportions in compact cards
-    prop_cols = st.columns(len(CATEGORY_CONFIG), gap="small")
-
-    for idx, (cat, cfg) in enumerate(CATEGORY_CONFIG.items()):
-        proportion = proportions.get(cat, 0) * 100
-
-        # Color based on proportion
-        if proportion >= 15:
-            prop_color = "#10b981"
-            prop_bg = "rgba(16, 185, 129, 0.15)"
-        elif proportion >= 10:
-            prop_color = "#22d3ee"
-            prop_bg = "rgba(34, 211, 238, 0.15)"
-        else:
-            prop_color = "#a78bfa"
-            prop_bg = "rgba(167, 139, 250, 0.15)"
-
-        with prop_cols[idx]:
-            if proportion > 0:
-                st.markdown(f"""
-                <div style='
-                    background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.6));
-                    border-radius: 8px;
-                    padding: 0.5rem;
-                    text-align: center;
-                    border: 1px solid {cfg['color']}30;
-                '>
-                    <div style='font-size: 1rem;'>{cfg['icon']}</div>
-                    <div style='font-size: 0.5rem; color: #94a3b8; text-transform: uppercase;'>{cat[:4]}</div>
-                    <div style='
-                        display: inline-block;
-                        padding: 0.125rem 0.25rem;
-                        background: {prop_bg};
-                        border: 1px solid {prop_color}40;
-                        border-radius: 4px;
-                        font-size: 0.5rem;
-                        font-weight: 700;
-                        color: {prop_color};
-                        margin-top: 0.25rem;
-                    '>{proportion:.1f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-def _render_category_statistics_compact():
-    """Render a compact category statistics section showing proportions only."""
-    proportions = _get_category_proportions()
-
-    if not proportions:
+    if not st.session_state.get("enable_seasonal_proportions", False):
         return
 
-    st.markdown("""
-    <div style='background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);
-                border-radius: 8px; padding: 0.75rem; margin: 1rem 0;'>
-        <div style='font-size: 0.75rem; font-weight: 600; color: #10b981; margin-bottom: 0.5rem;'>
-            📊 Category Distribution (Probability-Based)
-        </div>
-    """, unsafe_allow_html=True)
+    # Lazy import for performance, assuming these components exist from the other page.
+    from app_core.analytics.seasonal_proportions import (
+        SeasonalProportionConfig,
+        calculate_seasonal_proportions,
+        render_seasonal_forecast_breakdown,
+    )
 
-    # Display as inline badges
-    badges_html = ""
-    for cat, cfg in CATEGORY_CONFIG.items():
-        proportion = proportions.get(cat, 0) * 100
-        if proportion > 0:
-            badges_html += f"""
-            <span style='
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                padding: 0.25rem 0.5rem;
-                background: rgba(30, 41, 59, 0.6);
-                border: 1px solid {cfg["color"]}40;
-                border-radius: 6px;
-                margin: 0.125rem;
-                font-size: 0.6875rem;
-            '>
-                <span>{cfg['icon']}</span>
-                <span style='color: #94a3b8;'>{cat[:4]}</span>
-                <span style='color: {cfg["color"]}; font-weight: 700;'>{proportion:.1f}%</span>
-            </span>
-            """
+    config = st.session_state.get("seasonal_proportions_config", SeasonalProportionConfig())
+    # Use 'training_data' which is the selected dataset in this page
+    data = st.session_state.get("cfg", {}).get("training_data")
 
-    st.markdown(f"<div style='display: flex; flex-wrap: wrap; gap: 0.25rem;'>{badges_html}</div></div>", unsafe_allow_html=True)
+    if data is None or data.empty:
+        st.warning("Cannot calculate seasonal proportions: A dataset must be selected first.")
+        return
+
+    try:
+        # This function should return the proportion data needed for rendering
+        proportions_data = calculate_seasonal_proportions(data.copy(), config)
+
+        if not proportions_data:
+            st.info("Could not calculate seasonal proportions (insufficient data or no categories found).")
+            return
+
+        # This function should handle all the UI rendering for the breakdown
+        render_seasonal_forecast_breakdown(
+            predictions=predictions,
+            forecast_dates=pd.to_datetime(dates),
+            seasonal_proportions=proportions_data,
+            title=title,
+        )
+
+    except Exception as e:
+        st.error(f"Failed to render seasonal category forecast: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+
 
 
 # -----------------------------------------------------------------------------
@@ -2106,6 +1900,7 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
 def page_ml():
     # Import ML UI components
     from app_core.ui.ml_components import MLUIComponents
+    from app_core.analytics.seasonal_proportions import SeasonalProportionConfig
 
     # Header (left-aligned like Dashboard)
     st.markdown(
@@ -2243,7 +2038,41 @@ def page_ml():
         st.warning("⚠️ No feature selection results found. Please run **Automated Feature Selection** (Page 07) first.")
         data_source_placeholder()
 
-    # 3. Manual Configuration - Only show for Single Model mode
+    # 3. Seasonal Proportions Configuration (NEW)
+    st.markdown("---")
+    st.markdown("#### 📊 Seasonal Category Distribution")
+    st.caption("Distribute total patient forecast into clinical categories using seasonal patterns")
+
+    enable_seasonal = st.checkbox(
+        "Enable Seasonal Proportions",
+        value=True,
+        key="enable_seasonal_proportions",
+        help="Apply day-of-week and monthly patterns to distribute total forecasts across clinical categories"
+    )
+    st.session_state["enable_seasonal_proportions"] = enable_seasonal
+
+    if enable_seasonal:
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            use_dow = st.checkbox("Day-of-Week Seasonality", value=True, key="seasonal_use_dow")
+            use_monthly = st.checkbox("Monthly Seasonality", value=True, key="seasonal_use_monthly")
+        with col_s2:
+            stl_period = st.selectbox("STL Period", [7, 30, 365], index=0, key="seasonal_stl_period")
+            stl_model = st.selectbox("STL Model", ["additive", "multiplicative"], index=0, key="seasonal_stl_model")
+
+        st.session_state["seasonal_proportions_config"] = SeasonalProportionConfig(
+            use_dow_seasonality=use_dow,
+            use_monthly_seasonality=use_monthly,
+            stl_period=stl_period,
+            stl_model=stl_model
+        )
+        st.success("✅ Seasonal proportions will be applied to forecasts")
+    else:
+        st.info("ℹ️ Seasonal proportions disabled.")
+    st.markdown("---")
+
+
+    # 4. Manual Configuration - Only show for Single Model mode
     if training_mode == "Single Model":
         st.markdown(
             f"""
@@ -2271,7 +2100,7 @@ def page_ml():
 
         st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
 
-    # Train/test split ratio - Full width with better styling
+    # 5. Train/test split ratio - Full width with better styling
     st.markdown(
         f"""
         <div style='background: rgba(30, 41, 59, 0.5); padding: 1rem; border-radius: 10px; margin-bottom: 1rem;
@@ -2305,7 +2134,7 @@ def page_ml():
     else:
         cfg["ml_feature_cols"] = []
 
-    # 7. Run Model Button
+    # 6. Run Model Button
     st.divider()
 
     # Check if all required data is available
@@ -2328,23 +2157,24 @@ def page_ml():
                 )
 
             if run_button:
-                with st.spinner(f"Training {cfg['ml_choice']} for {cfg.get('ml_horizons', 7)} horizons..."):
+                # Pass a copy of the config to prevent any potential state pollution between runs
+                current_run_config = cfg.copy()
+                with st.spinner(f"Training {current_run_config['ml_choice']} for {current_run_config.get('ml_horizons', 7)} horizons..."):
                     try:
                         results = run_ml_multihorizon(
-                            model_type=cfg['ml_choice'],
-                            config=cfg,
+                            model_type=current_run_config['ml_choice'],
+                            config=current_run_config,
                             df=selected_df,
-                            feature_cols=cfg['ml_feature_cols'],
-                            split_ratio=cfg.get('split_ratio', 0.8),
-                            horizons=cfg.get('ml_horizons', 7),
+                            feature_cols=current_run_config['ml_feature_cols'],
+                            split_ratio=current_run_config.get('split_ratio', 0.8),
+                            horizons=current_run_config.get('ml_horizons', 7),
                         )
 
                         # Store results in session state
                         st.session_state["ml_mh_results"] = results
 
                         # Also save to individual model key for hybrid model detection
-                        # This allows multiple models to be detected even when trained separately
-                        model_key = f"ml_mh_results_{cfg['ml_choice'].lower()}"
+                        model_key = f"ml_mh_results_{current_run_config['ml_choice'].lower()}"
                         st.session_state[model_key] = results
 
                         # Auto-save to cache for persistence
@@ -2365,28 +2195,37 @@ def page_ml():
                 st.divider()
                 render_ml_multihorizon_results(st.session_state["ml_mh_results"], cfg['ml_choice'])
 
-                # Add probability-based category forecast section
+                # Add seasonal category forecast section
                 ml_results = st.session_state["ml_mh_results"]
                 per_h = ml_results.get("per_h", {})
                 successful = ml_results.get("successful", [])
 
                 if per_h and successful:
-                    # Extract average forecast value for each horizon
-                    horizon_predictions = []
-                    for h in sorted(successful):
-                        h_data = per_h.get(h, {})
-                        forecast = h_data.get("forecast")
-                        if forecast is not None and len(forecast) > 0:
-                            # Use the last forecast value (most recent prediction for this horizon)
-                            horizon_predictions.append(forecast[-1])
+                    # Construct a proper 7-day forecast from the multi-horizon results
+                    future_forecast_values = []
+                    future_forecast_dates = []
+                    for h in range(1, 8):  # We want a 7-day forecast
+                        if h in per_h:
+                            h_data = per_h.get(h, {})
+                            forecast_series = h_data.get("forecast")
+                            datetime_series = h_data.get("datetime")
+                            if forecast_series is not None and len(forecast_series) > 0:
+                                future_forecast_values.append(forecast_series[0])
+                                future_forecast_dates.append(datetime_series[0])
+                        else:
+                            future_forecast_values.append(np.nan)
+                            if future_forecast_dates:
+                                future_forecast_dates.append(future_forecast_dates[-1] + pd.Timedelta(days=1))
+                            else:
+                                future_forecast_dates.append(pd.NaT)
 
-                    if horizon_predictions:
+                    if future_forecast_values:
                         st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
-                        _render_category_forecast_section(
-                            horizon_predictions,
-                            f"{cfg['ml_choice']} - Clinical Category Forecast (Probability-Based)"
+                        _render_seasonal_category_forecast(
+                            predictions=future_forecast_values,
+                            dates=future_forecast_dates,
+                            title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
                         )
-
         else:
             # All Models Training
             col1, col2, col3 = st.columns([1, 1, 1])
@@ -2481,23 +2320,34 @@ def page_ml():
                             )
                             render_ml_metrics_only(results, model_name)
 
-                            # Add probability-based category forecast for each model
+                            # Add seasonal category forecast for each model
                             per_h = results.get("per_h", {})
                             successful = results.get("successful", [])
 
                             if per_h and successful:
-                                horizon_predictions = []
-                                for h in sorted(successful):
-                                    h_data = per_h.get(h, {})
-                                    forecast = h_data.get("forecast")
-                                    if forecast is not None and len(forecast) > 0:
-                                        horizon_predictions.append(forecast[-1])
+                                future_forecast_values = []
+                                future_forecast_dates = []
+                                for h in range(1, 8):
+                                    if h in per_h:
+                                        h_data = per_h.get(h, {})
+                                        forecast_series = h_data.get("forecast")
+                                        datetime_series = h_data.get("datetime")
+                                        if forecast_series is not None and len(forecast_series) > 0:
+                                            future_forecast_values.append(forecast_series[0])
+                                            future_forecast_dates.append(datetime_series[0])
+                                    else:
+                                        future_forecast_values.append(np.nan)
+                                        if future_forecast_dates:
+                                            future_forecast_dates.append(future_forecast_dates[-1] + pd.Timedelta(days=1))
+                                        else:
+                                            future_forecast_dates.append(pd.NaT)
 
-                                if horizon_predictions:
-                                    with st.expander(f"📊 {model_name} Category Forecast (Probability-Based)", expanded=False):
-                                        _render_category_forecast_section(
-                                            horizon_predictions,
-                                            f"Clinical Category Distribution"
+                                if future_forecast_values:
+                                    with st.expander(f"📊 {model_name} Category Forecast (Seasonal Distribution)", expanded=False):
+                                        _render_seasonal_category_forecast(
+                                            predictions=future_forecast_values,
+                                            dates=future_forecast_dates,
+                                            title="Clinical Category Distribution"
                                         )
 
                             st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
