@@ -2049,7 +2049,7 @@ def page_ml():
         key="enable_seasonal_proportions",
         help="Apply day-of-week and monthly patterns to distribute total forecasts across clinical categories"
     )
-    st.session_state["enable_seasonal_proportions"] = enable_seasonal
+    # Note: Widget key already manages session state - no manual assignment needed
 
     if enable_seasonal:
         col_s1, col_s2 = st.columns(2)
