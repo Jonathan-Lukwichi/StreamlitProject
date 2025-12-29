@@ -647,6 +647,8 @@ def run_sarimax_single(
         },
         "residuals": pd.Series(fit.resid, index=y_tr.index).dropna(),
         "fitted_values": fitted,
+        "seasonal_proportions": None,
+        "category_forecasts": None,
     }
 
 # ---------- multi-horizon SARIMAX (h = 1..H) ----------
@@ -873,7 +875,13 @@ def run_sarimax_multihorizon(
         raise RuntimeError("SARIMAX: not enough data to train any horizon.")
 
     results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
-    return {"results_df": results_df, "per_h": per_h, "successful": ok}
+    return {
+        "results_df": results_df,
+        "per_h": per_h,
+        "successful": ok,
+        "seasonal_proportions": None,
+        "category_forecasts": None,
+    }
 
 # ---------- helpers to adapt outputs for dashboards ----------
 def calculate_multi_horizon_metrics_from_rows(results_df: pd.DataFrame) -> pd.DataFrame:
@@ -1098,6 +1106,10 @@ def run_sarimax_multi_target_pipeline(
                                           if isinstance(r, dict) and r.get("status") == "success"]
     all_results["failed_targets"] = [t for t, r in all_results.items()
                                       if isinstance(r, dict) and r.get("status") == "error"]
+
+    # Seasonal proportions placeholders (to be populated by post-processor)
+    all_results["seasonal_proportions"] = None
+    all_results["category_forecasts"] = None
 
     return all_results
 

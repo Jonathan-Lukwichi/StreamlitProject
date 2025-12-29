@@ -1935,6 +1935,65 @@ def page_benchmarks():
 
         st.markdown("---")
 
+        # ============================================================
+        # SEASONAL PROPORTIONS CONFIGURATION
+        # ============================================================
+        st.markdown("#### 📊 Seasonal Category Distribution")
+        st.caption("Distribute total patient forecast into clinical categories using seasonal patterns")
+
+        enable_seasonal = st.checkbox(
+            "Enable Seasonal Proportions",
+            value=True,
+            key="enable_seasonal_proportions",
+            help="Apply day-of-week and monthly patterns to distribute total forecasts across clinical categories"
+        )
+
+        if enable_seasonal:
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                use_dow = st.checkbox(
+                    "Day-of-Week Seasonality",
+                    value=True,
+                    key="seasonal_use_dow",
+                    help="Use different proportions for each day of the week"
+                )
+                use_monthly = st.checkbox(
+                    "Monthly Seasonality",
+                    value=True,
+                    key="seasonal_use_monthly",
+                    help="Use different proportions for each month (requires ≥12 months data)"
+                )
+            with col_s2:
+                stl_period = st.selectbox(
+                    "STL Period",
+                    options=[7, 30, 365],
+                    index=0,
+                    key="seasonal_stl_period",
+                    help="Seasonal period for STL decomposition: 7=weekly, 30=monthly, 365=yearly"
+                )
+                stl_model = st.selectbox(
+                    "STL Model",
+                    options=["additive", "multiplicative"],
+                    index=0,
+                    key="seasonal_stl_model",
+                    help="Additive: Y = Trend + Seasonal + Residual; Multiplicative: Y = Trend × Seasonal × Residual"
+                )
+
+            # Store configuration in session state
+            from app_core.analytics.seasonal_proportions import SeasonalProportionConfig
+            st.session_state["seasonal_proportions_config"] = SeasonalProportionConfig(
+                use_dow_seasonality=use_dow,
+                use_monthly_seasonality=use_monthly,
+                stl_period=stl_period,
+                stl_model=stl_model
+            )
+
+            st.success("✅ Seasonal proportions will be applied to forecasts")
+        else:
+            st.info("ℹ️ Seasonal proportions disabled. Only total patient forecast will be generated.")
+
+        st.markdown("---")
+
         if current_model == "ARIMA":
             mode = st.radio("Parameter Mode", ["Automatic (recommended)", "Manual (enter p,d,q)"],
                             horizontal=True, key="arima_mode")
@@ -2135,6 +2194,49 @@ def page_benchmarks():
                                     model_params=model_params,
                                     runtime_s=runtime_s
                                 )
+
+                            # ============================================================
+                            # APPLY SEASONAL PROPORTIONS
+                            # ============================================================
+                            if st.session_state.get("enable_seasonal_proportions", False):
+                                try:
+                                    from app_core.analytics.seasonal_proportions import (
+                                        calculate_seasonal_proportions,
+                                        distribute_forecast_to_categories
+                                    )
+
+                                    with st.spinner("📊 Calculating seasonal proportions..."):
+                                        sp_config = st.session_state.get("seasonal_proportions_config")
+                                        sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
+
+                                        # Get forecast dates (last 7 days of best horizon forecast)
+                                        best_h = int(best_row.get('Horizon', 7))
+                                        if 'forecasts' in arima_mh_out and best_h in arima_mh_out['forecasts']:
+                                            forecast_series = arima_mh_out['forecasts'][best_h]
+                                            if isinstance(forecast_series, pd.Series):
+                                                forecast_dates = forecast_series.index
+                                            else:
+                                                # Generate date range for forecast
+                                                last_date = pd.to_datetime(data['Date'].max())
+                                                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=best_h, freq='D')
+                                                forecast_series = pd.Series(forecast_series, index=forecast_dates)
+
+                                            # Distribute forecast to categories
+                                            category_forecasts = distribute_forecast_to_categories(
+                                                forecast_series,
+                                                sp_result.dow_proportions,
+                                                sp_result.monthly_proportions
+                                            )
+
+                                            sp_result.category_forecasts = category_forecasts
+
+                                        # Store results
+                                        st.session_state["seasonal_proportions_result"] = sp_result
+                                        st.success(f"✅ Seasonal proportions calculated and applied!")
+
+                                except Exception as e:
+                                    st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
+
                         except Exception as e:
                             st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
@@ -2201,6 +2303,52 @@ def page_benchmarks():
                                     "Direction_Acc_%": "{:.2f}",
                                 }, na_rep="—"), use_container_width=True)
 
+                            # ============================================================
+                            # APPLY SEASONAL PROPORTIONS
+                            # ============================================================
+                            if st.session_state.get("enable_seasonal_proportions", False):
+                                try:
+                                    from app_core.analytics.seasonal_proportions import (
+                                        calculate_seasonal_proportions,
+                                        distribute_forecast_to_categories
+                                    )
+
+                                    with st.spinner("📊 Calculating seasonal proportions..."):
+                                        sp_config = st.session_state.get("seasonal_proportions_config")
+                                        sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
+
+                                        # Get forecast from first successful target as reference
+                                        successful_targets = multi_results.get("successful_targets", [])
+                                        if successful_targets and 'target_results' in multi_results:
+                                            first_target = successful_targets[0]
+                                            target_result = multi_results['target_results'].get(first_target, {})
+
+                                            if 'forecast' in target_result:
+                                                forecast_data = target_result['forecast']
+                                                if isinstance(forecast_data, pd.Series):
+                                                    forecast_series = forecast_data
+                                                else:
+                                                    # Generate date range
+                                                    last_date = pd.to_datetime(data['Date'].max())
+                                                    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_data), freq='D')
+                                                    forecast_series = pd.Series(forecast_data, index=forecast_dates)
+
+                                                # Distribute forecast to categories
+                                                category_forecasts = distribute_forecast_to_categories(
+                                                    forecast_series,
+                                                    sp_result.dow_proportions,
+                                                    sp_result.monthly_proportions
+                                                )
+
+                                                sp_result.category_forecasts = category_forecasts
+
+                                        # Store results
+                                        st.session_state["seasonal_proportions_result"] = sp_result
+                                        st.success(f"✅ Seasonal proportions calculated and applied!")
+
+                                except Exception as e:
+                                    st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
+
                         except Exception as e:
                             st.error(f"❌ SARIMAX Multi-Target training failed: {e}")
                             progress_bar.empty()
@@ -2261,6 +2409,49 @@ def page_benchmarks():
                                 model_params=model_params,
                                 runtime_s=runtime_s
                             )
+
+                            # ============================================================
+                            # APPLY SEASONAL PROPORTIONS
+                            # ============================================================
+                            if st.session_state.get("enable_seasonal_proportions", False):
+                                try:
+                                    from app_core.analytics.seasonal_proportions import (
+                                        calculate_seasonal_proportions,
+                                        distribute_forecast_to_categories
+                                    )
+
+                                    with st.spinner("📊 Calculating seasonal proportions..."):
+                                        sp_config = st.session_state.get("seasonal_proportions_config")
+                                        sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
+
+                                        # Get forecast from results
+                                        best_h = int(best_row.get('Horizon', 7))
+                                        if 'forecasts' in sarimax_out and best_h in sarimax_out['forecasts']:
+                                            forecast_data = sarimax_out['forecasts'][best_h]
+                                            if isinstance(forecast_data, pd.Series):
+                                                forecast_series = forecast_data
+                                            else:
+                                                # Generate date range
+                                                last_date = pd.to_datetime(data['Date'].max())
+                                                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=best_h, freq='D')
+                                                forecast_series = pd.Series(forecast_data, index=forecast_dates)
+
+                                            # Distribute forecast to categories
+                                            category_forecasts = distribute_forecast_to_categories(
+                                                forecast_series,
+                                                sp_result.dow_proportions,
+                                                sp_result.monthly_proportions
+                                            )
+
+                                            sp_result.category_forecasts = category_forecasts
+
+                                        # Store results
+                                        st.session_state["seasonal_proportions_result"] = sp_result
+                                        st.success(f"✅ Seasonal proportions calculated and applied!")
+
+                                except Exception as e:
+                                    st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
+
                     except Exception as e:
                         st.error(f"❌ SARIMAX training failed: {e}")
 
@@ -2524,6 +2715,127 @@ def page_benchmarks():
                         result = multi_target_results.get(target, {})
                         error_msg = result.get("message", "Unknown error")
                         st.error(f"**{target}**: {error_msg}")
+
+        # ============================================================
+        # SEASONAL PROPORTIONS VISUALIZATIONS
+        # ============================================================
+        if st.session_state.get("enable_seasonal_proportions", False) and st.session_state.get("seasonal_proportions_result") is not None:
+            st.markdown("---")
+            st.markdown(
+                f"""
+                <div class='hf-feature-card' style='text-align: center; margin: 1.5rem 0; padding: 1.5rem; background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(14, 165, 233, 0.1)); border: 2px solid rgba(34, 211, 238, 0.3); box-shadow: 0 0 30px rgba(34, 211, 238, 0.2);'>
+                  <div style='font-size: 2rem; margin-bottom: 0.5rem;'>📊</div>
+                  <h2 style='font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; background: linear-gradient(135deg, {SECONDARY_COLOR}, {PRIMARY_COLOR}); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>Seasonal Category Distribution</h2>
+                  <p style='font-size: 0.9rem; color: {BODY_TEXT};'>Day-of-week and monthly patterns for clinical category forecasts</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            sp_result = st.session_state.get("seasonal_proportions_result")
+
+            sp_tab1, sp_tab2, sp_tab3 = st.tabs([
+                "📈 STL Decomposition",
+                "🔥 Seasonal Heatmap",
+                "📊 Category Forecasts"
+            ])
+
+            with sp_tab1:
+                st.markdown("#### STL Decomposition (Seasonal-Trend-Loess)")
+                st.caption("Decompose time series into observed, trend, seasonal, and residual components")
+
+                # Category selector for STL
+                available_categories = [cat for cat, res in sp_result.stl_results.items() if res is not None]
+
+                if available_categories:
+                    selected_cat = st.selectbox(
+                        "Select category to visualize:",
+                        options=available_categories,
+                        key="stl_category_selector"
+                    )
+
+                    from app_core.analytics.seasonal_proportions import create_stl_decomposition_plot
+                    fig_stl = create_stl_decomposition_plot(sp_result.stl_results, selected_cat)
+                    st.plotly_chart(fig_stl, use_container_width=True)
+                else:
+                    st.info("ℹ️ STL decomposition not available. Insufficient data or decomposition failed.")
+
+            with sp_tab2:
+                st.markdown("#### Seasonal Proportion Heatmaps")
+                st.caption("Historical patterns showing how category proportions vary by day and month")
+
+                from app_core.analytics.seasonal_proportions import create_seasonal_heatmap
+
+                col_dow, col_monthly = st.columns(2)
+
+                with col_dow:
+                    st.markdown("##### Day-of-Week Patterns")
+                    fig_dow = create_seasonal_heatmap(
+                        dow_proportions=sp_result.dow_proportions,
+                        monthly_proportions=None,
+                        title="Day-of-Week Proportions"
+                    )
+                    st.plotly_chart(fig_dow, use_container_width=True)
+
+                with col_monthly:
+                    st.markdown("##### Monthly Patterns")
+                    fig_monthly = create_seasonal_heatmap(
+                        dow_proportions=None,
+                        monthly_proportions=sp_result.monthly_proportions,
+                        title="Monthly Proportions"
+                    )
+                    st.plotly_chart(fig_monthly, use_container_width=True)
+
+                # Show proportion tables
+                with st.expander("📋 View Proportion Tables", expanded=False):
+                    col_t1, col_t2 = st.columns(2)
+                    with col_t1:
+                        st.markdown("**Day-of-Week Proportions (%)**")
+                        dow_pct = (sp_result.dow_proportions * 100).round(2)
+                        st.dataframe(dow_pct, use_container_width=True)
+
+                    with col_t2:
+                        st.markdown("**Monthly Proportions (%)**")
+                        monthly_pct = (sp_result.monthly_proportions * 100).round(2)
+                        st.dataframe(monthly_pct, use_container_width=True)
+
+            with sp_tab3:
+                st.markdown("#### 7-Day Category Forecast Distribution")
+                st.caption("Total patient forecast distributed across clinical categories using seasonal patterns")
+
+                if sp_result.category_forecasts is not None and not sp_result.category_forecasts.empty:
+                    from app_core.analytics.seasonal_proportions import create_category_forecast_chart
+
+                    # Create and display chart
+                    fig_forecast = create_category_forecast_chart(sp_result.category_forecasts)
+                    st.plotly_chart(fig_forecast, use_container_width=True)
+
+                    # Show forecast table
+                    st.markdown("##### Forecast Table")
+                    forecast_display = sp_result.category_forecasts.copy()
+                    forecast_display = forecast_display.round(2)
+                    forecast_display['Total'] = forecast_display.sum(axis=1)
+
+                    st.dataframe(
+                        forecast_display.style.background_gradient(cmap="Blues", axis=None),
+                        use_container_width=True
+                    )
+
+                    # Summary statistics
+                    col_s1, col_s2, col_s3 = st.columns(3)
+                    with col_s1:
+                        total_forecast = forecast_display['Total'].sum()
+                        st.metric("Total 7-Day Forecast", f"{int(total_forecast):,}")
+                    with col_s2:
+                        avg_daily = forecast_display['Total'].mean()
+                        st.metric("Avg Daily Forecast", f"{int(avg_daily):,}")
+                    with col_s3:
+                        dominant_cat = sp_result.category_forecasts.sum().idxmax()
+                        dominant_pct = (sp_result.category_forecasts.sum()[dominant_cat] / sp_result.category_forecasts.sum().sum() * 100)
+                        st.metric("Dominant Category", f"{dominant_cat} ({dominant_pct:.1f}%)")
+
+                else:
+                    st.info("ℹ️ No category forecasts available. Train a model first to generate forecasts.")
 
         # ============================================================
         # CATEGORY PROPORTIONS (Probability-Based Approach)

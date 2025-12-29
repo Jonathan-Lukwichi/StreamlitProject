@@ -580,6 +580,8 @@ def run_arima_pipeline(
         "residuals": resid_series,
         "ljung_box": ljung_box,
         "fitted_values": results.fittedvalues if hasattr(results, "fittedvalues") else None,
+        "seasonal_proportions": None,
+        "category_forecasts": None,
     }
 
 
@@ -733,6 +735,8 @@ def run_arima_multi_horizon_pipeline(
         "eval_dates": eval_dates,
         "order": tuple(order),
         "max_horizon": H,
+        "seasonal_proportions": None,
+        "category_forecasts": None,
     }
 
 
@@ -1169,6 +1173,10 @@ def run_arima_multi_target_pipeline(
                                           if isinstance(r, dict) and r.get("status") == "success"]
     all_results["failed_targets"] = [t for t, r in all_results.items()
                                       if isinstance(r, dict) and r.get("status") == "error"]
+
+    # Seasonal proportions placeholders (to be populated by post-processor)
+    all_results["seasonal_proportions"] = None
+    all_results["category_forecasts"] = None
 
     return all_results
 
