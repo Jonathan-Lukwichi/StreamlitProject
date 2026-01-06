@@ -16,6 +16,15 @@ from .recursive_strategy import (
     compare_strategies,
 )
 
+# Stacking Generalization Ensemble (Step 4.2)
+from .stacking import (
+    ForecastStacker,
+    SimpleAverageEnsemble,
+    BlendingEnsemble,
+    StackingResult,
+    BaseModelResult,
+)
+
 __all__ = [
     "BaseMLPipeline",
     "MODEL_REGISTRY",
@@ -26,4 +35,10 @@ __all__ = [
     "RecursiveForecastResult",
     "DirectForecastResult",
     "compare_strategies",
+    # Stacking ensemble
+    "ForecastStacker",
+    "SimpleAverageEnsemble",
+    "BlendingEnsemble",
+    "StackingResult",
+    "BaseModelResult",
 ]
