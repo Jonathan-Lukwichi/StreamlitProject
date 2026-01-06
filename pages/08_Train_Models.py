@@ -32,9 +32,17 @@ from app_core.plots import build_multihorizon_results_dashboard
 # =============================================================================
 try:
     import optuna
+    from optuna.visualization import (
+        plot_optimization_history,
+        plot_param_importances,
+        plot_slice,
+        plot_contour,
+    )
     OPTUNA_AVAILABLE = True
+    OPTUNA_VIS_AVAILABLE = True
 except ImportError:
     OPTUNA_AVAILABLE = False
+    OPTUNA_VIS_AVAILABLE = False
 
 # =============================================================================
 # TIME SERIES CROSS-VALIDATION IMPORT
@@ -2861,9 +2869,13 @@ def run_random_search_optimization(model_type: str, X_train, y_train, n_splits: 
 
 def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
                               primary_metric: str, n_trials: int = 30,
-                              progress_callback=None):
+                              gap: int = 0, progress_callback=None):
     """
     Run Bayesian Optimization using Optuna with TimeSeriesSplit CV.
+
+    Academic Reference:
+        Bergmeir & Benítez (2012) - Time series cross-validation ensures
+        temporal ordering is respected to prevent data leakage.
 
     Args:
         model_type: "XGBoost", "LSTM", or "ANN"
@@ -2872,10 +2884,11 @@ def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
         n_splits: Number of CV folds
         primary_metric: Metric to optimize
         n_trials: Number of Optuna trials
+        gap: Number of samples between train/val sets (prevents autocorrelation leakage)
         progress_callback: Optional callback for progress updates
 
     Returns:
-        dict with best_params, trial_results, and all metrics
+        dict with best_params, trial_results, study object, and all metrics
     """
     # Check if optuna is available
     if not OPTUNA_AVAILABLE:
@@ -2919,8 +2932,9 @@ def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
         scorer = make_scorer(rmse_scorer, greater_is_better=False)
         direction = "minimize"
 
-    # Create TimeSeriesSplit
-    tscv = TimeSeriesSplit(n_splits=n_splits)
+    # Create TimeSeriesSplit with gap to prevent autocorrelation leakage
+    # Academic Reference: Bergmeir & Benítez (2012) - Time series predictor evaluation
+    tscv = TimeSeriesSplit(n_splits=n_splits, gap=gap)
 
     # Define objective function
     def objective(trial):
@@ -3019,6 +3033,157 @@ def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
             'params': [t.params for t in study.trials],
         })
     }
+
+
+# =============================================================================
+# OPTUNA VISUALIZATIONS (Step 2.3: HPO with Time Series CV)
+# Academic Reference: Akiba et al. (2019) - Optuna: A Next-generation HPO Framework
+# =============================================================================
+def _render_optuna_visualizations(study: "optuna.Study", model_name: str) -> None:
+    """
+    Render Optuna optimization visualizations in an expandable section.
+
+    Visualizations include:
+    1. Optimization History - Shows objective value improvement over trials
+    2. Parameter Importance - Shows which hyperparameters most affect performance
+    3. Slice Plot - Shows individual parameter effects on objective
+    4. Contour Plot - Shows parameter interactions (for top 2 params)
+
+    Academic Reference:
+        Akiba, T., Sano, S., Yanase, T., Ohta, T., & Koyama, M. (2019).
+        Optuna: A next-generation hyperparameter optimization framework.
+        KDD '19.
+
+    Args:
+        study: Completed Optuna study object
+        model_name: Name of the model for display purposes
+    """
+    if not OPTUNA_VIS_AVAILABLE:
+        st.warning("Optuna visualization not available. Install with: `pip install optuna`")
+        return
+
+    if study is None or len(study.trials) < 2:
+        st.info("Need at least 2 completed trials for visualizations.")
+        return
+
+    st.markdown("### 📊 Optuna Optimization Analysis")
+    st.caption(f"Model: {model_name} | Trials: {len(study.trials)} | Best Value: {study.best_value:.4f}")
+
+    # Create tabs for different visualizations
+    viz_tabs = st.tabs([
+        "📈 History",
+        "🎯 Importance",
+        "📉 Slice Plot",
+        "🗺️ Contour"
+    ])
+
+    with viz_tabs[0]:
+        st.markdown("#### Optimization History")
+        st.info(
+            "Shows how the objective value improves over trials. "
+            "A decreasing trend (for minimization) indicates successful optimization."
+        )
+        try:
+            fig_history = plot_optimization_history(study)
+            fig_history.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=400
+            )
+            st.plotly_chart(fig_history, use_container_width=True, key=f"optuna_history_{model_name}")
+        except Exception as e:
+            st.warning(f"Could not render history plot: {str(e)}")
+
+    with viz_tabs[1]:
+        st.markdown("#### Hyperparameter Importance")
+        st.info(
+            "Shows which hyperparameters have the most impact on the objective. "
+            "Higher importance means the parameter significantly affects model performance."
+        )
+        try:
+            # Need at least a few trials to compute importance
+            if len(study.trials) >= 5:
+                fig_importance = plot_param_importances(study)
+                fig_importance.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=400
+                )
+                st.plotly_chart(fig_importance, use_container_width=True, key=f"optuna_importance_{model_name}")
+            else:
+                st.info("Need at least 5 trials to compute parameter importance.")
+        except Exception as e:
+            st.warning(f"Could not render importance plot: {str(e)}")
+
+    with viz_tabs[2]:
+        st.markdown("#### Slice Plot")
+        st.info(
+            "Shows how individual parameters affect the objective value. "
+            "Helps identify optimal ranges for each hyperparameter."
+        )
+        try:
+            fig_slice = plot_slice(study)
+            fig_slice.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=500
+            )
+            st.plotly_chart(fig_slice, use_container_width=True, key=f"optuna_slice_{model_name}")
+        except Exception as e:
+            st.warning(f"Could not render slice plot: {str(e)}")
+
+    with viz_tabs[3]:
+        st.markdown("#### Contour Plot (Top 2 Parameters)")
+        st.info(
+            "Shows the interaction between the two most important parameters. "
+            "Helps identify optimal parameter combinations."
+        )
+        try:
+            # Get parameter names for contour plot
+            param_names = list(study.best_params.keys())
+            if len(param_names) >= 2:
+                fig_contour = plot_contour(study, params=param_names[:2])
+                fig_contour.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=500
+                )
+                st.plotly_chart(fig_contour, use_container_width=True, key=f"optuna_contour_{model_name}")
+            else:
+                st.info("Need at least 2 parameters for contour plot.")
+        except Exception as e:
+            st.warning(f"Could not render contour plot: {str(e)}")
+
+    # Summary statistics
+    with st.expander("📋 Optimization Summary", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Trials", len(study.trials))
+        with col2:
+            st.metric("Best Trial", study.best_trial.number + 1)
+        with col3:
+            st.metric("Best Value", f"{study.best_value:.4f}")
+
+        # Trial value statistics
+        values = [t.value for t in study.trials if t.value is not None]
+        if values:
+            st.markdown("**Trial Value Statistics:**")
+            stats_df = pd.DataFrame({
+                "Statistic": ["Mean", "Std", "Min", "Max", "Best"],
+                "Value": [
+                    f"{np.mean(values):.4f}",
+                    f"{np.std(values):.4f}",
+                    f"{np.min(values):.4f}",
+                    f"{np.max(values):.4f}",
+                    f"{study.best_value:.4f}"
+                ]
+            })
+            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+
 
 def run_7day_backtesting(model_type: str, best_params: dict, X, y, dates,
                          n_windows: int = 5, horizon: int = 7):
@@ -3492,22 +3657,43 @@ def page_hyperparameter_tuning():
         )
         cfg["tuning_optimization_metric"] = optimization_metric
 
-    # 2. Cross-Validation Strategy
+    # 2. Cross-Validation Strategy (with gap to prevent autocorrelation leakage)
+    # Academic Reference: Bergmeir & Benítez (2012) - Time series CV
     st.subheader("🔄 Cross-Validation Strategy")
 
-    col1, col2 = st.columns(2)
+    # Check for CV config from Feature Studio
+    cv_config_from_studio = st.session_state.get("cv_config", {})
+    if cv_config_from_studio.get("enabled", False):
+        st.info(
+            f"💡 **CV Config Detected from Feature Studio:**\n"
+            f"- Folds: {cv_config_from_studio.get('n_folds', 5)}\n"
+            f"- Gap: {cv_config_from_studio.get('gap', 0)} days"
+        )
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         n_splits = st.slider(
             "Number of CV Folds",
             min_value=3,
             max_value=10,
-            value=cfg.get("tuning_cv_splits", 5),
+            value=cv_config_from_studio.get("n_folds", cfg.get("tuning_cv_splits", 5)),
             help="TimeSeriesSplit folds - more folds = more robust but slower"
         )
         cfg["tuning_cv_splits"] = n_splits
 
     with col2:
+        cv_gap = st.slider(
+            "Gap Between Train/Val (days)",
+            min_value=0,
+            max_value=14,
+            value=cv_config_from_studio.get("gap", cfg.get("tuning_cv_gap", 0)),
+            help="Number of samples to skip between train and validation sets. "
+                 "Helps prevent autocorrelation leakage. Recommended: 0-7 for daily data."
+        )
+        cfg["tuning_cv_gap"] = cv_gap
+
+    with col3:
         if search_method == "Random Search":
             n_iter = st.slider(
                 "Number of Iterations",
@@ -3526,6 +3712,8 @@ def page_hyperparameter_tuning():
                 help="Number of Bayesian optimization trials"
             )
             cfg["tuning_n_iter"] = n_iter
+        else:
+            st.caption("Grid Search uses all parameter combinations")
 
     # 3. 7-Day Rolling-Origin Backtesting
     st.subheader("📅 7-Day Rolling-Origin Backtesting (Optional)")
@@ -3862,7 +4050,8 @@ def page_hyperparameter_tuning():
                                 y_train=y_train,
                                 n_splits=n_splits,
                                 primary_metric=optimization_metric,
-                                n_trials=n_iter
+                                n_trials=n_iter,
+                                gap=cv_gap
                             )
 
                             # Store results in session state
@@ -3872,11 +4061,9 @@ def page_hyperparameter_tuning():
 
                             st.success(f"✅ Optimization completed successfully!")
 
-                            # Show Optuna optimization history
-                            if 'study' in results:
-                                with st.expander("📈 Optimization History", expanded=False):
-                                    trial_results = results['trial_results']
-                                    st.line_chart(trial_results.set_index('trial')['value'])
+                            # Show Optuna visualizations
+                            if 'study' in results and OPTUNA_VIS_AVAILABLE:
+                                _render_optuna_visualizations(results['study'], selected_model_opt)
 
                             # Run 7-day backtesting if enabled
                             if cfg.get("enable_backtesting", False):
@@ -4014,8 +4201,9 @@ def page_hyperparameter_tuning():
                                     )
 
                             elif search_method == "Bayesian Optimization":
-                                # Use cfg fallback for n_iter in case variable not in scope
+                                # Use cfg fallback for n_iter and gap in case variable not in scope
                                 _n_trials = cfg.get("tuning_n_iter", 30)
+                                _cv_gap = cfg.get("tuning_cv_gap", 0)
 
                                 with st.spinner(f"⏳ Optimizing {model_type}..."):
                                     results = run_bayesian_optimization(
@@ -4024,7 +4212,8 @@ def page_hyperparameter_tuning():
                                         y_train=y_train,
                                         n_splits=n_splits,
                                         primary_metric=optimization_metric,
-                                        n_trials=_n_trials
+                                        n_trials=_n_trials,
+                                        gap=_cv_gap
                                     )
 
                             # Store results
@@ -4152,6 +4341,11 @@ def page_hyperparameter_tuning():
                     st.dataframe(display_df, use_container_width=True, height=400)
                 else:
                     st.info("No detailed CV results available for this optimization method.")
+
+            # Display Optuna visualizations if study is available
+            if 'study' in opt_results and OPTUNA_VIS_AVAILABLE:
+                st.divider()
+                _render_optuna_visualizations(opt_results['study'], selected_model_opt)
 
             # Display 7-day backtesting results if available
             backtest_results = st.session_state.get(f"backtest_results_{selected_model_opt}")
