@@ -798,3 +798,78 @@ def handle_zero_categories(proportions: pd.DataFrame, min_value: float = 0.001) 
             proportions[col] = proportions[col] / total
 
     return proportions
+
+
+# =============================================================================
+# UI RENDERING FUNCTIONS
+# =============================================================================
+
+def render_seasonal_forecast_breakdown(
+    predictions: np.ndarray,
+    forecast_dates: pd.DatetimeIndex,
+    seasonal_proportions: SeasonalProportionResult,
+    title: str = "Category Forecast Distribution"
+) -> None:
+    """
+    Render seasonal category forecast breakdown in Streamlit UI.
+
+    Parameters:
+    -----------
+    predictions : np.ndarray
+        Total forecast predictions
+    forecast_dates : pd.DatetimeIndex
+        Dates for the forecast period
+    seasonal_proportions : SeasonalProportionResult
+        Calculated seasonal proportions
+    title : str
+        Title for the section
+    """
+    import streamlit as st
+
+    if predictions is None or len(predictions) == 0:
+        st.info("No predictions available for category breakdown.")
+        return
+
+    # Ensure predictions is a Series with proper index
+    if isinstance(predictions, (list, np.ndarray)):
+        predictions = pd.Series(predictions, index=forecast_dates[:len(predictions)])
+
+    # Distribute forecast to categories
+    try:
+        category_forecasts = distribute_forecast_to_categories(
+            predictions,
+            seasonal_proportions.dow_proportions,
+            seasonal_proportions.monthly_proportions
+        )
+    except Exception as e:
+        st.warning(f"Could not distribute forecasts to categories: {e}")
+        return
+
+    if category_forecasts is None or category_forecasts.empty:
+        st.info("No category breakdown available.")
+        return
+
+    # Render UI
+    st.markdown(f"#### {title}")
+
+    # Summary metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Forecast", f"{predictions.sum():.0f}")
+    with col2:
+        st.metric("Forecast Days", len(predictions))
+    with col3:
+        st.metric("Categories", len(category_forecasts.columns))
+
+    # Create and display chart
+    fig = create_category_forecast_chart(category_forecasts)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Category breakdown table
+    with st.expander("View Category Breakdown Details", expanded=False):
+        summary_df = category_forecasts.sum().reset_index()
+        summary_df.columns = ["Category", "Total Forecast"]
+        summary_df["Percentage"] = (summary_df["Total Forecast"] / summary_df["Total Forecast"].sum() * 100).round(1)
+        summary_df["Percentage"] = summary_df["Percentage"].astype(str) + "%"
+        summary_df["Total Forecast"] = summary_df["Total Forecast"].round(0).astype(int)
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
