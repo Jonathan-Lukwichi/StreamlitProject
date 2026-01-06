@@ -990,6 +990,19 @@ def page_eda():
                     dominant_type = agg.index[0] if not agg.empty else "other"
                     st.success(f"**Dominant cycle type detected:** `{dominant_type}`")
 
+                    # =================================================================
+                    # SAVE FFT CYCLES TO SESSION STATE (Step 2.2: For Fourier Features)
+                    # Academic Reference: Box et al. (2015) - Fourier features for seasonality
+                    # =================================================================
+                    st.session_state["fft_dominant_cycles"] = {
+                        "cycles_df": cycles_df.to_dict("records"),
+                        "dominant_type": dominant_type,
+                        "amplitude_by_type": agg.to_dict(),
+                        "top_k": top_k,
+                        "detected_at": pd.Timestamp.now().isoformat(),
+                    }
+                    st.info("💾 **FFT cycles saved** — Use in Feature Studio to auto-generate Fourier features.")
+
                     fig_amp = px.bar(cycles_df, x="period_days", y="amplitude", color="cycle_type",
                                      title="Dominant Cycles — Amplitude by Period (days)",
                                      labels={"period_days":"Period (days)", "amplitude":"Amplitude"})

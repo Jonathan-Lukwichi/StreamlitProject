@@ -161,6 +161,118 @@ def _cyclical_block(df: pd.DataFrame, date_col: str, cal: pd.DataFrame) -> pd.Da
     out["week_of_year"] = cal["week_of_year"]
     return out
 
+# =============================================================================
+# FOURIER FEATURES GENERATOR (Step 2.2: Automate from FFT)
+# Academic Reference: Box et al. (2015) - Time Series Analysis, Harvey (1989)
+# =============================================================================
+def generate_fourier_features(
+    df: pd.DataFrame,
+    date_col: str,
+    periods: List[float],
+    harmonics_per_period: int = 1,
+    prefix: str = "fourier"
+) -> Tuple[pd.DataFrame, Dict]:
+    """
+    Generate Fourier (sin/cos) features from detected FFT cycle periods.
+
+    Fourier features capture periodic patterns by decomposing seasonality into
+    sine and cosine pairs. For period P and harmonic k, features are:
+        sin(2πk·t/P) and cos(2πk·t/P)
+
+    Academic Reference:
+        - Box, Jenkins, Reinsel & Ljung (2015) - Time Series Analysis
+        - Harvey (1989) - Forecasting, Structural Time Series Models
+
+    Args:
+        df: Input DataFrame with a date column
+        date_col: Name of the date column
+        periods: List of cycle periods (in days) detected from FFT
+        harmonics_per_period: Number of harmonics (k=1,2,...) per period
+        prefix: Prefix for feature names
+
+    Returns:
+        Tuple of (DataFrame with Fourier features, dict with feature info)
+    """
+    work = df.copy()
+    feature_info = {
+        'fourier_features': [],
+        'periods_used': periods,
+        'harmonics': harmonics_per_period,
+    }
+
+    # Convert date to numeric (days from start)
+    dates = pd.to_datetime(work[date_col])
+    t = (dates - dates.min()).dt.days.values.astype(float)
+
+    fourier_df = pd.DataFrame(index=work.index)
+
+    for period in periods:
+        if period <= 0 or not np.isfinite(period):
+            continue
+
+        # Normalize period name for column naming
+        period_name = f"{period:.0f}" if period >= 1 else f"{period:.2f}"
+
+        for k in range(1, harmonics_per_period + 1):
+            # Fourier terms: sin(2πk·t/P) and cos(2πk·t/P)
+            sin_col = f"{prefix}_sin_p{period_name}_k{k}"
+            cos_col = f"{prefix}_cos_p{period_name}_k{k}"
+
+            fourier_df[sin_col] = np.sin(2 * np.pi * k * t / period)
+            fourier_df[cos_col] = np.cos(2 * np.pi * k * t / period)
+
+            feature_info['fourier_features'].extend([sin_col, cos_col])
+
+    feature_info['total_features'] = len(feature_info['fourier_features'])
+
+    return fourier_df, feature_info
+
+
+def get_recommended_periods_from_fft() -> List[Dict]:
+    """
+    Get recommended periods from FFT analysis stored in session state.
+
+    Returns:
+        List of dicts with 'period_days', 'cycle_type', 'amplitude'
+    """
+    fft_data = st.session_state.get("fft_dominant_cycles", {})
+    cycles_list = fft_data.get("cycles_df", [])
+
+    # Add standard periods if not detected
+    standard_periods = {
+        "weekly": 7.0,
+        "bi-weekly": 14.0,
+        "monthly": 30.44,  # Average month
+        "quarterly": 91.31,
+        "yearly": 365.25,
+    }
+
+    # Merge detected with standards
+    result = []
+    detected_types = set()
+
+    for cycle in cycles_list:
+        result.append({
+            "period_days": cycle.get("period_days", 0),
+            "cycle_type": cycle.get("cycle_type", "other"),
+            "amplitude": cycle.get("amplitude", 0),
+            "source": "FFT detected"
+        })
+        detected_types.add(cycle.get("cycle_type", ""))
+
+    # Add standard periods not already detected
+    for cycle_type, period in standard_periods.items():
+        if cycle_type not in detected_types:
+            result.append({
+                "period_days": period,
+                "cycle_type": cycle_type,
+                "amplitude": 0,
+                "source": "Standard (not detected)"
+            })
+
+    return result
+
+
 def _make_ohe():
     params = set(inspect.signature(OneHotEncoder).parameters.keys())
     if "sparse_output" in params:
@@ -361,9 +473,10 @@ def page_feature_engineering():
     # FEATURE ENGINEERING TABS
     # Academic Reference: Bergmeir & Benítez (2012), Tashman (2000)
     # =========================================================================
-    tab_split, tab_cv, tab_options, tab_generate = st.tabs([
+    tab_split, tab_cv, tab_fourier, tab_options, tab_generate = st.tabs([
         "📊 Data Split",
         "🔄 Cross-Validation",
+        "🌊 Fourier Features",
         "🧪 Options",
         "🚀 Generate"
     ])
@@ -532,6 +645,168 @@ def page_feature_engineering():
                 st.error(f"Error creating CV folds: {str(e)}")
                 st.session_state["cv_folds"] = None
 
+    # =========================================================================
+    # FOURIER FEATURES TAB (Step 2.2: Auto-generate from FFT)
+    # Academic Reference: Box et al. (2015), Harvey (1989)
+    # =========================================================================
+    with tab_fourier:
+        st.markdown("#### Fourier Features from FFT Analysis")
+
+        st.info("""
+        **Why Fourier Features?** Fourier terms (sine/cosine pairs) capture periodic patterns
+        in time series data. They are especially effective for capturing seasonality that doesn't
+        align with calendar units (e.g., business cycles, bi-weekly patterns).
+
+        *Reference: Box, Jenkins, Reinsel & Ljung (2015) - Time Series Analysis*
+        """)
+
+        # Check for FFT data from EDA page
+        fft_data = st.session_state.get("fft_dominant_cycles", {})
+
+        if not fft_data:
+            st.warning("""
+            ⚠️ **No FFT cycles detected yet.**
+
+            Please run FFT analysis in the **Explore Data** page first:
+            1. Go to Explore Data (Page 4)
+            2. Click the "Advanced Analytics" tab
+            3. View the "Dominant Cycles (FFT)" section
+            4. FFT cycles will be automatically saved
+
+            Or, you can manually configure Fourier features below.
+            """)
+
+            use_manual = st.checkbox("Configure Fourier features manually", value=False)
+
+            if use_manual:
+                # Manual period configuration
+                st.markdown("##### Select Periods for Fourier Features")
+
+                period_options = {
+                    "Weekly (7 days)": 7.0,
+                    "Bi-weekly (14 days)": 14.0,
+                    "Monthly (30.44 days)": 30.44,
+                    "Quarterly (91.31 days)": 91.31,
+                    "Yearly (365.25 days)": 365.25,
+                }
+
+                selected_periods = st.multiselect(
+                    "Standard Periods",
+                    options=list(period_options.keys()),
+                    default=["Weekly (7 days)"],
+                    help="Select standard seasonal periods"
+                )
+
+                custom_period = st.number_input(
+                    "Custom Period (days)",
+                    min_value=1.0,
+                    max_value=730.0,
+                    value=0.0,
+                    step=1.0,
+                    help="Add a custom period (0 to skip)"
+                )
+
+                periods_to_use = [period_options[p] for p in selected_periods]
+                if custom_period > 0:
+                    periods_to_use.append(custom_period)
+            else:
+                periods_to_use = []
+        else:
+            st.success(f"✅ **FFT cycles detected** — Detected at: {fft_data.get('detected_at', 'unknown')}")
+
+            # Display detected cycles
+            cycles_list = fft_data.get("cycles_df", [])
+            if cycles_list:
+                st.markdown("##### Detected Cycles from FFT")
+                cycles_df = pd.DataFrame(cycles_list)
+                st.dataframe(cycles_df, use_container_width=True, hide_index=True)
+
+                # Dominant cycle type
+                dominant = fft_data.get("dominant_type", "unknown")
+                st.markdown(f"**Dominant cycle type:** `{dominant}`")
+
+            # Let user select which cycles to use
+            st.markdown("##### Select Cycles for Fourier Features")
+
+            recommended = get_recommended_periods_from_fft()
+            recommended_df = pd.DataFrame(recommended)
+
+            if not recommended_df.empty:
+                # Filter to detected cycles for auto-selection
+                detected_cycles = [c for c in recommended if c.get("source") == "FFT detected"]
+                default_periods = [c.get("period_days") for c in detected_cycles[:3]]
+
+                all_periods = recommended_df["period_days"].tolist()
+                period_labels = {
+                    p: f"{row['cycle_type']} ({p:.1f} days) - {row['source']}"
+                    for p, row in zip(recommended_df["period_days"], recommended_df.to_dict("records"))
+                }
+
+                selected = st.multiselect(
+                    "Cycles to include",
+                    options=all_periods,
+                    default=default_periods,
+                    format_func=lambda x: period_labels.get(x, f"{x:.1f} days"),
+                    help="Select which cycle periods to convert to Fourier features"
+                )
+
+                periods_to_use = selected
+            else:
+                periods_to_use = []
+
+        # Harmonics configuration
+        st.markdown("---")
+        fourier_col1, fourier_col2 = st.columns(2)
+
+        with fourier_col1:
+            n_harmonics = st.slider(
+                "Harmonics per Period",
+                min_value=1,
+                max_value=5,
+                value=1,
+                step=1,
+                help="Number of harmonic terms (k=1,2,...) per period. Higher values capture sharper patterns."
+            )
+
+        with fourier_col2:
+            enable_fourier = st.checkbox(
+                "Enable Fourier Features for Generation",
+                value=len(periods_to_use) > 0,
+                help="Include Fourier features in the generated dataset"
+            )
+
+        # Preview features to be generated
+        if periods_to_use and enable_fourier:
+            n_features = len(periods_to_use) * n_harmonics * 2  # sin + cos per harmonic
+            st.markdown("---")
+            preview_cols = st.columns(3)
+            with preview_cols[0]:
+                st.metric("Periods Selected", len(periods_to_use))
+            with preview_cols[1]:
+                st.metric("Harmonics", n_harmonics)
+            with preview_cols[2]:
+                st.metric("Total Fourier Features", n_features)
+
+            # Show feature names preview
+            with st.expander("Preview Feature Names"):
+                preview_names = []
+                for p in periods_to_use[:3]:  # Show first 3
+                    p_name = f"{p:.0f}" if p >= 1 else f"{p:.2f}"
+                    for k in range(1, n_harmonics + 1):
+                        preview_names.append(f"fourier_sin_p{p_name}_k{k}")
+                        preview_names.append(f"fourier_cos_p{p_name}_k{k}")
+                if len(periods_to_use) > 3:
+                    preview_names.append(f"... (+{(len(periods_to_use)-3)*n_harmonics*2} more)")
+                st.code("\n".join(preview_names))
+
+        # Save Fourier config to session state
+        st.session_state["fourier_config"] = {
+            "enabled": enable_fourier,
+            "periods": periods_to_use,
+            "n_harmonics": n_harmonics,
+            "n_features": len(periods_to_use) * n_harmonics * 2 if periods_to_use else 0,
+        }
+
     with tab_options:
         st.markdown("#### Feature Engineering Options")
 
@@ -564,6 +839,30 @@ def page_feature_engineering():
                                           apply_scaling, save_transformers)
                 variant_used = "Feature engineered (deduplicated)"
 
+            # =================================================================
+            # APPLY FOURIER FEATURES (Step 2.2)
+            # =================================================================
+            fourier_config = st.session_state.get("fourier_config", {})
+            fourier_info = None
+
+            if fourier_config.get("enabled", False) and fourier_config.get("periods"):
+                fourier_df, fourier_info = generate_fourier_features(
+                    df=base,
+                    date_col=date_col,
+                    periods=fourier_config["periods"],
+                    harmonics_per_period=fourier_config.get("n_harmonics", 1),
+                    prefix="fourier"
+                )
+
+                if not fourier_df.empty:
+                    # Add Fourier features to both variants
+                    A_full = _safe_concat(A_full, fourier_df)
+                    B_full = _safe_concat(B_full, fourier_df)
+                    variant_used += f" + {fourier_info['total_features']} Fourier features"
+
+                    # Save Fourier info for reference
+                    st.session_state["fourier_features_info"] = fourier_info
+
             # Validate temporal split if available
             if TEMPORAL_SPLIT_AVAILABLE and split_result is not None:
                 validation_result = validate_temporal_split(
@@ -590,6 +889,8 @@ def page_feature_engineering():
                 "train_ratio": train_ratio,
                 "test_ratio": test_ratio,
                 "transformers_saved": save_transformers and not skip_engineering,
+                "fourier_enabled": fourier_info is not None,
+                "fourier_features": fourier_info.get("total_features", 0) if fourier_info else 0,
             },
             "A": A_full,
             "B": B_full,
@@ -597,6 +898,7 @@ def page_feature_engineering():
             "cal_idx": cal_idx,    # Empty array (no calibration set)
             "test_idx": test_idx,
             "split_result": split_result,
+            "fourier_info": fourier_info,
         }
 
         # =========================================================================
@@ -605,14 +907,38 @@ def page_feature_engineering():
         st.success(f"✅ Dataset ready: {variant_used}")
 
         # Show split summary
-        col_sum1, col_sum2 = st.columns(2)
+        if fourier_info:
+            col_sum1, col_sum2, col_sum3 = st.columns(3)
+        else:
+            col_sum1, col_sum2 = st.columns(2)
+            col_sum3 = None
+
         with col_sum1:
             st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
         with col_sum2:
             st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
+        if col_sum3 and fourier_info:
+            with col_sum3:
+                st.metric("Fourier Features", f"{fourier_info['total_features']}", f"{len(fourier_info['periods_used'])} periods")
 
         if save_transformers and not skip_engineering:
             st.info(f"💾 Transformers saved to: `{TRANSFORMERS_DIR}/`")
+
+        # Show Fourier features info if generated
+        if fourier_info and fourier_info.get("total_features", 0) > 0:
+            with st.expander("🌊 Fourier Features Generated", expanded=True):
+                fcol1, fcol2 = st.columns(2)
+                with fcol1:
+                    st.markdown("**Periods Used:**")
+                    periods_str = ", ".join([f"{p:.1f} days" for p in fourier_info["periods_used"]])
+                    st.code(periods_str)
+                with fcol2:
+                    st.markdown("**Feature Names:**")
+                    feat_list = fourier_info.get("fourier_features", [])
+                    if len(feat_list) > 6:
+                        st.code("\n".join(feat_list[:6]) + f"\n... (+{len(feat_list)-6} more)")
+                    else:
+                        st.code("\n".join(feat_list))
 
         result_tab1, result_tab2, result_tab3 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)", "Split Details"])
         with result_tab1:
