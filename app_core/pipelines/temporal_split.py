@@ -615,6 +615,463 @@ def split_dataframe(
 
 
 # =============================================================================
+# TIME SERIES CROSS-VALIDATION
+# =============================================================================
+"""
+TIME SERIES CROSS-VALIDATION
+=============================
+
+Unlike standard k-fold cross-validation which randomly shuffles data,
+time series CV respects temporal ordering to prevent data leakage.
+
+Academic Reference:
+    Bergmeir, C., & Benitez, J. M. (2012). "On the use of cross-validation
+    for time series predictor evaluation." Information Sciences, 191, 192-213.
+
+EXPANDING WINDOW CV (used here):
+--------------------------------
+Fold 1: [Train: ████░░░░░░░░] [Val: ██░░░░░░░░]
+Fold 2: [Train: ██████░░░░░░] [Val: ██░░░░░░░░]
+Fold 3: [Train: ████████░░░░] [Val: ██░░░░░░░░]
+Fold 4: [Train: ██████████░░] [Val: ██░░░░░░░░]
+Fold 5: [Train: ████████████] [Val: ██░░░░░░░░]
+
+Each fold uses all previous data for training, ensuring no future leakage.
+"""
+
+try:
+    from sklearn.model_selection import TimeSeriesSplit
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+
+
+@dataclass
+class CVFoldResult:
+    """
+    Result for a single cross-validation fold.
+
+    Attributes
+    ----------
+    fold_idx : int
+        Index of the fold (0-based)
+    train_idx : np.ndarray
+        Array of indices for training data in this fold
+    val_idx : np.ndarray
+        Array of indices for validation data in this fold
+    train_start : datetime
+        Start date of training data
+    train_end : datetime
+        End date of training data
+    val_start : datetime
+        Start date of validation data
+    val_end : datetime
+        End date of validation data
+    """
+    fold_idx: int
+    train_idx: np.ndarray
+    val_idx: np.ndarray
+    train_start: datetime
+    train_end: datetime
+    val_start: datetime
+    val_end: datetime
+
+    @property
+    def n_train(self) -> int:
+        """Number of training samples in this fold."""
+        return len(self.train_idx)
+
+    @property
+    def n_val(self) -> int:
+        """Number of validation samples in this fold."""
+        return len(self.val_idx)
+
+    def __repr__(self) -> str:
+        return (
+            f"CVFold {self.fold_idx + 1}: "
+            f"Train[{self.train_start.strftime('%Y-%m-%d')} to {self.train_end.strftime('%Y-%m-%d')}] "
+            f"({self.n_train} samples) → "
+            f"Val[{self.val_start.strftime('%Y-%m-%d')} to {self.val_end.strftime('%Y-%m-%d')}] "
+            f"({self.n_val} samples)"
+        )
+
+
+@dataclass
+class CVConfig:
+    """
+    Configuration for time series cross-validation.
+
+    Attributes
+    ----------
+    n_splits : int
+        Number of CV folds (default: 5)
+    gap : int
+        Number of time periods between train and validation sets
+        to prevent leakage from autocorrelation (default: 0)
+    min_train_size : int, optional
+        Minimum number of samples required in training set
+    test_size : int, optional
+        Fixed size for each validation fold (if None, uses equal splits)
+    """
+    n_splits: int = 5
+    gap: int = 0
+    min_train_size: Optional[int] = None
+    test_size: Optional[int] = None
+
+
+def create_cv_folds(
+    df: pd.DataFrame,
+    date_col: str,
+    n_splits: int = 5,
+    gap: int = 0,
+    min_train_size: Optional[int] = None,
+    test_size: Optional[int] = None,
+    verbose: bool = False
+) -> List[CVFoldResult]:
+    """
+    Create time series cross-validation folds using expanding window.
+
+    Uses sklearn's TimeSeriesSplit to ensure temporal ordering is preserved.
+    Training sets grow with each fold (expanding window), validation sets
+    remain approximately equal in size.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input dataframe containing time series data
+    date_col : str
+        Name of the column containing dates
+    n_splits : int, default=5
+        Number of folds to create
+    gap : int, default=0
+        Number of samples to exclude between train and validation
+        to account for autocorrelation in time series
+    min_train_size : int, optional
+        Minimum number of samples required in training set
+        If None, defaults to n_splits (ensuring first fold has data)
+    test_size : int, optional
+        Fixed number of samples for each validation fold
+        If None, splits remaining data equally
+    verbose : bool, default=False
+        If True, print detailed information about each fold
+
+    Returns
+    -------
+    List[CVFoldResult]
+        List of CVFoldResult objects, one per fold
+
+    Raises
+    ------
+    ValueError
+        If date column doesn't exist or insufficient data for CV
+    ImportError
+        If sklearn is not installed
+
+    Examples
+    --------
+    >>> # Basic usage with 5-fold CV
+    >>> folds = create_cv_folds(df, 'Date', n_splits=5)
+    >>> for fold in folds:
+    ...     print(f"Fold {fold.fold_idx}: {fold.n_train} train, {fold.n_val} val")
+
+    >>> # With gap to prevent autocorrelation leakage
+    >>> folds = create_cv_folds(df, 'Date', n_splits=5, gap=7)
+
+    >>> # Use folds for training
+    >>> for fold in folds:
+    ...     X_train = df.iloc[fold.train_idx][features]
+    ...     y_train = df.iloc[fold.train_idx][target]
+    ...     X_val = df.iloc[fold.val_idx][features]
+    ...     y_val = df.iloc[fold.val_idx][target]
+    ...     # Train and evaluate model...
+
+    Academic Justification
+    ----------------------
+    Time series CV prevents data leakage by ensuring:
+    1. All training data comes BEFORE validation data
+    2. Gap parameter accounts for autocorrelation
+    3. Expanding window mimics real-world forecasting scenario
+    """
+    if not SKLEARN_AVAILABLE:
+        raise ImportError(
+            "sklearn is required for time series cross-validation. "
+            "Install it with: pip install scikit-learn"
+        )
+
+    # Validate inputs
+    if date_col not in df.columns:
+        raise ValueError(
+            f"Date column '{date_col}' not found. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    if n_splits < 2:
+        raise ValueError(f"n_splits must be at least 2, got {n_splits}")
+
+    # Prepare data - sort by date
+    df_sorted = df.copy()
+    if not pd.api.types.is_datetime64_any_dtype(df_sorted[date_col]):
+        df_sorted[date_col] = pd.to_datetime(df_sorted[date_col])
+    df_sorted = df_sorted.sort_values(date_col).reset_index(drop=True)
+
+    n_samples = len(df_sorted)
+
+    # Calculate minimum train size if not specified
+    if min_train_size is None:
+        # Ensure at least n_splits samples in first training fold
+        min_train_size = max(n_splits, int(n_samples * 0.1))
+
+    # Create TimeSeriesSplit object
+    tscv = TimeSeriesSplit(
+        n_splits=n_splits,
+        gap=gap,
+        max_train_size=None,  # Use expanding window
+        test_size=test_size
+    )
+
+    folds = []
+
+    for fold_idx, (train_indices, val_indices) in enumerate(tscv.split(df_sorted)):
+        # Skip if training set is too small
+        if len(train_indices) < min_train_size:
+            if verbose:
+                print(f"Skipping fold {fold_idx + 1}: insufficient training data "
+                      f"({len(train_indices)} < {min_train_size})")
+            continue
+
+        # Get date boundaries
+        train_dates = df_sorted.iloc[train_indices][date_col]
+        val_dates = df_sorted.iloc[val_indices][date_col]
+
+        fold_result = CVFoldResult(
+            fold_idx=len(folds),  # Re-number after potential skips
+            train_idx=train_indices,
+            val_idx=val_indices,
+            train_start=train_dates.min(),
+            train_end=train_dates.max(),
+            val_start=val_dates.min(),
+            val_end=val_dates.max(),
+        )
+
+        folds.append(fold_result)
+
+        if verbose:
+            print(fold_result)
+
+    if len(folds) == 0:
+        raise ValueError(
+            f"Could not create any CV folds with the given parameters. "
+            f"Dataset has {n_samples} samples, min_train_size={min_train_size}. "
+            f"Try reducing n_splits or min_train_size."
+        )
+
+    return folds
+
+
+def visualize_cv_folds(
+    df: pd.DataFrame,
+    date_col: str,
+    folds: List[CVFoldResult],
+    title: str = "Time Series Cross-Validation Folds"
+) -> "go.Figure":
+    """
+    Create a Plotly visualization of CV fold splits.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input dataframe
+    date_col : str
+        Name of the date column
+    folds : List[CVFoldResult]
+        List of CV folds from create_cv_folds()
+    title : str
+        Title for the chart
+
+    Returns
+    -------
+    go.Figure
+        Plotly figure object showing the CV fold structure
+    """
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        raise ImportError("plotly is required for visualization")
+
+    # Ensure date column is datetime
+    df = df.copy()
+    if not pd.api.types.is_datetime64_any_dtype(df[date_col]):
+        df[date_col] = pd.to_datetime(df[date_col])
+    df = df.sort_values(date_col).reset_index(drop=True)
+
+    min_date = df[date_col].min()
+    max_date = df[date_col].max()
+
+    fig = go.Figure()
+
+    # Color scheme
+    train_color = "rgba(102, 126, 234, 0.7)"  # Blue
+    val_color = "rgba(237, 100, 166, 0.7)"     # Pink
+    gap_color = "rgba(128, 128, 128, 0.3)"     # Gray
+
+    for fold in folds:
+        y_pos = len(folds) - fold.fold_idx  # Reverse so fold 1 is at top
+
+        # Training bar
+        fig.add_trace(go.Bar(
+            x=[(fold.train_end - fold.train_start).days],
+            y=[f"Fold {fold.fold_idx + 1}"],
+            orientation='h',
+            base=[(fold.train_start - min_date).days],
+            name=f"Train (Fold {fold.fold_idx + 1})",
+            marker=dict(color=train_color),
+            text=f"Train: {fold.n_train}",
+            textposition="inside",
+            showlegend=(fold.fold_idx == 0),
+            legendgroup="train",
+            hovertemplate=(
+                f"<b>Fold {fold.fold_idx + 1} - Training</b><br>"
+                f"Start: {fold.train_start.strftime('%Y-%m-%d')}<br>"
+                f"End: {fold.train_end.strftime('%Y-%m-%d')}<br>"
+                f"Samples: {fold.n_train}<extra></extra>"
+            )
+        ))
+
+        # Validation bar
+        fig.add_trace(go.Bar(
+            x=[(fold.val_end - fold.val_start).days],
+            y=[f"Fold {fold.fold_idx + 1}"],
+            orientation='h',
+            base=[(fold.val_start - min_date).days],
+            name=f"Validation (Fold {fold.fold_idx + 1})",
+            marker=dict(color=val_color),
+            text=f"Val: {fold.n_val}",
+            textposition="inside",
+            showlegend=(fold.fold_idx == 0),
+            legendgroup="val",
+            hovertemplate=(
+                f"<b>Fold {fold.fold_idx + 1} - Validation</b><br>"
+                f"Start: {fold.val_start.strftime('%Y-%m-%d')}<br>"
+                f"End: {fold.val_end.strftime('%Y-%m-%d')}<br>"
+                f"Samples: {fold.n_val}<extra></extra>"
+            )
+        ))
+
+    # Update layout
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=16)),
+        barmode='overlay',
+        xaxis=dict(
+            title="Days from Start",
+            showgrid=True,
+            gridcolor="rgba(128,128,128,0.2)"
+        ),
+        yaxis=dict(
+            title="",
+            categoryorder='array',
+            categoryarray=[f"Fold {i + 1}" for i in range(len(folds) - 1, -1, -1)]
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5
+        ),
+        height=max(300, 60 * len(folds) + 100),
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    # Add annotation with date range
+    fig.add_annotation(
+        x=0.5, y=-0.15,
+        xref="paper", yref="paper",
+        text=f"Data range: {min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}",
+        showarrow=False,
+        font=dict(size=11, color="gray")
+    )
+
+    return fig
+
+
+def evaluate_cv_metrics(
+    metrics_per_fold: List[Dict[str, float]]
+) -> Dict[str, Dict[str, float]]:
+    """
+    Aggregate metrics across CV folds to compute mean ± std.
+
+    Parameters
+    ----------
+    metrics_per_fold : List[Dict[str, float]]
+        List of metric dictionaries, one per fold.
+        Each dict should have keys like 'MAE', 'RMSE', 'MAPE', etc.
+
+    Returns
+    -------
+    Dict[str, Dict[str, float]]
+        Dictionary with metric names as keys and {'mean': X, 'std': Y} as values.
+
+    Examples
+    --------
+    >>> fold_metrics = [
+    ...     {'MAE': 10.5, 'RMSE': 15.2},
+    ...     {'MAE': 11.2, 'RMSE': 16.1},
+    ...     {'MAE': 10.8, 'RMSE': 15.5},
+    ... ]
+    >>> summary = evaluate_cv_metrics(fold_metrics)
+    >>> print(f"MAE: {summary['MAE']['mean']:.2f} ± {summary['MAE']['std']:.2f}")
+    MAE: 10.83 ± 0.35
+    """
+    if not metrics_per_fold:
+        return {}
+
+    # Get all metric names
+    metric_names = set()
+    for fold in metrics_per_fold:
+        metric_names.update(fold.keys())
+
+    result = {}
+    for name in metric_names:
+        values = [fold.get(name) for fold in metrics_per_fold if fold.get(name) is not None]
+        if values:
+            arr = np.array(values, dtype=float)
+            arr = arr[np.isfinite(arr)]  # Remove NaN/inf
+            if len(arr) > 0:
+                result[name] = {
+                    'mean': float(np.mean(arr)),
+                    'std': float(np.std(arr)),
+                    'min': float(np.min(arr)),
+                    'max': float(np.max(arr)),
+                    'n_folds': len(arr)
+                }
+
+    return result
+
+
+def format_cv_metric(metric_summary: Dict[str, float], precision: int = 2) -> str:
+    """
+    Format a CV metric summary as "mean ± std" string.
+
+    Parameters
+    ----------
+    metric_summary : Dict[str, float]
+        Dictionary with 'mean' and 'std' keys
+    precision : int
+        Number of decimal places
+
+    Returns
+    -------
+    str
+        Formatted string like "12.34 ± 1.23"
+    """
+    mean = metric_summary.get('mean', 0)
+    std = metric_summary.get('std', 0)
+    return f"{mean:.{precision}f} ± {std:.{precision}f}"
+
+
+# =============================================================================
 # TESTING / DEMONSTRATION
 # =============================================================================
 

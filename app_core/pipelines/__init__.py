@@ -22,9 +22,18 @@ Author: HealthForecast AI Research Team
 """
 
 from .temporal_split import (
+    # Single train/cal/test split
     compute_temporal_split,
     TemporalSplitResult,
     validate_temporal_split,
+    split_dataframe,
+    # Time series cross-validation
+    CVFoldResult,
+    CVConfig,
+    create_cv_folds,
+    visualize_cv_folds,
+    evaluate_cv_metrics,
+    format_cv_metric,
 )
 
 from .conformal_prediction import (
@@ -48,10 +57,18 @@ from .conformal_prediction import (
 )
 
 __all__ = [
-    # Temporal split
+    # Temporal split (single)
     "compute_temporal_split",
     "TemporalSplitResult",
     "validate_temporal_split",
+    "split_dataframe",
+    # Time series cross-validation
+    "CVFoldResult",
+    "CVConfig",
+    "create_cv_folds",
+    "visualize_cv_folds",
+    "evaluate_cv_metrics",
+    "format_cv_metric",
     # Conformal prediction
     "ConformalResult",
     "PredictionInterval",

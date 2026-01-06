@@ -36,6 +36,21 @@ try:
 except ImportError:
     OPTUNA_AVAILABLE = False
 
+# =============================================================================
+# TIME SERIES CROSS-VALIDATION IMPORT
+# =============================================================================
+try:
+    from app_core.pipelines import (
+        CVFoldResult,
+        CVConfig,
+        create_cv_folds,
+        evaluate_cv_metrics,
+        format_cv_metric,
+    )
+    CV_AVAILABLE = True
+except ImportError:
+    CV_AVAILABLE = False
+
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
 # ============================================================================
@@ -498,6 +513,143 @@ def _mean_from_any(df: pd.DataFrame, candidates: list[str]) -> float:
             if s.notna().any():
                 return float(s.mean())
     return np.nan
+
+# =============================================================================
+# CROSS-VALIDATION HELPERS
+# =============================================================================
+
+def render_cv_status_banner():
+    """Render a banner showing cross-validation status from Feature Studio configuration."""
+    cv_enabled = st.session_state.get("cv_enabled", False)
+    cv_config = st.session_state.get("cv_config")
+    cv_folds = st.session_state.get("cv_folds")
+
+    if cv_enabled and cv_folds:
+        n_folds = len(cv_folds)
+        gap = cv_config.gap if cv_config else 0
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
+                        border-left: 4px solid rgba(34, 197, 94, 0.8);
+                        padding: 1rem 1.5rem;
+                        border-radius: 12px;
+                        margin: 1rem 0;
+                        box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+                        display: flex;
+                        align-items: center;
+                        gap: 1rem;'>
+                <span style='font-size: 1.5rem;'>🔄</span>
+                <div>
+                    <div style='color: rgba(34, 197, 94, 1); font-weight: 700; font-size: 1rem;
+                                text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);'>
+                        Cross-Validation Enabled
+                    </div>
+                    <div style='color: {SUBTLE_TEXT}; font-size: 0.875rem; margin-top: 0.25rem;'>
+                        {n_folds}-fold time series CV • Gap: {gap} days • Metrics will show mean ± std
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        return True
+    else:
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, rgba(107, 114, 128, 0.15), rgba(75, 85, 99, 0.1));
+                        border-left: 4px solid rgba(107, 114, 128, 0.5);
+                        padding: 0.75rem 1.5rem;
+                        border-radius: 12px;
+                        margin: 1rem 0;
+                        display: flex;
+                        align-items: center;
+                        gap: 1rem;'>
+                <span style='font-size: 1.2rem;'>📊</span>
+                <div style='color: {SUBTLE_TEXT}; font-size: 0.875rem;'>
+                    Cross-Validation: <strong>Disabled</strong> • Configure in Feature Studio → Cross-Validation tab
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        return False
+
+
+def _create_cv_kpi_indicator(title: str, mean_val: float, std_val: float = None,
+                              suffix: str = "", color: str = PRIMARY_COLOR):
+    """
+    Create a KPI indicator card showing mean ± std for CV metrics.
+
+    Parameters
+    ----------
+    title : str
+        The metric name (e.g., "MAE", "RMSE")
+    mean_val : float
+        Mean value across CV folds
+    std_val : float, optional
+        Standard deviation across CV folds. If None, shows just the mean.
+    suffix : str
+        Suffix to append (e.g., "%")
+    color : str
+        Color for the indicator
+    """
+    try:
+        is_num = isinstance(mean_val, (int, float, np.floating)) and np.isfinite(mean_val)
+    except Exception:
+        is_num = False
+
+    display_val = float(mean_val) if is_num else 0.0
+
+    # Map colors to fluorescent glow colors
+    glow_colors = {
+        PRIMARY_COLOR: "rgba(59, 130, 246, 0.6)",
+        SECONDARY_COLOR: "rgba(34, 211, 238, 0.6)",
+        SUCCESS_COLOR: "rgba(34, 197, 94, 0.6)",
+        WARNING_COLOR: "rgba(245, 158, 11, 0.6)",
+    }
+    glow_color = glow_colors.get(color, "rgba(59, 130, 246, 0.6)")
+    number_color = color if is_num else "rgba(0,0,0,0)"
+
+    # Format the display text
+    if is_num and std_val is not None and np.isfinite(std_val):
+        # Show mean ± std format
+        value_text = f"{display_val:.2f} ± {std_val:.2f}{suffix}"
+    elif is_num:
+        value_text = f"{display_val:.2f}{suffix}"
+    else:
+        value_text = "—"
+
+    fig = go.Figure()
+
+    # Create a simple indicator with custom annotation for ± format
+    fig.add_annotation(
+        x=0.5, y=0.35,
+        text=value_text,
+        showarrow=False,
+        font=dict(size=22 if std_val is None else 18, color=number_color, family="Arial Black"),
+        xanchor="center",
+        yanchor="middle"
+    )
+
+    fig.add_annotation(
+        x=0.5, y=0.8,
+        text=f"<b style='letter-spacing:0.5px'>{title}</b>",
+        showarrow=False,
+        font=dict(size=12, color=TEXT_COLOR),
+        xanchor="center",
+        yanchor="middle"
+    )
+
+    fig.update_layout(
+        margin=dict(l=5, r=5, t=10, b=5),
+        paper_bgcolor="rgba(15, 23, 42, 0.8)",
+        height=110,
+        xaxis=dict(visible=False, range=[0, 1]),
+        yaxis=dict(visible=False, range=[0, 1]),
+    )
+
+    return fig
+
 
 def _create_kpi_indicator(title: str, value, suffix: str = "", color: str = PRIMARY_COLOR):
     """Create a KPI indicator card using Plotly with fluorescent glow effect."""
@@ -1917,6 +2069,9 @@ def page_ml():
         """,
         unsafe_allow_html=True,
     )
+
+    # Cross-Validation Status Banner
+    cv_is_enabled = render_cv_status_banner()
 
     # 1. Model Selection (Generic - replaces 15 lines with 3)
     st.markdown(

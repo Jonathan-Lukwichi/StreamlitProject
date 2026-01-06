@@ -39,10 +39,19 @@ try:
         compute_temporal_split,
         validate_temporal_split,
         TemporalSplitResult,
+        # Time series cross-validation
+        CVFoldResult,
+        CVConfig,
+        create_cv_folds,
+        visualize_cv_folds,
+        evaluate_cv_metrics,
+        format_cv_metric,
     )
     TEMPORAL_SPLIT_AVAILABLE = True
+    CV_AVAILABLE = True
 except ImportError:
     TEMPORAL_SPLIT_AVAILABLE = False
+    CV_AVAILABLE = False
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -352,8 +361,9 @@ def page_feature_engineering():
     # FEATURE ENGINEERING TABS
     # Academic Reference: Bergmeir & Benítez (2012), Tashman (2000)
     # =========================================================================
-    tab_split, tab_options, tab_generate = st.tabs([
+    tab_split, tab_cv, tab_options, tab_generate = st.tabs([
         "📊 Data Split",
+        "🔄 Cross-Validation",
         "🧪 Options",
         "🚀 Generate"
     ])
@@ -396,6 +406,131 @@ def page_feature_engineering():
         train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
         cal_idx = np.array([], dtype=int)  # No calibration set
         split_result = None
+
+    # =========================================================================
+    # CROSS-VALIDATION TAB
+    # Academic Reference: Bergmeir & Benítez (2012)
+    # =========================================================================
+    with tab_cv:
+        st.markdown("#### Time Series Cross-Validation")
+
+        st.info("""
+        **Why Time Series CV?** Standard k-fold CV randomly shuffles data, which causes
+        data leakage in time series. Time series CV uses expanding windows where training
+        data always precedes validation data, mimicking real-world forecasting.
+
+        *Reference: Bergmeir & Benítez (2012) - "On the use of cross-validation for time series predictor evaluation"*
+        """)
+
+        if not CV_AVAILABLE:
+            st.warning("⚠️ Cross-validation module not available. Please check installation.")
+        else:
+            # CV Configuration
+            cv_col1, cv_col2 = st.columns(2)
+
+            with cv_col1:
+                n_splits = st.slider(
+                    "Number of Folds",
+                    min_value=3,
+                    max_value=10,
+                    value=5,
+                    step=1,
+                    help="Number of train/validation splits. More folds = more robust estimates but slower training."
+                )
+
+                gap_days = st.slider(
+                    "Gap (days)",
+                    min_value=0,
+                    max_value=14,
+                    value=0,
+                    step=1,
+                    help="Days between training and validation sets to prevent autocorrelation leakage. "
+                         "Recommended: 0-7 days for daily data."
+                )
+
+            with cv_col2:
+                use_cv = st.checkbox(
+                    "Enable Cross-Validation for Model Training",
+                    value=True,
+                    help="When enabled, models will be trained on all CV folds and metrics will show mean ± std."
+                )
+
+                min_train_pct = st.slider(
+                    "Minimum Training Size (%)",
+                    min_value=10,
+                    max_value=50,
+                    value=20,
+                    step=5,
+                    help="Minimum percentage of data required for training in the first fold."
+                )
+
+            # Save CV config to session state
+            cv_config = CVConfig(
+                n_splits=n_splits,
+                gap=gap_days,
+                min_train_size=int(len(base) * min_train_pct / 100) if min_train_pct > 0 else None,
+                test_size=None
+            )
+            st.session_state["cv_config"] = cv_config
+            st.session_state["cv_enabled"] = use_cv
+
+            # Preview CV folds
+            st.markdown("---")
+            st.markdown("##### CV Fold Preview")
+
+            try:
+                cv_folds = create_cv_folds(
+                    df=base,
+                    date_col=date_col,
+                    n_splits=n_splits,
+                    gap=gap_days,
+                    min_train_size=cv_config.min_train_size,
+                    verbose=False
+                )
+
+                # Display fold summary
+                fold_data = []
+                for fold in cv_folds:
+                    fold_data.append({
+                        "Fold": fold.fold_idx + 1,
+                        "Train Start": fold.train_start.strftime("%Y-%m-%d"),
+                        "Train End": fold.train_end.strftime("%Y-%m-%d"),
+                        "Train Samples": fold.n_train,
+                        "Val Start": fold.val_start.strftime("%Y-%m-%d"),
+                        "Val End": fold.val_end.strftime("%Y-%m-%d"),
+                        "Val Samples": fold.n_val,
+                    })
+                fold_df = pd.DataFrame(fold_data)
+                st.dataframe(fold_df, use_container_width=True, hide_index=True)
+
+                # Visualization
+                fig = visualize_cv_folds(base, date_col, cv_folds, "Time Series Cross-Validation Folds")
+                st.plotly_chart(fig, use_container_width=True, key="cv_folds_viz")
+
+                # Summary metrics
+                total_train = sum(f.n_train for f in cv_folds)
+                total_val = sum(f.n_val for f in cv_folds)
+                avg_train = total_train / len(cv_folds) if cv_folds else 0
+                avg_val = total_val / len(cv_folds) if cv_folds else 0
+
+                metric_cols = st.columns(4)
+                with metric_cols[0]:
+                    st.metric("Active Folds", len(cv_folds))
+                with metric_cols[1]:
+                    st.metric("Avg Train Size", f"{avg_train:,.0f}")
+                with metric_cols[2]:
+                    st.metric("Avg Val Size", f"{avg_val:,.0f}")
+                with metric_cols[3]:
+                    st.metric("Total Samples", f"{len(base):,}")
+
+                # Save folds to session state for use in training
+                st.session_state["cv_folds"] = cv_folds
+
+                st.success(f"✅ {len(cv_folds)} CV folds configured. Ready for model training with cross-validation.")
+
+            except Exception as e:
+                st.error(f"Error creating CV folds: {str(e)}")
+                st.session_state["cv_folds"] = None
 
     with tab_options:
         st.markdown("#### Feature Engineering Options")
