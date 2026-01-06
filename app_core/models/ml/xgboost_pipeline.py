@@ -456,3 +456,336 @@ class XGBoostPipeline(BaseMLPipeline):
 
         importance = self.model.feature_importances_
         return {f"feature_{i}": float(imp) for i, imp in enumerate(importance)}
+
+
+# =============================================================================
+# TREND-RESIDUAL HYBRID XGBOOST (Step 3.3)
+# Academic Reference: Hyndman & Athanasopoulos (2021) - Decomposition methods
+# =============================================================================
+class TrendXGBoostHybrid:
+    """
+    Trend-Residual Hybrid XGBoost Model.
+
+    Decomposes time series into trend + residuals, modeling each separately:
+    - Trend: Simple model (linear regression or rolling mean)
+    - Residuals: XGBoost captures complex patterns
+
+    Final prediction: y_pred = trend_pred + residual_pred
+
+    Advantages:
+    - Better extrapolation for trend (XGBoost struggles with trends)
+    - XGBoost focuses on detrended patterns
+    - Often better for long-horizon forecasts
+
+    Academic Reference:
+        - Hyndman & Athanasopoulos (2021) - Forecasting: Principles and Practice
+        - Zhang (2003) - Time series forecasting using hybrid ARIMA-neural networks
+
+    Usage:
+        hybrid = TrendXGBoostHybrid(xgb_config, trend_method="linear")
+        hybrid.fit(X_train, y_train)
+        predictions = hybrid.predict(X_test)
+    """
+
+    def __init__(
+        self,
+        xgb_config: Dict[str, Any] = None,
+        trend_method: str = "linear",
+        detrend_window: int = 7,
+        use_early_stopping: bool = True,
+        early_stopping_rounds: int = 50,
+    ):
+        """
+        Initialize Trend-Residual Hybrid.
+
+        Args:
+            xgb_config: XGBoost hyperparameters
+            trend_method: Method to extract trend
+                - "linear": Linear regression on time index
+                - "rolling": Rolling mean (moving average)
+                - "polynomial": Polynomial regression (degree 2)
+                - "lowess": Locally weighted regression (if available)
+            detrend_window: Window size for rolling method
+            use_early_stopping: Enable early stopping for XGBoost
+            early_stopping_rounds: Rounds for early stopping
+        """
+        self.xgb_config = xgb_config or {
+            "n_estimators": 500,
+            "max_depth": 6,
+            "eta": 0.05,
+            "min_child_weight": 3,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+        }
+        self.trend_method = trend_method
+        self.detrend_window = detrend_window
+        self.use_early_stopping = use_early_stopping
+        self.early_stopping_rounds = early_stopping_rounds
+
+        # Models
+        self.trend_model = None
+        self.residual_model = None  # XGBoost
+
+        # Training state
+        self.is_fitted = False
+        self.training_history = {}
+        self.trend_info = {}
+
+    def _extract_trend(self, y: np.ndarray, time_index: np.ndarray = None) -> np.ndarray:
+        """
+        Extract trend component from time series.
+
+        Args:
+            y: Target values
+            time_index: Time index for regression (if None, uses 0,1,2,...)
+
+        Returns:
+            Trend values (same shape as y)
+        """
+        n = len(y)
+        t = time_index if time_index is not None else np.arange(n)
+
+        if self.trend_method == "linear":
+            # Linear regression: y = a + b*t
+            from sklearn.linear_model import LinearRegression
+            self.trend_model = LinearRegression()
+            self.trend_model.fit(t.reshape(-1, 1), y)
+            trend = self.trend_model.predict(t.reshape(-1, 1))
+            self.trend_info = {
+                "method": "linear",
+                "intercept": float(self.trend_model.intercept_),
+                "slope": float(self.trend_model.coef_[0]),
+            }
+
+        elif self.trend_method == "rolling":
+            # Rolling mean (centered)
+            import pandas as pd
+            trend = pd.Series(y).rolling(
+                window=self.detrend_window, center=True, min_periods=1
+            ).mean().values
+            self.trend_model = {"method": "rolling", "window": self.detrend_window}
+            self.trend_info = {"method": "rolling", "window": self.detrend_window}
+
+        elif self.trend_method == "polynomial":
+            # Polynomial regression (degree 2)
+            from sklearn.preprocessing import PolynomialFeatures
+            from sklearn.linear_model import LinearRegression
+            from sklearn.pipeline import Pipeline
+
+            self.trend_model = Pipeline([
+                ("poly", PolynomialFeatures(degree=2)),
+                ("lr", LinearRegression())
+            ])
+            self.trend_model.fit(t.reshape(-1, 1), y)
+            trend = self.trend_model.predict(t.reshape(-1, 1))
+            self.trend_info = {
+                "method": "polynomial",
+                "degree": 2,
+                "coefficients": list(self.trend_model.named_steps["lr"].coef_),
+            }
+
+        elif self.trend_method == "lowess":
+            # Locally Weighted Scatterplot Smoothing
+            try:
+                from statsmodels.nonparametric.smoothers_lowess import lowess
+                smoothed = lowess(y, t, frac=0.1, return_sorted=False)
+                trend = smoothed
+                self.trend_model = {"method": "lowess", "frac": 0.1}
+                self.trend_info = {"method": "lowess", "frac": 0.1}
+            except ImportError:
+                # Fallback to rolling
+                import pandas as pd
+                trend = pd.Series(y).rolling(
+                    window=self.detrend_window, center=True, min_periods=1
+                ).mean().values
+                self.trend_model = {"method": "rolling", "window": self.detrend_window}
+                self.trend_info = {"method": "rolling (lowess fallback)", "window": self.detrend_window}
+
+        else:
+            raise ValueError(f"Unknown trend method: {self.trend_method}")
+
+        return trend
+
+    def _predict_trend(self, time_index: np.ndarray) -> np.ndarray:
+        """
+        Predict trend for future time points.
+
+        Args:
+            time_index: Future time indices
+
+        Returns:
+            Predicted trend values
+        """
+        if self.trend_method in ["linear", "polynomial"]:
+            return self.trend_model.predict(time_index.reshape(-1, 1))
+        elif self.trend_method in ["rolling", "lowess"]:
+            # For rolling/lowess, extrapolate using last values
+            # Simple linear extrapolation from last trend values
+            return np.full(len(time_index), self.training_history.get("last_trend", 0))
+        else:
+            raise ValueError(f"Cannot predict trend for method: {self.trend_method}")
+
+    def fit(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_val: np.ndarray = None,
+        y_val: np.ndarray = None,
+        time_index: np.ndarray = None,
+    ) -> Dict[str, Any]:
+        """
+        Fit the hybrid model.
+
+        1. Extract trend from y_train
+        2. Compute residuals: residuals = y_train - trend
+        3. Train XGBoost on residuals
+
+        Args:
+            X_train: Training features
+            y_train: Training targets
+            X_val: Validation features (optional)
+            y_val: Validation targets (optional)
+            time_index: Time index for trend extraction
+
+        Returns:
+            Training history with trend and residual metrics
+        """
+        n = len(y_train)
+        time_idx = time_index if time_index is not None else np.arange(n)
+
+        # Step 1: Extract trend
+        trend = self._extract_trend(y_train, time_idx)
+        self.training_history["last_trend"] = float(trend[-1])
+        self.training_history["last_time_index"] = float(time_idx[-1])
+
+        # Step 2: Compute residuals
+        residuals = y_train - trend
+
+        # Step 3: Train XGBoost on residuals
+        self.residual_model = XGBoostPipeline(self.xgb_config)
+
+        # Handle validation set
+        val_residuals = None
+        if X_val is not None and y_val is not None:
+            # For validation, we need to extend the trend
+            n_val = len(y_val)
+            val_time_idx = np.arange(n, n + n_val)
+            if self.trend_method in ["linear", "polynomial"]:
+                val_trend = self._predict_trend(val_time_idx)
+            else:
+                # Use last trend value for simple extrapolation
+                val_trend = np.full(n_val, trend[-1])
+            val_residuals = y_val - val_trend
+
+        # Train XGBoost on residuals
+        xgb_history = self.residual_model.train(
+            X_train, residuals,
+            X_val, val_residuals
+        )
+
+        # Store training history
+        self.training_history.update({
+            "trend_method": self.trend_method,
+            "trend_info": self.trend_info,
+            "xgb_history": xgb_history,
+            "train_trend_mean": float(np.mean(trend)),
+            "train_residual_mean": float(np.mean(residuals)),
+            "train_residual_std": float(np.std(residuals)),
+        })
+
+        # Evaluate on training set
+        y_train_pred = self.predict(X_train, np.arange(n))
+        train_metrics = self._compute_metrics(y_train, y_train_pred)
+        self.training_history["train_metrics"] = train_metrics
+
+        # Evaluate on validation set if provided
+        if X_val is not None and y_val is not None:
+            y_val_pred = self.predict(X_val, np.arange(n, n + len(y_val)))
+            val_metrics = self._compute_metrics(y_val, y_val_pred)
+            self.training_history["val_metrics"] = val_metrics
+
+        self.is_fitted = True
+        return self.training_history
+
+    def predict(
+        self,
+        X: np.ndarray,
+        time_index: np.ndarray = None,
+    ) -> np.ndarray:
+        """
+        Generate predictions by combining trend and residual predictions.
+
+        Args:
+            X: Input features
+            time_index: Time indices for trend prediction
+
+        Returns:
+            Final predictions = trend + residual_prediction
+        """
+        if not self.is_fitted:
+            raise ValueError("Model not fitted. Call fit() first.")
+
+        n = len(X)
+
+        # Predict trend
+        if time_index is None:
+            # Use extrapolated indices from training
+            last_idx = self.training_history.get("last_time_index", 0)
+            time_index = np.arange(last_idx + 1, last_idx + 1 + n)
+
+        if self.trend_method in ["linear", "polynomial"]:
+            trend_pred = self._predict_trend(time_index)
+        else:
+            # Linear extrapolation for rolling/lowess
+            last_trend = self.training_history.get("last_trend", 0)
+            trend_pred = np.full(n, last_trend)
+
+        # Predict residuals with XGBoost
+        residual_pred = self.residual_model.predict(X)
+
+        # Combine
+        return trend_pred + residual_pred
+
+    def _compute_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+        """Compute standard metrics."""
+        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+        mae = mean_absolute_error(y_true, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        r2 = r2_score(y_true, y_pred)
+
+        # MAPE with zero handling
+        mask = y_true != 0
+        if mask.sum() > 0:
+            mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+        else:
+            mape = np.nan
+
+        return {"MAE": mae, "RMSE": rmse, "R2": r2, "MAPE": mape}
+
+    def get_decomposition(
+        self,
+        y: np.ndarray,
+        time_index: np.ndarray = None
+    ) -> Dict[str, np.ndarray]:
+        """
+        Get trend-residual decomposition.
+
+        Args:
+            y: Target values
+            time_index: Time indices
+
+        Returns:
+            Dictionary with 'original', 'trend', 'residual'
+        """
+        n = len(y)
+        t = time_index if time_index is not None else np.arange(n)
+        trend = self._extract_trend(y, t)
+        residual = y - trend
+
+        return {
+            "original": y,
+            "trend": trend,
+            "residual": residual,
+            "trend_method": self.trend_method,
+        }
