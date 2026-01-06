@@ -145,6 +145,145 @@ except Exception:
             work = work.dropna(how="any")
         return work, {}
 
+
+# =============================================================================
+# TEMPORAL FEATURES GENERATOR (Step 2.1: Lag and Rolling Window Features)
+# Academic Reference: Bergmeir & Benítez (2012), Hyndman & Athanasopoulos (2021)
+# =============================================================================
+def generate_temporal_features(
+    df: pd.DataFrame,
+    target_col: str = "Total_Arrivals",
+    max_lag_days: int = 14,
+    rolling_window: int = 7,
+    include_rolling_stats: list = None,
+    date_col: str = None,
+) -> tuple:
+    """
+    Generate comprehensive temporal features for time series forecasting.
+
+    This function creates two types of features:
+    1. LAG FEATURES: Historical values at specific time offsets (ED_lag_1..ED_lag_n)
+       - Captures autocorrelation patterns
+       - Essential for AR-type models
+
+    2. ROLLING WINDOW FEATURES: Statistical summaries over a sliding window
+       - roll_N_mean: Trend indicator (momentum)
+       - roll_N_std: Volatility measure (uncertainty)
+       - roll_N_min: Recent minimum (floor)
+       - roll_N_max: Recent maximum (ceiling)
+
+    Academic Reference:
+        Bergmeir & Benítez (2012) - Time series feature engineering
+        Hyndman & Athanasopoulos (2021) - Forecasting: Principles and Practice
+
+    Args:
+        df: Input DataFrame with time series data
+        target_col: Column to generate features from (default: "Total_Arrivals")
+        max_lag_days: Maximum number of lag features (1 to max_lag_days)
+        rolling_window: Window size for rolling statistics
+        include_rolling_stats: List of stats to include ['mean', 'std', 'min', 'max']
+        date_col: Optional date column for sorting
+
+    Returns:
+        Tuple of (DataFrame with new features, dict with feature info)
+    """
+    if include_rolling_stats is None:
+        include_rolling_stats = ['mean', 'std', 'min', 'max']
+
+    work = df.copy()
+    feature_info = {
+        'lag_features': [],
+        'rolling_features': [],
+        'target_col': target_col,
+        'max_lag_days': max_lag_days,
+        'rolling_window': rolling_window,
+    }
+
+    # Find target column (flexible matching)
+    target = None
+    for col in work.columns:
+        if col.lower() == target_col.lower():
+            target = col
+            break
+        if col.lower() in ['total_arrivals', 'ed', 'arrivals', 'patients']:
+            target = col
+            break
+
+    if target is None:
+        # Try to find first numeric column that looks like arrival data
+        for col in work.columns:
+            if pd.api.types.is_numeric_dtype(work[col]):
+                if 'arrival' in col.lower() or 'ed' in col.lower() or 'patient' in col.lower():
+                    target = col
+                    break
+        # Fallback to first numeric column
+        if target is None:
+            for col in work.columns:
+                if pd.api.types.is_numeric_dtype(work[col]) and not col.startswith('Target_'):
+                    target = col
+                    break
+
+    if target is None:
+        return work, {'error': 'No suitable target column found for temporal features'}
+
+    feature_info['actual_target'] = target
+
+    # Ensure data is sorted by date if date column exists
+    if date_col:
+        work = work.sort_values(date_col).reset_index(drop=True)
+
+    # ==========================================================================
+    # 1. GENERATE LAG FEATURES (ED_lag_1, ED_lag_2, ..., ED_lag_N)
+    # ==========================================================================
+    for lag in range(1, max_lag_days + 1):
+        lag_col = f"ED_lag_{lag}"
+        work[lag_col] = work[target].shift(lag)
+        feature_info['lag_features'].append(lag_col)
+
+    # ==========================================================================
+    # 2. GENERATE ROLLING WINDOW FEATURES
+    # ==========================================================================
+    series = work[target]
+    window = rolling_window
+
+    if 'mean' in include_rolling_stats:
+        col_name = f"roll_{window}_mean"
+        work[col_name] = series.rolling(window=window, min_periods=1).mean()
+        feature_info['rolling_features'].append(col_name)
+
+    if 'std' in include_rolling_stats:
+        col_name = f"roll_{window}_std"
+        work[col_name] = series.rolling(window=window, min_periods=2).std()
+        feature_info['rolling_features'].append(col_name)
+
+    if 'min' in include_rolling_stats:
+        col_name = f"roll_{window}_min"
+        work[col_name] = series.rolling(window=window, min_periods=1).min()
+        feature_info['rolling_features'].append(col_name)
+
+    if 'max' in include_rolling_stats:
+        col_name = f"roll_{window}_max"
+        work[col_name] = series.rolling(window=window, min_periods=1).max()
+        feature_info['rolling_features'].append(col_name)
+
+    # ==========================================================================
+    # 3. ADDITIONAL DERIVED FEATURES (Optional but useful)
+    # ==========================================================================
+    # Rolling range (volatility indicator)
+    if 'min' in include_rolling_stats and 'max' in include_rolling_stats:
+        work[f"roll_{window}_range"] = work[f"roll_{window}_max"] - work[f"roll_{window}_min"]
+        feature_info['rolling_features'].append(f"roll_{window}_range")
+
+    # Momentum (difference from rolling mean - captures trend)
+    if 'mean' in include_rolling_stats:
+        work[f"momentum_{window}"] = work[target] - work[f"roll_{window}_mean"]
+        feature_info['rolling_features'].append(f"momentum_{window}")
+
+    feature_info['total_features_added'] = len(feature_info['lag_features']) + len(feature_info['rolling_features'])
+
+    return work, feature_info
+
+
 # ---------- PAGE CONFIG --------------------------------------------------------
 st.set_page_config(
     page_title="Prepare Data - HealthForecast AI",
@@ -1139,14 +1278,135 @@ def page_data_preparation_studio():
                 )
                 st.session_state["use_aggregated_categories"] = use_aggregated_categories
 
+            # =================================================================
+            # TEMPORAL FEATURES CONFIGURATION (Step 2.1)
+            # Academic Reference: Bergmeir & Benítez (2012)
+            # =================================================================
+            st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+
+            with st.expander("📈 Advanced Temporal Features (Lag & Rolling Window)", expanded=True):
+                st.info("""
+                **Why Temporal Features?** Time series forecasting benefits from:
+                - **Lag features**: Capture autocorrelation patterns (yesterday's value predicts today's)
+                - **Rolling statistics**: Capture trends, volatility, and momentum
+
+                *Reference: Hyndman & Athanasopoulos (2021) - Forecasting: Principles and Practice*
+                """)
+
+                enable_temporal = st.checkbox(
+                    "Enable Advanced Temporal Features",
+                    value=True,
+                    help="Generate extended lag features (ED_lag_1..N) and rolling window statistics"
+                )
+
+                if enable_temporal:
+                    temp_col1, temp_col2 = st.columns(2)
+
+                    with temp_col1:
+                        max_lag_days = st.slider(
+                            "Maximum Lag Days",
+                            min_value=1,
+                            max_value=21,
+                            value=14,
+                            step=1,
+                            help="Number of lag features to create (ED_lag_1 through ED_lag_N). "
+                                 "Recommended: 7-14 for daily data."
+                        )
+
+                        rolling_window = st.slider(
+                            "Rolling Window Size (days)",
+                            min_value=3,
+                            max_value=21,
+                            value=7,
+                            step=1,
+                            help="Window size for rolling statistics. "
+                                 "Recommended: 7 (weekly patterns) or 14 (bi-weekly)."
+                        )
+
+                    with temp_col2:
+                        st.markdown("**Rolling Statistics to Include:**")
+                        roll_mean = st.checkbox("Rolling Mean", value=True, help="Trend indicator")
+                        roll_std = st.checkbox("Rolling Std", value=True, help="Volatility measure")
+                        roll_min = st.checkbox("Rolling Min", value=True, help="Recent floor")
+                        roll_max = st.checkbox("Rolling Max", value=True, help="Recent ceiling")
+
+                    # Collect selected stats
+                    include_stats = []
+                    if roll_mean: include_stats.append('mean')
+                    if roll_std: include_stats.append('std')
+                    if roll_min: include_stats.append('min')
+                    if roll_max: include_stats.append('max')
+
+                    # Preview of features to be generated
+                    n_lag_features = max_lag_days
+                    n_rolling_features = len(include_stats)
+                    # Add derived features (range, momentum)
+                    if 'min' in include_stats and 'max' in include_stats:
+                        n_rolling_features += 1  # range
+                    if 'mean' in include_stats:
+                        n_rolling_features += 1  # momentum
+
+                    st.markdown("---")
+                    preview_cols = st.columns(4)
+                    with preview_cols[0]:
+                        st.metric("Lag Features", f"{n_lag_features}", help=f"ED_lag_1 → ED_lag_{max_lag_days}")
+                    with preview_cols[1]:
+                        st.metric("Rolling Features", f"{n_rolling_features}", help=f"roll_{rolling_window}_*")
+                    with preview_cols[2]:
+                        st.metric("Total New Features", f"{n_lag_features + n_rolling_features}")
+                    with preview_cols[3]:
+                        st.metric("Window", f"{rolling_window} days")
+                else:
+                    max_lag_days = 0
+                    rolling_window = 7
+                    include_stats = []
+
+            # Save temporal config to session state
+            st.session_state["temporal_features_config"] = {
+                "enabled": enable_temporal if 'enable_temporal' in dir() else False,
+                "max_lag_days": max_lag_days if 'max_lag_days' in dir() else 14,
+                "rolling_window": rolling_window if 'rolling_window' in dir() else 7,
+                "include_stats": include_stats if 'include_stats' in dir() else ['mean', 'std', 'min', 'max'],
+            }
+
             run = st.button("🧪 Build Features", type="primary", use_container_width=True)
             if run:
                 with st.spinner("Engineering features, harmonising schema, and ordering columns…"):
                     try:
+                        # Step 1: Basic preprocessing (ED_1..n, Target_1..n, clinical categories)
                         processed = _preprocess_after_fusion_cached(
-                            md, n_lags=n_lags, strict_drop=strict_drop,
+                            md, n_lags=n_lags, strict_drop=False,  # Don't drop yet, do it after temporal features
                             use_aggregated_categories=use_aggregated_categories
                         )
+
+                        # Step 2: Generate advanced temporal features if enabled
+                        temporal_config = st.session_state.get("temporal_features_config", {})
+                        temporal_info = None
+
+                        if temporal_config.get("enabled", False):
+                            # Find date column for sorting
+                            date_col = None
+                            for col in ['datetime', 'Date', 'date', 'timestamp']:
+                                if col in processed.columns:
+                                    date_col = col
+                                    break
+
+                            processed, temporal_info = generate_temporal_features(
+                                df=processed,
+                                target_col="Total_Arrivals",
+                                max_lag_days=temporal_config.get("max_lag_days", 14),
+                                rolling_window=temporal_config.get("rolling_window", 7),
+                                include_rolling_stats=temporal_config.get("include_stats", ['mean', 'std', 'min', 'max']),
+                                date_col=date_col,
+                            )
+
+                            # Save temporal feature info for reference
+                            st.session_state["temporal_features_info"] = temporal_info
+
+                        # Step 3: Drop edge rows if requested (after all feature generation)
+                        if strict_drop:
+                            processed = processed.dropna(how="any")
+
                         st.session_state["processed_df"] = processed
 
                         # Auto-save to cache for persistence across app restarts
@@ -1155,17 +1415,38 @@ def page_data_preparation_studio():
                         save_to_cache("merged_data", md, data_hash)
                         save_to_cache("processed_df", processed, data_hash)
                         save_to_cache("aggregated_categories_enabled", use_aggregated_categories, data_hash)
+                        if temporal_info:
+                            save_to_cache("temporal_features_info", temporal_info, data_hash)
+
+                        # Success message with temporal features info
+                        temporal_msg = ""
+                        if temporal_info and 'total_features_added' in temporal_info:
+                            temporal_msg = f" (+{temporal_info['total_features_added']} temporal features)"
 
                         st.markdown(
                             f"""
                             <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05)); border-radius: 16px; border: 1px solid rgba(34, 197, 94, 0.2); margin: 1.5rem 0;'>
                               <div style='font-size: 3rem; margin-bottom: 1rem;'>✅</div>
                               <div style='font-size: 1.25rem; font-weight: 700; color: {SUCCESS_COLOR}; margin-bottom: 0.5rem;'>Feature Engineering Complete</div>
-                              <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Generated {len(processed.columns)} features across {len(processed):,} rows</div>
+                              <div style='color: {BODY_TEXT}; font-size: 0.9375rem;'>Generated {len(processed.columns)} features across {len(processed):,} rows{temporal_msg}</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
+
+                        # Show temporal features details if generated
+                        if temporal_info and temporal_info.get('total_features_added', 0) > 0:
+                            with st.expander("📊 Temporal Features Generated", expanded=True):
+                                tcol1, tcol2 = st.columns(2)
+                                with tcol1:
+                                    st.markdown("**Lag Features:**")
+                                    lag_cols = temporal_info.get('lag_features', [])
+                                    st.code(", ".join(lag_cols[:5]) + (f"... (+{len(lag_cols)-5} more)" if len(lag_cols) > 5 else ""))
+                                with tcol2:
+                                    st.markdown("**Rolling Window Features:**")
+                                    roll_cols = temporal_info.get('rolling_features', [])
+                                    st.code(", ".join(roll_cols))
+
                     except Exception as e:
                         st.error(f"❌ Preprocessing failed: {e}")
 
@@ -1186,6 +1467,8 @@ def page_data_preparation_studio():
                     past_reason_cols = []
                     future_arrivals_cols = []
                     future_reason_cols = []
+                    temporal_lag_cols = []      # NEW: ED_lag_1..N
+                    temporal_rolling_cols = []  # NEW: roll_*, momentum_*
                     other_cols = []
 
                     # Known reason column names (granular medical categories)
@@ -1218,6 +1501,14 @@ def page_data_preparation_studio():
                         elif col_lower in ['average_temp', 'max_temp', 'average_wind', 'max_wind',
                                           'average_mslp', 'total_precipitation', 'moon_phase']:
                             weather_cols.append(col)
+
+                        # NEW: Temporal lag features (ED_lag_1, ED_lag_2, etc.)
+                        elif col_lower.startswith('ed_lag_'):
+                            temporal_lag_cols.append(col)
+
+                        # NEW: Rolling window features (roll_7_mean, roll_7_std, etc.)
+                        elif col_lower.startswith('roll_') or col_lower.startswith('momentum_'):
+                            temporal_rolling_cols.append(col)
 
                         # Past arrivals features (ED_1, ED_2, etc.)
                         elif col_lower.startswith('ed_') and len(col_lower) > 3 and col_lower[3:].isdigit():
@@ -1258,6 +1549,8 @@ def page_data_preparation_studio():
                         'Current Reason Columns': current_reason_cols,
                         'Past Features (Arrivals)': past_arrivals_cols,
                         'Past Features (Reasons)': past_reason_cols,
+                        'Temporal Lag Features': temporal_lag_cols,       # NEW
+                        'Temporal Rolling Features': temporal_rolling_cols,  # NEW
                         'Future Features (Arrivals)': future_arrivals_cols,
                         'Future Features (Reasons)': future_reason_cols,
                         'Other': other_cols
@@ -1278,6 +1571,8 @@ def page_data_preparation_studio():
                     'Current Reason Columns': '#F59E0B',  # Amber
                     'Past Features (Arrivals)': '#06B6D4',  # Cyan
                     'Past Features (Reasons)': '#14B8A6',  # Teal
+                    'Temporal Lag Features': '#0EA5E9',    # Sky Blue (NEW)
+                    'Temporal Rolling Features': '#6366F1', # Indigo (NEW)
                     'Future Features (Arrivals)': '#EF4444',  # Red
                     'Future Features (Reasons)': '#EC4899',  # Pink
                     'Other': '#6B7280'  # Gray
@@ -1286,6 +1581,8 @@ def page_data_preparation_studio():
                 category_icons = {
                     'Date': '📅',
                     'Calendar Features': '🗓️',
+                    'Temporal Lag Features': '⏪',     # NEW
+                    'Temporal Rolling Features': '📈',  # NEW
                     'Weather Features': '🌤️',
                     'Current Reason Columns': '🏥',
                     'Past Features (Arrivals)': '⏮️',
@@ -1317,8 +1614,9 @@ def page_data_preparation_studio():
                 # Summary metrics
                 total_past_features = len(categorized['Past Features (Arrivals)']) + len(categorized['Past Features (Reasons)'])
                 total_future_features = len(categorized['Future Features (Arrivals)']) + len(categorized['Future Features (Reasons)'])
+                total_temporal_features = len(categorized.get('Temporal Lag Features', [])) + len(categorized.get('Temporal Rolling Features', []))
 
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3, col4, col5 = st.columns(5)
                 with col1:
                     st.metric("📅 Date & Calendar", len(categorized['Date']) + len(categorized['Calendar Features']))
                 with col2:
@@ -1326,6 +1624,8 @@ def page_data_preparation_studio():
                 with col3:
                     st.metric("⏮️ Past Features (Lag)", total_past_features)
                 with col4:
+                    st.metric("📈 Temporal Features", total_temporal_features)
+                with col5:
                     st.metric("🎯 Future Targets", total_future_features)
 
                 # Dataset preview
