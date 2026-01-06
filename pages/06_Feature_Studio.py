@@ -228,6 +228,177 @@ def generate_fourier_features(
     return fourier_df, feature_info
 
 
+# =============================================================================
+# DIFFERENCING FUNCTIONS (Step 3.1: Stationarity Auto-Response)
+# Academic Reference: Dickey & Fuller (1979), Box & Jenkins (1976)
+# =============================================================================
+@dataclass
+class DifferencingResult:
+    """Store differencing transformation details for inverse transform."""
+    original_first_values: Dict[str, float]  # Column: first value for each differenced column
+    differencing_order: int
+    columns_differenced: List[str]
+    applied: bool = True
+
+
+def apply_differencing(
+    df: pd.DataFrame,
+    target_columns: List[str],
+    order: int = 1,
+    drop_na: bool = True
+) -> Tuple[pd.DataFrame, DifferencingResult]:
+    """
+    Apply differencing to make time series stationary.
+
+    Differencing removes trends by computing: y'(t) = y(t) - y(t-1)
+    Second-order differencing: y''(t) = y'(t) - y'(t-1)
+
+    Academic Reference:
+        - Box & Jenkins (1976) - Time Series Analysis: Forecasting and Control
+        - Dickey & Fuller (1979) - Distribution of the Estimators for
+          Autoregressive Time Series with a Unit Root
+
+    Args:
+        df: Input DataFrame
+        target_columns: Columns to difference
+        order: Differencing order (1 = first difference, 2 = second difference)
+        drop_na: Whether to drop NaN values created by differencing
+
+    Returns:
+        Tuple of (differenced DataFrame, DifferencingResult for inverse transform)
+    """
+    work = df.copy()
+    first_values = {}
+
+    for col in target_columns:
+        if col not in work.columns:
+            continue
+
+        # Store first value(s) needed for inverse transform
+        if order == 1:
+            first_values[col] = float(work[col].iloc[0])
+        elif order == 2:
+            first_values[col] = [float(work[col].iloc[0]), float(work[col].iloc[1])]
+
+        # Apply differencing
+        for _ in range(order):
+            work[col] = work[col].diff()
+
+    # Drop NaN rows created by differencing
+    if drop_na:
+        work = work.dropna().reset_index(drop=True)
+
+    result = DifferencingResult(
+        original_first_values=first_values,
+        differencing_order=order,
+        columns_differenced=target_columns,
+        applied=True
+    )
+
+    return work, result
+
+
+def inverse_differencing(
+    differenced_values: np.ndarray,
+    diff_result: DifferencingResult,
+    column: str,
+    original_series: Optional[pd.Series] = None
+) -> np.ndarray:
+    """
+    Inverse differencing to recover original scale predictions.
+
+    For first-order differencing: y(t) = y'(t) + y(t-1)
+    For second-order: y(t) = y''(t) + 2*y(t-1) - y(t-2)
+
+    Academic Reference:
+        - Box & Jenkins (1976) - Inverse transforms for ARIMA
+
+    Args:
+        differenced_values: Differenced predictions
+        diff_result: DifferencingResult from apply_differencing()
+        column: Name of the column to inverse transform
+        original_series: Original undifferenced series (needed for proper reconstruction)
+
+    Returns:
+        Reconstructed values in original scale
+    """
+    if not diff_result.applied or column not in diff_result.columns_differenced:
+        return differenced_values
+
+    order = diff_result.differencing_order
+    first_vals = diff_result.original_first_values.get(column)
+
+    if first_vals is None:
+        return differenced_values
+
+    values = differenced_values.copy()
+
+    if order == 1:
+        # Cumulative sum to reverse first difference
+        # Need last known value from training set for proper reconstruction
+        if original_series is not None and len(original_series) > 0:
+            last_known = float(original_series.iloc[-1])
+            values = np.cumsum(values) + last_known
+        else:
+            values = np.cumsum(values) + first_vals
+
+    elif order == 2:
+        # Reverse second-order differencing
+        if original_series is not None and len(original_series) >= 2:
+            last_val = float(original_series.iloc[-1])
+            second_last = float(original_series.iloc[-2])
+            # First integrate to get first difference
+            values = np.cumsum(values)
+            # Then integrate again
+            reconstructed = np.zeros(len(values))
+            reconstructed[0] = values[0] + last_val
+            for i in range(1, len(values)):
+                reconstructed[i] = values[i] + reconstructed[i-1]
+            values = reconstructed
+        else:
+            # Fallback with stored first values
+            values = np.cumsum(np.cumsum(values))
+
+    return values
+
+
+def get_stationarity_status() -> Dict:
+    """
+    Get stationarity test results from session state.
+
+    Returns:
+        Dict with 'is_stationary', 'p_value', 'adf_statistic', 'tested'
+    """
+    adf_data = st.session_state.get("adf_stationarity", {})
+
+    if not adf_data:
+        return {
+            "tested": False,
+            "is_stationary": None,
+            "p_value": None,
+            "adf_statistic": None,
+            "recommendation": "Run ADF test in Explore Data page first."
+        }
+
+    is_stationary = adf_data.get("is_stationary", True)
+    p_value = adf_data.get("p_value", 1.0)
+
+    if is_stationary:
+        recommendation = "Series is stationary. No differencing required."
+    else:
+        recommendation = "Series is non-stationary (p ≥ 0.05). Differencing recommended."
+
+    return {
+        "tested": True,
+        "is_stationary": is_stationary,
+        "p_value": p_value,
+        "adf_statistic": adf_data.get("adf_statistic"),
+        "series_name": adf_data.get("series_name", "target"),
+        "tested_at": adf_data.get("tested_at"),
+        "recommendation": recommendation
+    }
+
+
 def get_recommended_periods_from_fft() -> List[Dict]:
     """
     Get recommended periods from FFT analysis stored in session state.
@@ -473,9 +644,10 @@ def page_feature_engineering():
     # FEATURE ENGINEERING TABS
     # Academic Reference: Bergmeir & Benítez (2012), Tashman (2000)
     # =========================================================================
-    tab_split, tab_cv, tab_fourier, tab_options, tab_generate = st.tabs([
+    tab_split, tab_cv, tab_stationarity, tab_fourier, tab_options, tab_generate = st.tabs([
         "📊 Data Split",
         "🔄 Cross-Validation",
+        "📈 Stationarity",
         "🌊 Fourier Features",
         "🧪 Options",
         "🚀 Generate"
@@ -644,6 +816,177 @@ def page_feature_engineering():
             except Exception as e:
                 st.error(f"Error creating CV folds: {str(e)}")
                 st.session_state["cv_folds"] = None
+
+    # =========================================================================
+    # STATIONARITY TAB (Step 3.1: Auto-Response to Stationarity Tests)
+    # Academic Reference: Dickey & Fuller (1979), Box & Jenkins (1976)
+    # =========================================================================
+    with tab_stationarity:
+        st.markdown("#### Stationarity & Differencing")
+
+        st.info("""
+        **Why Differencing?** Many time series models (ARIMA, regression) assume stationarity.
+        Differencing removes trends and makes the series stationary by computing: y'(t) = y(t) - y(t-1).
+
+        *Reference: Dickey & Fuller (1979) - Unit Root Tests, Box & Jenkins (1976)*
+        """)
+
+        # Get stationarity status from EDA page
+        stationarity_status = get_stationarity_status()
+
+        if not stationarity_status["tested"]:
+            st.warning("""
+            ⚠️ **No ADF test results found.**
+
+            Please run the stationarity test in the **Explore Data** page first:
+            1. Go to Explore Data (Page 4)
+            2. Look at the "Statistical Tests" section
+            3. The ADF test results will be automatically saved
+
+            Or, you can manually configure differencing below.
+            """)
+
+            use_manual_diff = st.checkbox("Configure differencing manually", value=False, key="manual_diff_check")
+
+            if use_manual_diff:
+                # Auto-check differencing checkbox based on manual setting
+                apply_diff_default = True
+            else:
+                apply_diff_default = False
+        else:
+            # Display ADF test results
+            st.markdown("##### ADF Test Results from Explore Data")
+
+            adf_col1, adf_col2, adf_col3 = st.columns(3)
+            with adf_col1:
+                st.metric(
+                    "ADF Statistic",
+                    f"{stationarity_status['adf_statistic']:.4f}" if stationarity_status['adf_statistic'] else "N/A"
+                )
+            with adf_col2:
+                st.metric(
+                    "P-value",
+                    f"{stationarity_status['p_value']:.6f}" if stationarity_status['p_value'] else "N/A"
+                )
+            with adf_col3:
+                if stationarity_status["is_stationary"]:
+                    st.success("✅ Stationary")
+                else:
+                    st.warning("🟡 Non-Stationary")
+
+            st.markdown(f"**Recommendation:** {stationarity_status['recommendation']}")
+
+            # Auto-set differencing based on stationarity
+            apply_diff_default = not stationarity_status["is_stationary"]
+
+        # Differencing configuration
+        st.markdown("---")
+        st.markdown("##### Differencing Configuration")
+
+        diff_col1, diff_col2 = st.columns(2)
+
+        with diff_col1:
+            apply_differencing_check = st.checkbox(
+                "Apply Differencing to Targets",
+                value=apply_diff_default,
+                help="Automatically recommended if series is non-stationary (p ≥ 0.05)"
+            )
+
+            if apply_differencing_check and apply_diff_default and stationarity_status.get("tested"):
+                st.caption("📊 *Auto-enabled based on ADF test results*")
+
+        with diff_col2:
+            diff_order = st.selectbox(
+                "Differencing Order",
+                options=[1, 2],
+                index=0,
+                help="1st order: y'(t) = y(t) - y(t-1). 2nd order for strong trends."
+            )
+
+        # Select target columns for differencing
+        if apply_differencing_check:
+            # Auto-detect target columns
+            available_targets = targets if targets else [c for c in base.columns if c.lower().startswith("target")]
+
+            if not available_targets:
+                # Fallback: let user select any numeric column
+                numeric_cols = base.select_dtypes(include=[np.number]).columns.tolist()
+                available_targets = [c for c in numeric_cols if c != date_col]
+
+            if available_targets:
+                diff_targets = st.multiselect(
+                    "Columns to Difference",
+                    options=available_targets,
+                    default=available_targets[:min(7, len(available_targets))],  # Default to first 7 targets
+                    help="Select target columns to apply differencing"
+                )
+            else:
+                diff_targets = []
+                st.warning("No numeric target columns found for differencing.")
+
+            if diff_targets:
+                st.markdown("---")
+                st.markdown("##### Preview Differencing Effect")
+
+                # Show preview of first target
+                preview_col = diff_targets[0]
+                preview_original = base[preview_col].dropna()
+
+                if len(preview_original) > diff_order:
+                    preview_diff = preview_original.diff(diff_order).dropna()
+
+                    import plotly.graph_objects as go
+                    from plotly.subplots import make_subplots
+
+                    fig = make_subplots(rows=1, cols=2, subplot_titles=["Original Series", "After Differencing"])
+
+                    fig.add_trace(
+                        go.Scatter(y=preview_original.values[-100:], mode="lines", name="Original",
+                                   line=dict(color=PRIMARY_COLOR)),
+                        row=1, col=1
+                    )
+                    fig.add_trace(
+                        go.Scatter(y=preview_diff.values[-100:], mode="lines", name="Differenced",
+                                   line=dict(color=SUCCESS_COLOR)),
+                        row=1, col=2
+                    )
+
+                    fig.update_layout(
+                        height=300,
+                        showlegend=False,
+                        template="plotly_dark",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        margin=dict(t=40, b=20, l=20, r=20)
+                    )
+                    st.plotly_chart(fig, use_container_width=True, key="diff_preview_chart")
+
+                    # Summary stats
+                    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+                    with stat_col1:
+                        st.metric("Original Mean", f"{preview_original.mean():.2f}")
+                    with stat_col2:
+                        st.metric("Differenced Mean", f"{preview_diff.mean():.4f}")
+                    with stat_col3:
+                        st.metric("Original Std", f"{preview_original.std():.2f}")
+                    with stat_col4:
+                        st.metric("Differenced Std", f"{preview_diff.std():.2f}")
+        else:
+            diff_targets = []
+
+        # Save differencing config to session state
+        st.session_state["differencing_config"] = {
+            "enabled": apply_differencing_check,
+            "order": diff_order if apply_differencing_check else 1,
+            "target_columns": diff_targets,
+            "auto_recommended": apply_diff_default,
+            "stationarity_tested": stationarity_status.get("tested", False),
+        }
+
+        if apply_differencing_check and diff_targets:
+            st.success(f"✅ Differencing configured: Order-{diff_order} on {len(diff_targets)} column(s)")
+            st.caption("⚠️ **Note:** Differencing will be applied during feature generation. "
+                       "Inverse transform will be needed for predictions.")
 
     # =========================================================================
     # FOURIER FEATURES TAB (Step 2.2: Auto-generate from FFT)
@@ -863,6 +1206,49 @@ def page_feature_engineering():
                     # Save Fourier info for reference
                     st.session_state["fourier_features_info"] = fourier_info
 
+            # =================================================================
+            # APPLY DIFFERENCING (Step 3.1: Stationarity Auto-Response)
+            # =================================================================
+            diff_config = st.session_state.get("differencing_config", {})
+            diff_result = None
+
+            if diff_config.get("enabled", False) and diff_config.get("target_columns"):
+                diff_targets = diff_config["target_columns"]
+                diff_order = diff_config.get("order", 1)
+
+                # Apply differencing to both variants
+                A_full, diff_result_A = apply_differencing(
+                    df=A_full,
+                    target_columns=diff_targets,
+                    order=diff_order,
+                    drop_na=True
+                )
+                B_full, diff_result_B = apply_differencing(
+                    df=B_full,
+                    target_columns=diff_targets,
+                    order=diff_order,
+                    drop_na=True
+                )
+
+                diff_result = diff_result_A  # Store for reference
+                variant_used += f" + Differencing(order={diff_order})"
+
+                # Update indices to account for dropped rows
+                n_dropped = diff_order
+                if len(train_idx) > n_dropped:
+                    train_idx = train_idx[train_idx >= n_dropped] - n_dropped
+                if len(test_idx) > n_dropped:
+                    test_idx = test_idx[test_idx >= n_dropped] - n_dropped
+
+                # Save differencing info
+                st.session_state["differencing_result"] = {
+                    "applied": True,
+                    "order": diff_order,
+                    "columns": diff_targets,
+                    "original_first_values": diff_result.original_first_values,
+                    "rows_dropped": n_dropped,
+                }
+
             # Validate temporal split if available
             if TEMPORAL_SPLIT_AVAILABLE and split_result is not None:
                 validation_result = validate_temporal_split(
@@ -891,6 +1277,9 @@ def page_feature_engineering():
                 "transformers_saved": save_transformers and not skip_engineering,
                 "fourier_enabled": fourier_info is not None,
                 "fourier_features": fourier_info.get("total_features", 0) if fourier_info else 0,
+                "differencing_enabled": diff_result is not None,
+                "differencing_order": diff_config.get("order", 1) if diff_result else 0,
+                "differencing_columns": diff_config.get("target_columns", []) if diff_result else [],
             },
             "A": A_full,
             "B": B_full,
@@ -899,6 +1288,7 @@ def page_feature_engineering():
             "test_idx": test_idx,
             "split_result": split_result,
             "fourier_info": fourier_info,
+            "differencing_result": diff_result,
         }
 
         # =========================================================================
@@ -939,6 +1329,28 @@ def page_feature_engineering():
                         st.code("\n".join(feat_list[:6]) + f"\n... (+{len(feat_list)-6} more)")
                     else:
                         st.code("\n".join(feat_list))
+
+        # Show Differencing info if applied (Step 3.1)
+        if diff_result is not None:
+            with st.expander("📈 Differencing Applied", expanded=True):
+                dcol1, dcol2, dcol3 = st.columns(3)
+                with dcol1:
+                    st.metric("Order", diff_config.get("order", 1))
+                with dcol2:
+                    st.metric("Columns", len(diff_config.get("target_columns", [])))
+                with dcol3:
+                    st.metric("Rows Dropped", diff_config.get("order", 1))
+
+                st.markdown("**Differenced Columns:**")
+                cols_str = ", ".join(diff_config.get("target_columns", [])[:5])
+                if len(diff_config.get("target_columns", [])) > 5:
+                    cols_str += f" (+{len(diff_config['target_columns'])-5} more)"
+                st.code(cols_str)
+
+                st.warning("""
+                ⚠️ **Important:** Predictions will need inverse differencing.
+                The original first values have been saved for reconstruction.
+                """)
 
         result_tab1, result_tab2, result_tab3 = st.tabs(["Variant A (Decomp)", "Variant B (Cyclical)", "Split Details"])
         with result_tab1:

@@ -328,11 +328,32 @@ def _render_time_series_diagnostics(df):
             adf_stat, p_value, crit = result[0], result[1], result[4]
             st.metric("ADF Statistic", f"{adf_stat:.4f}")
             st.metric("P-value", f"{p_value:.6f}")
-            if p_value < 0.05: st.success("✅ Stationary (p < 0.05)")
-            else:              st.warning("🟡 Non-Stationary (p ≥ 0.05)")
+            is_stationary = p_value < 0.05
+            if is_stationary:
+                st.success("✅ Stationary (p < 0.05)")
+            else:
+                st.warning("🟡 Non-Stationary (p ≥ 0.05)")
             with st.expander("Critical Values"):
                 for k, v in crit.items():
                     st.write(f"{k}: {v:.4f} {'(Reject H0)' if adf_stat < v else ''}")
+
+            # =================================================================
+            # SAVE ADF RESULTS TO SESSION STATE (Step 3.1: Stationarity Auto-Response)
+            # Academic Reference: Dickey & Fuller (1979) - Unit Root Tests
+            # =================================================================
+            st.session_state["adf_stationarity"] = {
+                "adf_statistic": float(adf_stat),
+                "p_value": float(p_value),
+                "is_stationary": is_stationary,
+                "critical_values": {str(k): float(v) for k, v in crit.items()},
+                "series_name": str(y.name) if hasattr(y, 'name') and y.name else "target",
+                "n_observations": len(y),
+                "tested_at": pd.Timestamp.now().isoformat(),
+            }
+
+            # Inform user about Feature Studio integration
+            if not is_stationary:
+                st.info("💡 **Tip:** Differencing is recommended. Go to **Feature Studio** to auto-apply differencing.")
         except Exception as e:
             st.error(f"ADF test failed: {e}")
 
