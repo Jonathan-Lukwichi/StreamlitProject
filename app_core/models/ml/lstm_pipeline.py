@@ -452,3 +452,353 @@ class LSTMPipeline:
             "MAPE": float(mape),
             "Accuracy": float(accuracy)
         }
+
+
+# =============================================================================
+# LSTM WITH ATTENTION (Step 4.1)
+# Academic Reference: Bahdanau et al. (2015) - Attention Mechanism
+#                     Vaswani et al. (2017) - Self-Attention (Transformers)
+# =============================================================================
+class AttentionLSTM:
+    """
+    Bidirectional LSTM with Self-Attention for Time Series Forecasting.
+
+    Architecture:
+    1. Bidirectional LSTM layers (captures forward and backward dependencies)
+    2. Self-Attention layer (learns which time steps are most important)
+    3. Dense layers for prediction
+
+    Advantages over standard LSTM:
+    - Bidirectional: Uses future context (for training) to understand patterns
+    - Attention: Automatically learns which past observations matter most
+    - Better long-range dependency modeling
+
+    Academic References:
+        - Bahdanau, Cho & Bengio (2015) - "Neural Machine Translation by
+          Jointly Learning to Align and Translate" (Attention)
+        - Vaswani et al. (2017) - "Attention Is All You Need" (Self-Attention)
+        - Lai et al. (2018) - "Modeling Long- and Short-Term Temporal Patterns
+          with Deep Neural Networks" (LSTNet)
+
+    Usage:
+        model = AttentionLSTM(config)
+        model.train(X_train, y_train, X_val, y_val)
+        predictions = model.predict(X_test)
+    """
+
+    def __init__(self, config):
+        """
+        Initialize Attention LSTM.
+
+        Args:
+            config: Dictionary with hyperparameters
+                - lookback_window: Past observations (default: 14)
+                - lstm_hidden_units: LSTM units (default: 64)
+                - attention_heads: Number of attention heads (default: 4)
+                - dropout: Dropout rate (default: 0.2)
+                - lstm_epochs: Training epochs (default: 100)
+                - lstm_lr: Learning rate (default: 0.001)
+                - bidirectional: Use bidirectional LSTM (default: True)
+        """
+        self.lookback = config.get("lookback_window", 14)
+        self.lstm_units = config.get("lstm_hidden_units", 64)
+        self.attention_heads = config.get("attention_heads", 4)
+        self.dropout = config.get("dropout", 0.2)
+        self.epochs = config.get("lstm_epochs", 100)
+        self.learning_rate = config.get("lstm_lr", 0.001)
+        self.batch_size = config.get("batch_size", 32)
+        self.bidirectional = config.get("bidirectional", True)
+
+        self.scaler_X = None
+        self.scaler_y = None
+        self.model = None
+        self.n_features = None
+        self.attention_weights = None
+
+    def create_sequences(self, X, y):
+        """Create sequences for LSTM (same as LSTMPipeline)."""
+        X_seq, y_seq = [], []
+        for i in range(self.lookback, len(X)):
+            X_seq.append(X[i-self.lookback:i])
+            y_seq.append(y[i])
+        return np.array(X_seq), np.array(y_seq)
+
+    def _build_attention_layer(self):
+        """
+        Build self-attention layer using TensorFlow/Keras.
+
+        Returns:
+            Attention layer (MultiHeadAttention or custom)
+        """
+        try:
+            from tensorflow.keras import layers
+            # Use built-in MultiHeadAttention (TensorFlow >= 2.4)
+            return layers.MultiHeadAttention(
+                num_heads=self.attention_heads,
+                key_dim=self.lstm_units // self.attention_heads,
+                dropout=self.dropout / 2,
+            )
+        except AttributeError:
+            # Fallback: Simple Attention layer for older TensorFlow
+            from tensorflow import keras
+            from tensorflow.keras import layers
+
+            class SimpleAttention(layers.Layer):
+                """Simple additive attention layer."""
+                def __init__(self, units):
+                    super().__init__()
+                    self.W = layers.Dense(units)
+                    self.V = layers.Dense(1)
+
+                def call(self, inputs):
+                    # inputs: (batch, seq_len, features)
+                    score = self.V(keras.activations.tanh(self.W(inputs)))
+                    attention_weights = keras.activations.softmax(score, axis=1)
+                    context = inputs * attention_weights
+                    return keras.backend.sum(context, axis=1), attention_weights
+
+            return SimpleAttention(self.lstm_units)
+
+    def build_model(self, n_features):
+        """
+        Build Bidirectional LSTM with Self-Attention.
+
+        Args:
+            n_features: Number of input features
+        """
+        try:
+            import tensorflow as tf
+            from tensorflow import keras
+            from tensorflow.keras import layers
+        except ImportError:
+            raise ImportError("TensorFlow is required. Install with: pip install tensorflow")
+
+        self.n_features = n_features
+
+        # Input layer
+        inputs = layers.Input(shape=(self.lookback, n_features))
+
+        # Bidirectional LSTM layers
+        if self.bidirectional:
+            x = layers.Bidirectional(
+                layers.LSTM(self.lstm_units, return_sequences=True)
+            )(inputs)
+            lstm_out_dim = self.lstm_units * 2
+        else:
+            x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
+            lstm_out_dim = self.lstm_units
+
+        x = layers.Dropout(self.dropout)(x)
+
+        # Second LSTM layer
+        if self.bidirectional:
+            x = layers.Bidirectional(
+                layers.LSTM(self.lstm_units // 2, return_sequences=True)
+            )(x)
+            lstm_out_dim = self.lstm_units
+        else:
+            x = layers.LSTM(self.lstm_units // 2, return_sequences=True)(x)
+            lstm_out_dim = self.lstm_units // 2
+
+        x = layers.Dropout(self.dropout)(x)
+
+        # Self-Attention Layer
+        # MultiHeadAttention: query, key, value all come from LSTM output
+        try:
+            attention_layer = layers.MultiHeadAttention(
+                num_heads=self.attention_heads,
+                key_dim=max(1, lstm_out_dim // self.attention_heads),
+                dropout=self.dropout / 2,
+            )
+            attention_output = attention_layer(x, x, return_attention_scores=False)
+
+            # Residual connection
+            x = layers.Add()([x, attention_output])
+            x = layers.LayerNormalization()(x)
+
+        except (AttributeError, TypeError):
+            # Fallback: Simple attention for older TensorFlow
+            # Compute attention scores
+            attention_dense = layers.Dense(1, activation='tanh')
+            attention_scores = attention_dense(x)
+            attention_weights = layers.Softmax(axis=1)(attention_scores)
+            x = layers.Multiply()([x, attention_weights])
+
+        # Global pooling to aggregate sequence
+        x = layers.GlobalAveragePooling1D()(x)
+
+        # Dense layers
+        x = layers.Dense(32, activation='relu')(x)
+        x = layers.Dropout(self.dropout / 2)(x)
+        x = layers.Dense(16, activation='relu')(x)
+
+        # Output
+        outputs = layers.Dense(1)(x)
+
+        # Build model
+        self.model = keras.Model(inputs=inputs, outputs=outputs)
+
+        # Compile
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),
+            loss='mse',
+            metrics=['mae']
+        )
+
+        return self.model
+
+    def train(self, X_train, y_train, X_val=None, y_val=None):
+        """
+        Train Attention LSTM with preprocessing detection.
+
+        Args:
+            X_train: Training features
+            y_train: Training targets
+            X_val: Validation features
+            y_val: Validation targets
+
+        Returns:
+            Training history
+        """
+        try:
+            import tensorflow as tf
+            from tensorflow import keras
+        except ImportError:
+            raise ImportError("TensorFlow is required for Attention LSTM")
+
+        # Preprocessing detection (reuse from LSTMPipeline logic)
+        print("=" * 70)
+        print("🔍 ATTENTION LSTM - Building Model")
+        print("=" * 70)
+        print(f"   Architecture: Bidirectional={self.bidirectional}")
+        print(f"   LSTM Units: {self.lstm_units}")
+        print(f"   Attention Heads: {self.attention_heads}")
+        print(f"   Lookback: {self.lookback}")
+        print("-" * 70)
+
+        # Apply scaling
+        self.scaler_X = StandardScaler()
+        self.scaler_y = MinMaxScaler(feature_range=(0, 1))
+
+        X_train_scaled = self.scaler_X.fit_transform(X_train)
+        y_train_scaled = self.scaler_y.fit_transform(y_train.reshape(-1, 1)).flatten()
+
+        if X_val is not None and y_val is not None:
+            X_val_scaled = self.scaler_X.transform(X_val)
+            y_val_scaled = self.scaler_y.transform(y_val.reshape(-1, 1)).flatten()
+        else:
+            X_val_scaled, y_val_scaled = None, None
+
+        # Create sequences
+        X_train_seq, y_train_seq = self.create_sequences(X_train_scaled, y_train_scaled)
+        print(f"📊 Train sequences: {X_train_seq.shape}")
+
+        if X_val_scaled is not None:
+            X_val_seq, y_val_seq = self.create_sequences(X_val_scaled, y_val_scaled)
+            print(f"   Val sequences: {X_val_seq.shape}")
+            validation_data = (X_val_seq, y_val_seq)
+        else:
+            validation_data = None
+
+        # Build model
+        if self.model is None:
+            print("🏗️  Building Attention LSTM...")
+            self.build_model(n_features=X_train.shape[1])
+
+        # Callbacks
+        callbacks = [
+            keras.callbacks.EarlyStopping(
+                monitor='val_loss' if validation_data else 'loss',
+                patience=15,
+                restore_best_weights=True
+            ),
+            keras.callbacks.ReduceLROnPlateau(
+                monitor='val_loss' if validation_data else 'loss',
+                factor=0.5,
+                patience=7,
+                min_lr=1e-6
+            )
+        ]
+
+        # Train
+        print(f"🚀 Training ({self.epochs} epochs max)...")
+        history = self.model.fit(
+            X_train_seq, y_train_seq,
+            validation_data=validation_data,
+            epochs=self.epochs,
+            batch_size=self.batch_size,
+            callbacks=callbacks,
+            verbose=0
+        )
+
+        final_epoch = len(history.history['loss'])
+        print(f"✓ Training complete ({final_epoch} epochs)")
+        print("=" * 70)
+
+        return history
+
+    def predict(self, X):
+        """
+        Make predictions.
+
+        Args:
+            X: Input features
+
+        Returns:
+            Predictions in original scale
+        """
+        if self.model is None:
+            raise ValueError("Model not trained. Call train() first.")
+
+        # Scale input
+        if self.scaler_X is not None:
+            X_scaled = self.scaler_X.transform(X)
+        else:
+            X_scaled = X
+
+        # Create sequences
+        X_seq = []
+        for i in range(self.lookback, len(X_scaled)):
+            X_seq.append(X_scaled[i-self.lookback:i])
+        X_seq = np.array(X_seq)
+
+        # Predict
+        y_pred_scaled = self.model.predict(X_seq, verbose=0).flatten()
+
+        # Inverse transform
+        if self.scaler_y is not None:
+            y_pred = self.scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+        else:
+            y_pred = y_pred_scaled
+
+        # Pad to match original length
+        full_pred = np.full(len(X), np.nan)
+        full_pred[self.lookback:] = y_pred
+
+        return full_pred
+
+    def evaluate(self, y_true, y_pred):
+        """Calculate regression metrics."""
+        mask = ~np.isnan(y_pred)
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
+
+        if len(y_true) == 0:
+            return {"MAE": np.nan, "RMSE": np.nan, "MAPE": np.nan}
+
+        mae = np.mean(np.abs(y_true - y_pred))
+        rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
+
+        epsilon = 1e-10
+        mape = np.mean(np.abs((y_true - y_pred) / (y_true + epsilon))) * 100
+
+        return {"MAE": float(mae), "RMSE": float(rmse), "MAPE": float(mape)}
+
+    def get_model_summary(self):
+        """Get model architecture summary."""
+        if self.model is None:
+            return "Model not built yet"
+
+        summary_lines = []
+        self.model.summary(print_fn=lambda x: summary_lines.append(x))
+        return "\n".join(summary_lines)
