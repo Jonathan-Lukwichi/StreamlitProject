@@ -6,8 +6,9 @@ from __future__ import annotations
 import streamlit as st
 
 # Page order configuration
+# Note: Pages 10-13 consolidated into Command Center (01_Dashboard.py)
 PAGES = [
-    {"file": "pages/01_Dashboard.py", "name": "Dashboard", "icon": "📊"},
+    {"file": "pages/01_Dashboard.py", "name": "Command Center", "icon": "🎯"},
     {"file": "pages/02_Upload_Data.py", "name": "Upload Data", "icon": "📁"},
     {"file": "pages/03_Prepare_Data.py", "name": "Prepare Data", "icon": "🔧"},
     {"file": "pages/04_Explore_Data.py", "name": "Explore Data", "icon": "🔍"},
@@ -16,10 +17,6 @@ PAGES = [
     {"file": "pages/07_Feature_Selection.py", "name": "Feature Selection", "icon": "🎯"},
     {"file": "pages/08_Train_Models.py", "name": "Train Models", "icon": "🧠"},
     {"file": "pages/09_Model_Results.py", "name": "Model Results", "icon": "📊"},
-    {"file": "pages/10_Patient_Forecast.py", "name": "Patient Forecast", "icon": "🔮"},
-    {"file": "pages/11_Staff_Planner.py", "name": "Staff Planner", "icon": "👥"},
-    {"file": "pages/12_Supply_Planner.py", "name": "Supply Planner", "icon": "📦"},
-    {"file": "pages/13_Action_Center.py", "name": "Action Center", "icon": "🏥"},
 ]
 
 
@@ -137,13 +134,13 @@ def render_page_navigation(current_page_index: int):
         if st.button("🏠 Home", key="nav_home", use_container_width=True):
             st.switch_page("Welcome.py")
 
-    # Dashboard button
+    # Command Center button
     with col3:
         if current_page_index != 0:
-            if st.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
+            if st.button("🎯 Command Center", key="nav_dashboard", use_container_width=True):
                 st.switch_page("pages/01_Dashboard.py")
         else:
-            st.button("📊 Dashboard", key="nav_dashboard_current", use_container_width=True, disabled=True)
+            st.button("🎯 Command Center", key="nav_dashboard_current", use_container_width=True, disabled=True)
 
     # Next button
     with col4:
@@ -194,10 +191,10 @@ def render_compact_navigation(current_page_index: int):
 
     with col4:
         if current_page_index != 0:
-            if st.button("📊 Dashboard", key="nav_dash_c", use_container_width=True, help="Go to Dashboard"):
+            if st.button("🎯 Command", key="nav_dash_c", use_container_width=True, help="Go to Command Center"):
                 st.switch_page("pages/01_Dashboard.py")
         else:
-            st.button("📊 Dashboard", key="nav_dash_c_dis", use_container_width=True, disabled=True)
+            st.button("🎯 Command", key="nav_dash_c_dis", use_container_width=True, disabled=True)
 
     with col5:
         if current_page_index < len(PAGES) - 1:
