@@ -1,6 +1,30 @@
 from __future__ import annotations
 import streamlit as st
 
+# =============================================================================
+# GLOBAL USER PREFERENCES
+# =============================================================================
+
+def is_quiet_mode() -> bool:
+    """Check if quiet mode is enabled (disables background animations)."""
+    return st.session_state.get("quiet_mode", False)
+
+
+def is_analyst_mode() -> bool:
+    """Check if analyst mode is enabled (shows advanced technical details)."""
+    return st.session_state.get("analyst_mode", False)
+
+
+def set_quiet_mode(enabled: bool) -> None:
+    """Enable or disable quiet mode."""
+    st.session_state["quiet_mode"] = enabled
+
+
+def set_analyst_mode(enabled: bool) -> None:
+    """Enable or disable analyst mode."""
+    st.session_state["analyst_mode"] = enabled
+
+
 # A. COLOR SYSTEM (export publicly)
 PRIMARY_COLOR   = "#3b82f6"   # electric blue
 SECONDARY_COLOR = "#22d3ee"   # neon cyan
@@ -20,26 +44,14 @@ BG_GRADIENT_END   = "#02010f" # gradient end
 
 # B. GLOBAL CSS (in apply_css())
 def apply_css() -> None:
-    css_string = f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    # Check if quiet mode is enabled
+    quiet = is_quiet_mode()
 
-    /* Global Reset & Typography */
-    html, body, [class*='css'] {{
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        color: {BODY_TEXT};
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }}
-
-    /* Cinematic Background Gradient */
-    .main {{
-        background: linear-gradient(135deg, {BG_GRADIENT_START} 0%, {BG_GRADIENT_MID} 50%, {BG_GRADIENT_END} 100%);
-        background-attachment: fixed;
-        min-height: 100vh;
-    }}
-
-    /* Diagonal Neon Streaks (Raycast-style) */
+    # Conditional animation CSS - only show neon streaks if NOT in quiet mode
+    animation_css = ""
+    if not quiet:
+        animation_css = f"""
+    /* Diagonal Neon Streaks (Raycast-style) - Disabled in Quiet Mode */
     .main::before {{
         content: '';
         position: fixed;
@@ -64,6 +76,28 @@ def apply_css() -> None:
         pointer-events: none;
         z-index: 0;
     }}
+    """
+
+    css_string = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    /* Global Reset & Typography */
+    html, body, [class*='css'] {{
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: {BODY_TEXT};
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }}
+
+    /* Cinematic Background Gradient */
+    .main {{
+        background: linear-gradient(135deg, {BG_GRADIENT_START} 0%, {BG_GRADIENT_MID} 50%, {BG_GRADIENT_END} 100%);
+        background-attachment: fixed;
+        min-height: 100vh;
+    }}
+
+    {animation_css}
 
     /* ========================================
        SIDEBAR - Premium Navigation Design
@@ -573,11 +607,281 @@ def feature_card(icon: str, title: str, description: str, features: list[str]) -
     </div>
     """
 
-# E. EXPORTS
+# E. FLUORESCENT EFFECTS HELPER (Quiet Mode Aware)
+def get_fluorescent_effects_css() -> str:
+    """
+    Returns CSS for fluorescent orbs and sparkle animations.
+    Returns empty string if quiet mode is enabled.
+    """
+    if is_quiet_mode():
+        return ""
+
+    return """
+<style>
+/* ========================================
+   ANIMATED FLUORESCENT ORBS
+   ======================================== */
+
+@keyframes float-orb {
+    0%, 100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.25;
+    }
+    50% {
+        transform: translate(30px, -30px) scale(1.05);
+        opacity: 0.35;
+    }
+}
+
+.fluorescent-orb {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(70px);
+}
+
+.orb-1 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(251, 191, 36, 0.25), transparent 70%);
+    top: 15%;
+    right: 20%;
+    animation: float-orb 25s ease-in-out infinite;
+}
+
+.orb-2 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.25), transparent 70%);
+    bottom: 20%;
+    left: 15%;
+    animation: float-orb 30s ease-in-out infinite;
+    animation-delay: 5s;
+}
+
+.orb-3 {
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.22), transparent 70%);
+    top: 50%;
+    right: 10%;
+    animation: float-orb 28s ease-in-out infinite;
+    animation-delay: 10s;
+}
+
+.orb-4 {
+    width: 320px;
+    height: 320px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.2), transparent 70%);
+    bottom: 30%;
+    right: 40%;
+    animation: float-orb 32s ease-in-out infinite;
+    animation-delay: 15s;
+}
+
+/* ========================================
+   SUBTLE GLOW ANIMATIONS
+   ======================================== */
+
+@keyframes subtle-text-glow {
+    0%, 100% {
+        text-shadow:
+            0 0 15px rgba(59, 130, 246, 0.3),
+            0 0 30px rgba(34, 211, 238, 0.2),
+            0 0 25px rgba(251, 191, 36, 0.15);
+    }
+    50% {
+        text-shadow:
+            0 0 20px rgba(59, 130, 246, 0.4),
+            0 0 40px rgba(34, 211, 238, 0.3),
+            0 0 35px rgba(251, 191, 36, 0.25);
+    }
+}
+
+@keyframes subtle-border-glow {
+    0%, 100% {
+        border-color: rgba(59, 130, 246, 0.3);
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.15), 0 0 10px rgba(34, 211, 238, 0.1);
+    }
+    33% {
+        border-color: rgba(34, 211, 238, 0.35);
+        box-shadow: 0 0 18px rgba(34, 211, 238, 0.2), 0 0 12px rgba(251, 191, 36, 0.1);
+    }
+    66% {
+        border-color: rgba(251, 191, 36, 0.3);
+        box-shadow: 0 0 16px rgba(251, 191, 36, 0.18), 0 0 10px rgba(34, 197, 94, 0.1);
+    }
+}
+
+@keyframes gentle-shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+}
+
+/* Apply to Hero Title - Subtle */
+.hf-hero-title {
+    animation: subtle-text-glow 4s ease-in-out infinite !important;
+}
+
+/* Apply to Pills - Subtle */
+.hf-pill {
+    animation: subtle-border-glow 3s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+}
+
+.hf-pill::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(59, 130, 246, 0.15),
+        rgba(34, 211, 238, 0.15),
+        rgba(251, 191, 36, 0.12),
+        rgba(34, 197, 94, 0.12),
+        transparent
+    );
+    animation: gentle-shimmer 5s infinite;
+}
+
+/* ========================================
+   SPARKLES
+   ======================================== */
+
+@keyframes sparkle {
+    0%, 100% {
+        opacity: 0;
+        transform: scale(0);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+}
+
+.sparkle {
+    position: fixed;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 2;
+    animation: sparkle 3s ease-in-out infinite;
+}
+
+.sparkle-1 {
+    top: 25%;
+    left: 35%;
+    animation-delay: 0s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+.sparkle-2 {
+    top: 65%;
+    left: 70%;
+    animation-delay: 1s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(251, 191, 36, 0.4));
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+}
+.sparkle-3 {
+    top: 45%;
+    left: 15%;
+    animation-delay: 2s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 197, 94, 0.3));
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+.sparkle-4 {
+    top: 35%;
+    left: 80%;
+    animation-delay: 1.5s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(168, 85, 247, 0.4));
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
+}
+.sparkle-5 {
+    top: 75%;
+    left: 45%;
+    animation-delay: 2.5s;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 211, 238, 0.4));
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .fluorescent-orb {
+        width: 200px !important;
+        height: 200px !important;
+        filter: blur(50px);
+    }
+    .sparkle {
+        display: none;
+    }
+}
+</style>
+"""
+
+
+def get_fluorescent_effects_html() -> str:
+    """
+    Returns HTML elements for fluorescent orbs and sparkles.
+    Returns empty string if quiet mode is enabled.
+    """
+    if is_quiet_mode():
+        return ""
+
+    return """
+<!-- Fluorescent Floating Orbs -->
+<div class="fluorescent-orb orb-1"></div>
+<div class="fluorescent-orb orb-2"></div>
+<div class="fluorescent-orb orb-3"></div>
+<div class="fluorescent-orb orb-4"></div>
+
+<!-- Sparkle Particles -->
+<div class="sparkle sparkle-1"></div>
+<div class="sparkle sparkle-2"></div>
+<div class="sparkle sparkle-3"></div>
+<div class="sparkle sparkle-4"></div>
+<div class="sparkle sparkle-5"></div>
+"""
+
+
+def render_fluorescent_effects() -> None:
+    """
+    Renders fluorescent orbs and sparkle effects if quiet mode is disabled.
+    Call this after apply_css() on pages that want the fluorescent effects.
+    """
+    if is_quiet_mode():
+        return
+
+    css = get_fluorescent_effects_css()
+    html = get_fluorescent_effects_html()
+
+    if css:
+        st.markdown(css, unsafe_allow_html=True)
+    if html:
+        st.markdown(html, unsafe_allow_html=True)
+
+
+# F. EXPORTS
 __all__ = [
     "apply_css",
     "hero_card",
     "feature_card",
+    # User preference functions
+    "is_quiet_mode",
+    "is_analyst_mode",
+    "set_quiet_mode",
+    "set_analyst_mode",
+    # Fluorescent effects
+    "get_fluorescent_effects_css",
+    "get_fluorescent_effects_html",
+    "render_fluorescent_effects",
+    # Color constants
     "PRIMARY_COLOR",
     "SECONDARY_COLOR",
     "ACCENT_PINK",

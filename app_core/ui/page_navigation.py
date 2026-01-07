@@ -6,15 +6,13 @@ from __future__ import annotations
 import streamlit as st
 
 # Page order configuration
+# Note: Data Studio consolidates Upload Data, Prepare Data, and Feature Studio
+# Note: Modeling Studio consolidates Baseline Models, Feature Selection, and Train Models
 PAGES = [
     {"file": "pages/01_Dashboard.py", "name": "Dashboard", "icon": "📊"},
-    {"file": "pages/02_Upload_Data.py", "name": "Upload Data", "icon": "📁"},
-    {"file": "pages/03_Prepare_Data.py", "name": "Prepare Data", "icon": "🔧"},
+    {"file": "pages/02_Data_Studio.py", "name": "Data Studio", "icon": "🔬"},
     {"file": "pages/04_Explore_Data.py", "name": "Explore Data", "icon": "🔍"},
-    {"file": "pages/05_Baseline_Models.py", "name": "Baseline Models", "icon": "📈"},
-    {"file": "pages/06_Feature_Studio.py", "name": "Feature Studio", "icon": "🛠️"},
-    {"file": "pages/07_Feature_Selection.py", "name": "Feature Selection", "icon": "🎯"},
-    {"file": "pages/08_Train_Models.py", "name": "Train Models", "icon": "🧠"},
+    {"file": "pages/05_Modeling_Studio.py", "name": "Modeling Studio", "icon": "🎯"},
     {"file": "pages/09_Model_Results.py", "name": "Model Results", "icon": "📊"},
     {"file": "pages/10_Patient_Forecast.py", "name": "Patient Forecast", "icon": "🔮"},
     {"file": "pages/11_Staff_Planner.py", "name": "Staff Planner", "icon": "👥"},

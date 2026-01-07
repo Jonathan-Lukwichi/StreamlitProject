@@ -1620,7 +1620,7 @@ with st.sidebar:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(12)  # Action Center is page index 12
+render_page_navigation(8)  # Action Center is page index 8
 
 # =============================================================================
 # FOOTER

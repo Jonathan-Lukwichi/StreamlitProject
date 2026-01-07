@@ -20,11 +20,11 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 
 # App core
 from app_core.ui.theme import (
-    apply_css,
+    apply_css, is_quiet_mode,
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, CARD_BG, BODY_TEXT,
 )
-from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_user_preferences
 from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
@@ -302,6 +302,28 @@ def _render_time_series_diagnostics(df):
     c1, c2 = st.columns([2, 1])
     with c1:
         st.markdown("#### Autocorrelation (ACF & PACF)")
+
+        # Contextual help expander (Prompt 7: Add Contextual Help)
+        with st.expander("ℹ️ What does this mean?", expanded=False):
+            st.markdown("""
+            **ACF (Autocorrelation Function)** measures how correlated today's value is
+            with values from previous days. Significant spikes at certain lags reveal
+            patterns in your data:
+
+            - **Spike at lag 7**: Weekly pattern (same day last week is predictive)
+            - **Slow decay**: Strong trend in the data
+            - **Alternating spikes**: Seasonal oscillations
+
+            **PACF (Partial Autocorrelation)** shows the "pure" correlation at each lag,
+            removing the influence of shorter lags. This helps identify:
+
+            - **AR order (p)**: Number of significant PACF lags
+            - **Direct dependencies**: Which past days directly influence predictions
+
+            **For forecasting:** If both show significant lag-7 spikes, weekly seasonality
+            is important for your models.
+            """)
+
         try:
             acf_vals, confint_acf = sm_acf(y, nlags=nlags, alpha=0.05, fft=True)
             pacf_vals, confint_pacf = sm_pacf(y, nlags=nlags, method="ywm", alpha=0.05)
@@ -323,6 +345,24 @@ def _render_time_series_diagnostics(df):
 
     with c2:
         st.markdown("#### 🔬 ADF Stationarity Test")
+
+        # Contextual help expander (Prompt 7: Add Contextual Help)
+        with st.expander("ℹ️ What does this mean?", expanded=False):
+            st.markdown("""
+            The **ADF (Augmented Dickey-Fuller) test** checks if your data has a
+            stable average over time. This is called **stationarity**.
+
+            **Interpreting the result:**
+            - **Stationary (p < 0.05)**: ✅ Your data fluctuates around a stable average.
+              Most forecasting models work well with this.
+            - **Non-Stationary (p ≥ 0.05)**: ⚠️ Your data has trends or the average
+              changes over time. Consider applying **differencing** to make it stationary.
+
+            **Why it matters:** Non-stationary data can lead to unreliable forecasts.
+            Differencing (subtracting each value from the previous) often helps stabilize
+            the data for better model performance.
+            """)
+
         try:
             result = adfuller(y)
             adf_stat, p_value, crit = result[0], result[1], result[4]
@@ -370,68 +410,70 @@ def page_eda():
     apply_css()
     inject_sidebar_style()
     render_sidebar_brand()
+    render_user_preferences()
 
-    # Apply fluorescent effects
-    st.markdown("""
-    <style>
-    /* Fluorescent Effects for EDA */
-    @keyframes float-orb {
-        0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.25; }
-        50% { transform: translate(30px, -30px) scale(1.05); opacity: 0.35; }
-    }
-    .fluorescent-orb {
-        position: fixed;
-        border-radius: 50%;
-        pointer-events: none;
-        z-index: 0;
-        filter: blur(70px);
-    }
-    .orb-1 {
-        width: 350px;
-        height: 350px;
-        background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
-        top: 15%;
-        right: 20%;
-        animation: float-orb 25s ease-in-out infinite;
-    }
-    .orb-2 {
-        width: 300px;
-        height: 300px;
-        background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
-        bottom: 20%;
-        left: 15%;
-        animation: float-orb 30s ease-in-out infinite;
-        animation-delay: 5s;
-    }
-    @keyframes sparkle {
-        0%, 100% { opacity: 0; transform: scale(0); }
-        50% { opacity: 0.6; transform: scale(1); }
-    }
-    .sparkle {
-        position: fixed;
-        width: 3px;
-        height: 3px;
-        background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
-        border-radius: 50%;
-        pointer-events: none;
-        z-index: 2;
-        animation: sparkle 3s ease-in-out infinite;
-        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-    }
-    .sparkle-1 { top: 25%; left: 35%; animation-delay: 0s; }
-    .sparkle-2 { top: 65%; left: 70%; animation-delay: 1s; }
-    .sparkle-3 { top: 45%; left: 15%; animation-delay: 2s; }
-    @media (max-width: 768px) {
-        .fluorescent-orb { width: 200px !important; height: 200px !important; filter: blur(50px); }
-        .sparkle { display: none; }
-    }
-    </style>
-    <div class="fluorescent-orb orb-1"></div>
-    <div class="fluorescent-orb orb-2"></div>
-    <div class="sparkle sparkle-1"></div>
-    <div class="sparkle sparkle-2"></div>
-    <div class="sparkle sparkle-3"></div>
-    """, unsafe_allow_html=True)
+    # Apply fluorescent effects (respects Quiet Mode)
+    if not is_quiet_mode():
+        st.markdown("""
+        <style>
+        /* Fluorescent Effects for EDA */
+        @keyframes float-orb {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.25; }
+            50% { transform: translate(30px, -30px) scale(1.05); opacity: 0.35; }
+        }
+        .fluorescent-orb {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(70px);
+        }
+        .orb-1 {
+            width: 350px;
+            height: 350px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
+            top: 15%;
+            right: 20%;
+            animation: float-orb 25s ease-in-out infinite;
+        }
+        .orb-2 {
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(34, 211, 238, 0.2), transparent 70%);
+            bottom: 20%;
+            left: 15%;
+            animation: float-orb 30s ease-in-out infinite;
+            animation-delay: 5s;
+        }
+        @keyframes sparkle {
+            0%, 100% { opacity: 0; transform: scale(0); }
+            50% { opacity: 0.6; transform: scale(1); }
+        }
+        .sparkle {
+            position: fixed;
+            width: 3px;
+            height: 3px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 2;
+            animation: sparkle 3s ease-in-out infinite;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+        }
+        .sparkle-1 { top: 25%; left: 35%; animation-delay: 0s; }
+        .sparkle-2 { top: 65%; left: 70%; animation-delay: 1s; }
+        .sparkle-3 { top: 45%; left: 15%; animation-delay: 2s; }
+        @media (max-width: 768px) {
+            .fluorescent-orb { width: 200px !important; height: 200px !important; filter: blur(50px); }
+            .sparkle { display: none; }
+        }
+        </style>
+        <div class="fluorescent-orb orb-1"></div>
+        <div class="fluorescent-orb orb-2"></div>
+        <div class="sparkle sparkle-1"></div>
+        <div class="sparkle sparkle-2"></div>
+        <div class="sparkle sparkle-3"></div>
+        """, unsafe_allow_html=True)
 
     # Premium Hero Header
     st.markdown(
@@ -973,6 +1015,31 @@ def page_eda():
             """,
             unsafe_allow_html=True,
         )
+
+        # Contextual help expander (Prompt 7: Add Contextual Help)
+        with st.expander("ℹ️ What does this mean?", expanded=False):
+            st.markdown("""
+            **FFT (Fast Fourier Transform)** breaks down your time series into its
+            underlying wave patterns. This helps identify **hidden periodicities**:
+
+            **Understanding the chart:**
+            - **X-axis (Period)**: How many days per cycle
+            - **Y-axis (Amplitude)**: How strong that cycle is
+
+            **Common patterns in healthcare data:**
+            - **~7-day peak**: Weekly pattern (weekday vs weekend differences)
+            - **~30-day peak**: Monthly pattern (billing cycles, shift schedules)
+            - **~365-day peak**: Yearly seasonality (flu season, holidays)
+
+            **How to use this:**
+            - Peaks with high amplitude are your **dominant cycles**
+            - These cycles can be used to create **Fourier features** in Feature Studio
+            - Fourier features help models capture periodic patterns mathematically
+
+            **Tip:** If you see a strong 7-day cycle, your models should account for
+            day-of-week effects. SARIMAX with s=7 or XGBoost with day features will help.
+            """)
+
         ts = df["Target_1"].asfreq("D").interpolate(method="time", limit_direction="both")
         if ts.dropna().empty or len(ts) < 8:
             st.info("Need at least ~8 daily points to extract dominant cycles.")
@@ -1061,6 +1128,6 @@ page_eda()
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(3)  # Explore Data is page index 3
+render_page_navigation(2)  # Explore Data is page index 2
 
 

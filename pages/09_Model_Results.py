@@ -2152,7 +2152,7 @@ with tab_thesis:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(8)  # Model Results is page index 8
+render_page_navigation(4)  # Model Results is page index 4
 
 # -----------------------------------------------------------------------------
 # FOOTER
