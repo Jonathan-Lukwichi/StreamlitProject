@@ -1770,7 +1770,7 @@ with tab_export:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(5)  # Patient Forecast is page index 5
+render_page_navigation(9)  # Patient Forecast is page index 9
 
 # =============================================================================
 # FOOTER

@@ -1617,4 +1617,4 @@ with st.sidebar:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(6)  # Staff Planner is page index 6
+render_page_navigation(10)  # Staff Planner is page index 10

@@ -28,12 +28,12 @@ import plotly.express as px
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 
-from app_core.ui.theme import apply_css, is_quiet_mode
+from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR, WARNING_COLOR,
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT, BODY_TEXT, CARD_BG,
 )
-from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_user_preferences
+from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
@@ -53,49 +53,46 @@ st.set_page_config(
 apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
-render_user_preferences()
 add_logout_button()
 
 # =============================================================================
 # CUSTOM CSS - Premium Executive Dashboard Design
 # =============================================================================
-
-# Fluorescent effects CSS (only if quiet mode is disabled)
-_quiet = is_quiet_mode()
-_fluorescent_css = "" if _quiet else """
+st.markdown(f"""
+<style>
 /* ========================================
    FLUORESCENT EFFECTS FOR EXECUTIVE DASHBOARD
    ======================================== */
 
-@keyframes float-orb {
-    0%, 100% {
+@keyframes float-orb {{
+    0%, 100% {{
         transform: translate(0, 0) scale(1);
         opacity: 0.25;
-    }
-    50% {
+    }}
+    50% {{
         transform: translate(30px, -30px) scale(1.05);
         opacity: 0.35;
-    }
-}
+    }}
+}}
 
-.fluorescent-orb {
+.fluorescent-orb {{
     position: fixed;
     border-radius: 50%;
     pointer-events: none;
     z-index: 0;
     filter: blur(70px);
-}
+}}
 
-.orb-1 {
+.orb-1 {{
     width: 400px;
     height: 400px;
     background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 70%);
     top: 10%;
     right: 15%;
     animation: float-orb 25s ease-in-out infinite;
-}
+}}
 
-.orb-2 {
+.orb-2 {{
     width: 350px;
     height: 350px;
     background: radial-gradient(circle, rgba(34, 197, 94, 0.2), transparent 70%);
@@ -103,9 +100,9 @@ _fluorescent_css = "" if _quiet else """
     left: 10%;
     animation: float-orb 30s ease-in-out infinite;
     animation-delay: 5s;
-}
+}}
 
-.orb-3 {
+.orb-3 {{
     width: 300px;
     height: 300px;
     background: radial-gradient(circle, rgba(168, 85, 247, 0.18), transparent 70%);
@@ -113,20 +110,20 @@ _fluorescent_css = "" if _quiet else """
     left: 50%;
     animation: float-orb 35s ease-in-out infinite;
     animation-delay: 10s;
-}
+}}
 
-@keyframes sparkle {
-    0%, 100% {
+@keyframes sparkle {{
+    0%, 100% {{
         opacity: 0;
         transform: scale(0);
-    }
-    50% {
+    }}
+    50% {{
         opacity: 0.6;
         transform: scale(1);
-    }
-}
+    }}
+}}
 
-.sparkle {
+.sparkle {{
     position: fixed;
     width: 3px;
     height: 3px;
@@ -136,29 +133,12 @@ _fluorescent_css = "" if _quiet else """
     z-index: 2;
     animation: sparkle 3s ease-in-out infinite;
     box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-}
+}}
 
-.sparkle-1 { top: 20%; left: 30%; animation-delay: 0s; }
-.sparkle-2 { top: 60%; left: 75%; animation-delay: 1s; }
-.sparkle-3 { top: 40%; left: 20%; animation-delay: 2s; }
-.sparkle-4 { top: 75%; left: 45%; animation-delay: 1.5s; }
-
-/* Mobile Responsive - Fluorescent */
-@media (max-width: 768px) {
-    .fluorescent-orb {
-        width: 200px !important;
-        height: 200px !important;
-        filter: blur(50px);
-    }
-    .sparkle {
-        display: none;
-    }
-}
-"""
-
-st.markdown(f"""
-<style>
-{_fluorescent_css}
+.sparkle-1 {{ top: 20%; left: 30%; animation-delay: 0s; }}
+.sparkle-2 {{ top: 60%; left: 75%; animation-delay: 1s; }}
+.sparkle-3 {{ top: 40%; left: 20%; animation-delay: 2s; }}
+.sparkle-4 {{ top: 75%; left: 45%; animation-delay: 1.5s; }}
 
 /* ========================================
    CUSTOM TAB STYLING (Executive Design)
@@ -486,6 +466,14 @@ st.markdown(f"""
 
 /* Mobile Responsive */
 @media (max-width: 768px) {{
+    .fluorescent-orb {{
+        width: 200px !important;
+        height: 200px !important;
+        filter: blur(50px);
+    }}
+    .sparkle {{
+        display: none;
+    }}
     .exec-kpi-value {{ font-size: 1.5rem; }}
     .savings-value {{ font-size: 2rem; }}
     .day-patients {{ font-size: 1.25rem; }}
@@ -709,7 +697,6 @@ st.markdown(f"""
 }}
 </style>
 
-{'' if _quiet else '''
 <!-- Fluorescent Floating Orbs -->
 <div class="fluorescent-orb orb-1"></div>
 <div class="fluorescent-orb orb-2"></div>
@@ -720,7 +707,6 @@ st.markdown(f"""
 <div class="sparkle sparkle-2"></div>
 <div class="sparkle sparkle-3"></div>
 <div class="sparkle sparkle-4"></div>
-'''}
 """, unsafe_allow_html=True)
 
 
@@ -1484,130 +1470,6 @@ st.markdown(f"""
 # Get platform-wide activity state (connects with all pages)
 platform_activity = get_platform_activity_state()
 
-# =============================================================================
-# GETTING STARTED STATE - Show welcome guide if no data uploaded
-# =============================================================================
-if not platform_activity["workflow_started"]:
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(34, 211, 238, 0.05));
-        border: 2px solid rgba(59, 130, 246, 0.3);
-        border-radius: 24px;
-        padding: 3rem 2rem;
-        text-align: center;
-        margin: 2rem 0;
-    ">
-        <div style="font-size: 4rem; margin-bottom: 1rem;">🚀</div>
-        <h2 style="
-            font-size: 2rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #ffffff 0%, #22d3ee 50%, #3b82f6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 1rem;
-        ">Welcome to HealthForecast AI</h2>
-        <p style="
-            color: #94a3b8;
-            font-size: 1.1rem;
-            max-width: 600px;
-            margin: 0 auto 2rem auto;
-            line-height: 1.7;
-        ">
-            Get started by uploading your hospital data. Our AI-powered platform will help you
-            forecast patient arrivals, optimize staffing, and manage inventory efficiently.
-        </p>
-        <div style="
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            justify-content: center;
-            margin-bottom: 2rem;
-        ">
-            <div style="
-                background: rgba(59, 130, 246, 0.1);
-                border: 1px solid rgba(59, 130, 246, 0.3);
-                border-radius: 12px;
-                padding: 1rem 1.5rem;
-                min-width: 150px;
-            ">
-                <div style="font-size: 1.5rem;">📊</div>
-                <div style="color: #e2e8f0; font-weight: 600; margin-top: 0.5rem;">Upload Data</div>
-                <div style="color: #64748b; font-size: 0.85rem;">Patient & operational data</div>
-            </div>
-            <div style="
-                background: rgba(168, 85, 247, 0.1);
-                border: 1px solid rgba(168, 85, 247, 0.3);
-                border-radius: 12px;
-                padding: 1rem 1.5rem;
-                min-width: 150px;
-            ">
-                <div style="font-size: 1.5rem;">🤖</div>
-                <div style="color: #e2e8f0; font-weight: 600; margin-top: 0.5rem;">Train Models</div>
-                <div style="color: #64748b; font-size: 0.85rem;">AI forecasting models</div>
-            </div>
-            <div style="
-                background: rgba(34, 197, 94, 0.1);
-                border: 1px solid rgba(34, 197, 94, 0.3);
-                border-radius: 12px;
-                padding: 1rem 1.5rem;
-                min-width: 150px;
-            ">
-                <div style="font-size: 1.5rem;">📈</div>
-                <div style="color: #e2e8f0; font-weight: 600; margin-top: 0.5rem;">Optimize</div>
-                <div style="color: #64748b; font-size: 0.85rem;">Staff & inventory</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Action button to start workflow
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button(
-            "📂 Start by Uploading Data",
-            type="primary",
-            use_container_width=True,
-            key="getting_started_upload_btn"
-        ):
-            st.switch_page("pages/02_Upload_Data.py")
-
-    # Show quick links to other pages
-    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-    st.markdown("---")
-
-    help_col1, help_col2, help_col3 = st.columns(3)
-    with help_col1:
-        st.markdown("""
-        **📖 Quick Start Guide**
-
-        1. Upload your patient arrival data
-        2. Prepare and merge data sources
-        3. Explore patterns in your data
-        4. Train forecasting models
-        5. Generate 7-day forecasts
-        """)
-    with help_col2:
-        st.markdown("""
-        **📊 Data Requirements**
-
-        - **Patient data**: Date, patient counts
-        - **Optional**: Weather, calendar events
-        - **Format**: CSV, Excel, or Parquet
-        - **Minimum**: 30 days of history
-        """)
-    with help_col3:
-        st.markdown("""
-        **🎯 What You'll Get**
-
-        - AI-powered patient forecasts
-        - Staff scheduling optimization
-        - Inventory level recommendations
-        - Actionable insights
-        """)
-
-    st.stop()  # Stop here if no data - don't render empty dashboard
-
 # Get detailed data for display
 forecast = get_forecast_data()
 staffing = get_staff_insights()
@@ -1860,9 +1722,6 @@ with tab_overview:
             <div class="exec-kpi-sublabel">{trend_icon} {forecast["trend"].title()} trend</div>
         </div>
         """, unsafe_allow_html=True)
-        # Drill-down button (Prompt 4: Enable Drill-Down Functionality)
-        if st.button("View Details →", key="kpi_patients_drilldown", use_container_width=True):
-            st.switch_page("pages/10_Patient_Forecast.py")
 
     with kpi_cols[1]:
         avg = forecast["avg_daily"] if forecast["has_forecast"] else "—"
@@ -1875,9 +1734,6 @@ with tab_overview:
             <div class="exec-kpi-sublabel"><span class="{conf_class}">{forecast["confidence"]} Confidence</span></div>
         </div>
         """, unsafe_allow_html=True)
-        # Drill-down button
-        if st.button("View Models →", key="kpi_models_drilldown", use_container_width=True):
-            st.switch_page("pages/09_Model_Results.py")
 
     with kpi_cols[2]:
         util = f"{staffing['avg_utilization']:.0f}%" if staffing["has_data"] else "—"
@@ -1891,9 +1747,6 @@ with tab_overview:
             <div class="exec-kpi-sublabel"><span class="{util_class if staffing['has_data'] else ''}">{util_text}</span></div>
         </div>
         """, unsafe_allow_html=True)
-        # Drill-down button (Prompt 4: Enable Drill-Down Functionality)
-        if st.button("Staff Planner →", key="kpi_staff_drilldown", use_container_width=True):
-            st.switch_page("pages/11_Staff_Planner.py")
 
     with kpi_cols[3]:
         if inventory["has_data"]:
@@ -1917,9 +1770,6 @@ with tab_overview:
             <div class="exec-kpi-sublabel"><span class="{supply_class}">{supply_status}</span></div>
         </div>
         """, unsafe_allow_html=True)
-        # Drill-down button (Prompt 4: Enable Drill-Down Functionality)
-        if st.button("Supply Planner →", key="kpi_inventory_drilldown", use_container_width=True):
-            st.switch_page("pages/12_Supply_Planner.py")
 
     with kpi_cols[4]:
         savings = f"${financial['total_monthly_savings']:,.0f}" if financial["total_monthly_savings"] > 0 else "—"
@@ -1931,9 +1781,6 @@ with tab_overview:
             <div class="exec-kpi-sublabel">From optimization</div>
         </div>
         """, unsafe_allow_html=True)
-        # Drill-down button (Prompt 4: Enable Drill-Down Functionality)
-        if st.button("Action Center →", key="kpi_savings_drilldown", use_container_width=True):
-            st.switch_page("pages/13_Action_Center.py")
 
     # Financial Impact Section
     if financial["total_monthly_savings"] > 0:

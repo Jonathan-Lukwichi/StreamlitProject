@@ -1709,4 +1709,4 @@ with st.sidebar:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(7)  # Supply Planner is page index 7
+render_page_navigation(11)  # Supply Planner is page index 11
