@@ -24,11 +24,15 @@ from .components import (
     render_premium_card,
     render_sync_status,
     render_action_card,
+    render_action_list,
     render_comparison_panel,
     render_empty_state,
     render_skeleton_loader,
     render_system_health_gauge,
     render_forecast_day_card,
+    render_forecast_day_cards,
+    render_section_header,
+    render_glass_divider,
 )
 
 from .charts import (
@@ -51,11 +55,15 @@ __all__ = [
     "render_premium_card",
     "render_sync_status",
     "render_action_card",
+    "render_action_list",
     "render_comparison_panel",
     "render_empty_state",
     "render_skeleton_loader",
     "render_system_health_gauge",
     "render_forecast_day_card",
+    "render_forecast_day_cards",
+    "render_section_header",
+    "render_glass_divider",
     # Charts
     "create_forecast_area_chart",
     "create_utilization_gauge",
