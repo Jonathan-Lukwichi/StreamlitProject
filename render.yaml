@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: healthforecast-ai
+    runtime: python
+    region: frankfurt  # Change to your preferred region (oregon, frankfurt, singapore, ohio)
+    plan: starter  # starter ($7/mo) or standard ($25/mo) for production
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run Welcome.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
+      # Add your secrets in Render Dashboard (not in this file!)
+      # - key: SUPABASE_URL
+      #   sync: false  # Set manually in dashboard
+      # - key: SUPABASE_KEY
+      #   sync: false
+      # - key: ANTHROPIC_API_KEY
+      #   sync: false
