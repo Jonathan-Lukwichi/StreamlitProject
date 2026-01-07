@@ -167,6 +167,24 @@ st.markdown("""
 
 
 # =============================================================================
+# STUNNING HERO HEADER - DASHBOARD OVERVIEW
+# =============================================================================
+st.markdown("""
+<div class="dashboard-hero">
+    <div class="hero-content">
+        <div class="hero-eyebrow">HealthForecast AI</div>
+        <h1 class="hero-title">Dashboard Overview</h1>
+        <p class="hero-subtitle">
+            Your unified command center for hospital operations. Monitor forecasts,
+            optimize staffing, manage inventory, and take action—all in one place.
+        </p>
+    </div>
+    <div class="hero-glow-line"></div>
+</div>
+""", unsafe_allow_html=True)
+
+
+# =============================================================================
 # INITIALIZE AND REFRESH STATE
 # =============================================================================
 initialize_dashboard_state()
