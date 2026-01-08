@@ -19,6 +19,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
@@ -1665,18 +1666,11 @@ def page_benchmarks():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    st.markdown(
-        f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🤖</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Baseline Models</h1>
-          <p class='hf-feature-description' style='font-size: 1rem; max-width: 700px; margin: 0 auto;'>
-            Train and evaluate forecasting models for patient arrivals with advanced statistical and machine learning techniques
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Sci-Fi Hero Header - CALIBRATE Hub
+    render_scifi_hero_header(
+        title="CALIBRATE Hub",
+        subtitle="Statistical baseline protocols. ARIMA and SARIMAX calibration for precision forecasting.",
+        status="SYSTEM ONLINE"
     )
 
     # Prefer preprocessed data; fallback to merged

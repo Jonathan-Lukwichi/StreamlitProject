@@ -31,6 +31,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
 # Import temporal split module
@@ -1498,18 +1499,11 @@ def main():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    st.markdown(
-        f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🧪</div>
-          <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Feature Studio</h1>
-          <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
-            Create sophisticated temporal and cyclical features with automated deduplication and scaling for enhanced model performance
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Sci-Fi Hero Header - ENGINEER Lab
+    render_scifi_hero_header(
+        title="ENGINEER Lab",
+        subtitle="Feature synthesis and engineering matrix. Build predictive signals with temporal and cyclical patterns.",
+        status="SYSTEM ONLINE"
     )
     page_feature_engineering()
 

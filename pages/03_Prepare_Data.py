@@ -18,6 +18,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 from app_core.cache import save_to_cache, get_cache_manager
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
@@ -894,18 +895,11 @@ def page_data_preparation_studio():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    st.markdown(
-        f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>🧠</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Prepare Data</h1>
-          <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 auto;'>
-            Intelligent data fusion and feature engineering pipeline for production-ready forecasting models
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Sci-Fi Hero Header - FORGE Station
+    render_scifi_hero_header(
+        title="FORGE Station",
+        subtitle="Data fusion and preparation protocols. Merge multi-source intel for production-ready forecasting systems.",
+        status="SYSTEM ONLINE"
     )
 
     # Pull uploaded sources

@@ -31,4 +31,27 @@ def add_grid(fig):
                       font=dict(family="Segoe UI, sans-serif", size=12, color=TEXT_COLOR),
                       title_font=dict(color=TEXT_COLOR))
     return fig
-    
+
+
+def render_scifi_hero_header(title: str, subtitle: str, status: str = "SYSTEM ONLINE"):
+    """
+    Render sci-fi themed hero header matching HORIZON Control style.
+
+    Args:
+        title: The main title text (e.g., "DATA Uplink", "NEURAL Core")
+        subtitle: Descriptive subtitle text
+        status: Status indicator text (default: "SYSTEM ONLINE")
+    """
+    st.markdown(f"""
+    <div class="dashboard-hero corner-brackets">
+        <div class="hero-content">
+            <div class="hero-eyebrow">
+                <span class="status-online">{status}</span> · HealthForecast AI
+            </div>
+            <h1 class="hero-title hero-title-glitch">{title}</h1>
+            <p class="hero-subtitle">{subtitle}</p>
+        </div>
+        <div class="hero-glow-line"></div>
+    </div>
+    """, unsafe_allow_html=True)
+

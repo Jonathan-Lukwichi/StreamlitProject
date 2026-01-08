@@ -1,8 +1,10 @@
 from __future__ import annotations
 import streamlit as st
-from app_core.ui.theme import apply_css, hero_card, feature_card
+from app_core.ui.theme import apply_css, hero_card, feature_card, render_fluorescent_effects, is_quiet_mode
+from app_core.ui.components import render_scifi_hero_header
 from app_core.auth.authentication import initialize_session_state
 from app_core.auth.navigation import configure_sidebar_navigation
+from app_core.ui.sidebar_brand import render_user_preferences
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -23,220 +25,16 @@ configure_sidebar_navigation()
 # Apply Premium CSS Theme
 apply_css()
 
-# Warning banner removed per user request
+# Render user preferences in sidebar
+with st.sidebar:
+    render_user_preferences()
 
-# ============================================================================
-# FLUORESCENT EFFECTS - Subtle Premium Visual Enhancements
-# ============================================================================
+# Render fluorescent effects (respects Quiet Mode)
+render_fluorescent_effects()
+
+# Login button and feature card hover styles (non-animated)
 st.markdown("""
 <style>
-/* ========================================
-   ANIMATED FLUORESCENT ORBS (REDUCED)
-   ======================================== */
-
-@keyframes float-orb {
-    0%, 100% {
-        transform: translate(0, 0) scale(1);
-        opacity: 0.25;
-    }
-    50% {
-        transform: translate(30px, -30px) scale(1.05);
-        opacity: 0.35;
-    }
-}
-
-/* Floating Orbs - Subtle */
-.fluorescent-orb {
-    position: fixed;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 0;
-    filter: blur(70px);
-}
-
-.orb-1 {
-    width: 350px;
-    height: 350px;
-    background: radial-gradient(circle, rgba(251, 191, 36, 0.25), transparent 70%);
-    top: 15%;
-    right: 20%;
-    animation: float-orb 25s ease-in-out infinite;
-}
-
-.orb-2 {
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle, rgba(34, 211, 238, 0.25), transparent 70%);
-    bottom: 20%;
-    left: 15%;
-    animation: float-orb 30s ease-in-out infinite;
-    animation-delay: 5s;
-}
-
-.orb-3 {
-    width: 280px;
-    height: 280px;
-    background: radial-gradient(circle, rgba(34, 197, 94, 0.22), transparent 70%);
-    top: 50%;
-    right: 10%;
-    animation: float-orb 28s ease-in-out infinite;
-    animation-delay: 10s;
-}
-
-.orb-4 {
-    width: 320px;
-    height: 320px;
-    background: radial-gradient(circle, rgba(168, 85, 247, 0.2), transparent 70%);
-    bottom: 30%;
-    right: 40%;
-    animation: float-orb 32s ease-in-out infinite;
-    animation-delay: 15s;
-}
-
-/* ========================================
-   SUBTLE GLOW ANIMATIONS
-   ======================================== */
-
-@keyframes subtle-text-glow {
-    0%, 100% {
-        text-shadow:
-            0 0 15px rgba(59, 130, 246, 0.3),
-            0 0 30px rgba(34, 211, 238, 0.2),
-            0 0 25px rgba(251, 191, 36, 0.15);
-    }
-    50% {
-        text-shadow:
-            0 0 20px rgba(59, 130, 246, 0.4),
-            0 0 40px rgba(34, 211, 238, 0.3),
-            0 0 35px rgba(251, 191, 36, 0.25);
-    }
-}
-
-@keyframes subtle-border-glow {
-    0%, 100% {
-        border-color: rgba(59, 130, 246, 0.3);
-        box-shadow: 0 0 15px rgba(59, 130, 246, 0.15), 0 0 10px rgba(34, 211, 238, 0.1);
-    }
-    33% {
-        border-color: rgba(34, 211, 238, 0.35);
-        box-shadow: 0 0 18px rgba(34, 211, 238, 0.2), 0 0 12px rgba(251, 191, 36, 0.1);
-    }
-    66% {
-        border-color: rgba(251, 191, 36, 0.3);
-        box-shadow: 0 0 16px rgba(251, 191, 36, 0.18), 0 0 10px rgba(34, 197, 94, 0.1);
-    }
-}
-
-@keyframes gentle-shimmer {
-    0% {
-        background-position: -1000px 0;
-    }
-    100% {
-        background-position: 1000px 0;
-    }
-}
-
-/* Apply to Hero Title - Subtle */
-.hf-hero-title {
-    animation: subtle-text-glow 4s ease-in-out infinite !important;
-}
-
-/* Apply to Pills - Subtle */
-.hf-pill {
-    animation: subtle-border-glow 3s ease-in-out infinite;
-    position: relative;
-    overflow: hidden;
-}
-
-.hf-pill::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(59, 130, 246, 0.15),
-        rgba(34, 211, 238, 0.15),
-        rgba(251, 191, 36, 0.12),
-        rgba(34, 197, 94, 0.12),
-        transparent
-    );
-    animation: gentle-shimmer 5s infinite;
-}
-
-/* Feature Cards - Subtle Hover */
-.hf-feature-card:hover {
-    filter: brightness(1.1);
-}
-
-.hf-feature-card:hover .hf-feature-icon {
-    transform: scale(1.05);
-}
-
-/* ========================================
-   SPARKLES (REDUCED)
-   ======================================== */
-
-@keyframes sparkle {
-    0%, 100% {
-        opacity: 0;
-        transform: scale(0);
-    }
-    50% {
-        opacity: 0.6;
-        transform: scale(1);
-    }
-}
-
-.sparkle {
-    position: fixed;
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 2;
-    animation: sparkle 3s ease-in-out infinite;
-}
-
-.sparkle-1 {
-    top: 25%;
-    left: 35%;
-    animation-delay: 0s;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(59, 130, 246, 0.3));
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-}
-.sparkle-2 {
-    top: 65%;
-    left: 70%;
-    animation-delay: 1s;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(251, 191, 36, 0.4));
-    box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
-}
-.sparkle-3 {
-    top: 45%;
-    left: 15%;
-    animation-delay: 2s;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 197, 94, 0.3));
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
-}
-.sparkle-4 {
-    top: 35%;
-    left: 80%;
-    animation-delay: 1.5s;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(168, 85, 247, 0.4));
-    box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
-}
-.sparkle-5 {
-    top: 75%;
-    left: 45%;
-    animation-delay: 2.5s;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(34, 211, 238, 0.4));
-    box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
-}
-
 /* ========================================
    LOGIN BUTTON STYLING
    ======================================== */
@@ -281,54 +79,25 @@ st.markdown("""
     box-shadow: 0 8px 20px rgba(245, 158, 11, 0.4);
 }
 
-/* ========================================
-   RESPONSIVE ADJUSTMENTS
-   ======================================== */
+/* Feature Cards - Subtle Hover */
+.hf-feature-card:hover {
+    filter: brightness(1.1);
+}
 
-@media (max-width: 768px) {
-    .fluorescent-orb {
-        width: 200px !important;
-        height: 200px !important;
-        filter: blur(50px);
-    }
-
-    .sparkle {
-        display: none;
-    }
+.hf-feature-card:hover .hf-feature-icon {
+    transform: scale(1.05);
 }
 </style>
-
-<!-- Fluorescent Floating Orbs (Reduced) -->
-<div class="fluorescent-orb orb-1"></div>
-<div class="fluorescent-orb orb-2"></div>
-<div class="fluorescent-orb orb-3"></div>
-<div class="fluorescent-orb orb-4"></div>
-
-<!-- Sparkle Particles (Reduced) -->
-<div class="sparkle sparkle-1"></div>
-<div class="sparkle sparkle-2"></div>
-<div class="sparkle sparkle-3"></div>
-<div class="sparkle sparkle-4"></div>
-<div class="sparkle sparkle-5"></div>
-
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# HERO SECTION - Premium Enterprise Header
+# HERO SECTION - GENESIS Portal (Sci-Fi Theme)
 # ============================================================================
-hero_html = hero_card(
-    title="Enterprise Healthcare Intelligence Platform",
-    subtitle="Transform hospital operations with AI-powered forecasting. Predict patient arrivals, optimize resources, and deliver superior care through advanced predictive analytics.",
-    pills=[
-        "🎯 Production-Ready AI",
-        "⚡ Real-Time Forecasting",
-        "🔬 Deep Learning Models",
-        "📊 Multi-Source Intelligence",
-        "🏥 Healthcare-Optimized",
-        "🚀 Enterprise Scale",
-    ],
+render_scifi_hero_header(
+    title="GENESIS Portal",
+    subtitle="Your gateway to predictive healthcare intelligence. Initialize your mission and transform hospital operations with AI-powered forecasting.",
+    status="SYSTEM ONLINE"
 )
-st.markdown(hero_html, unsafe_allow_html=True)
 
 # ============================================================================
 # START HERE SECTION - Beautiful Entry Point with Fluorescent Card

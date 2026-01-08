@@ -17,6 +17,7 @@ from app_core.ui.theme import (
     DANGER_COLOR, TEXT_COLOR, SUBTLE_TEXT,
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.components import render_scifi_hero_header
 from app_core.ui.page_navigation import render_page_navigation
 
 # ============================================================================
@@ -376,18 +377,11 @@ def page_data_hub():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    st.markdown(
-        f"""
-        <div class='hf-feature-card' style='text-align: center; margin-bottom: 1rem; padding: 1.5rem;'>
-          <div class='hf-feature-icon' style='margin: 0 auto 0.75rem auto; font-size: 2.5rem;'>📤</div>
-          <h1 class='hf-feature-title' style='font-size: 1.75rem; margin-bottom: 0.5rem;'>Upload Data</h1>
-          <p class='hf-feature-description' style='font-size: 1rem; max-width: 700px; margin: 0 auto;'>
-            Upload and manage your patient, weather, and calendar data
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Sci-Fi Hero Header - DATA Uplink
+    render_scifi_hero_header(
+        title="DATA Uplink",
+        subtitle="Establish data connection. Upload mission-critical datasets for patient, weather, and calendar intelligence.",
+        status="SYSTEM ONLINE"
     )
 
     # Ensure session keys exist

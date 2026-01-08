@@ -23,6 +23,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 from app_core.cache import save_to_cache, get_cache_manager
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 from app_core.plots import build_multihorizon_results_dashboard
@@ -255,21 +256,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Hero Header
+# Sci-Fi Hero Header - NEURAL Core
 # -----------------------------------------------------------------------------
-st.markdown(
-    f"""
-    <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
-      <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
-        <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🧠</div>
-        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Train Models</h1>
-      </div>
-      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
-        Unified platform for configuring and training time series forecasting models
-      </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
+render_scifi_hero_header(
+    title="NEURAL Core",
+    subtitle="Machine learning training protocols. XGBoost, LSTM, and ANN neural network systems.",
+    status="SYSTEM ONLINE"
 )
 
 # -----------------------------------------------------------------------------
