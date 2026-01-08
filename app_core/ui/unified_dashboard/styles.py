@@ -842,14 +842,12 @@ HERO_HEADER_CSS = """
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 3px;
     color: #22d3ee;
-    margin-bottom: 0.75rem;
-    animation: slideInRight 0.6s ease-out 0.2s forwards;
-    opacity: 0;
+    margin-bottom: 0.5rem;
 }
 
 .hero-eyebrow::before {
@@ -860,17 +858,17 @@ HERO_HEADER_CSS = """
 }
 
 .hero-title {
-    font-size: 3rem;
+    font-size: 3.5rem;
     font-weight: 900;
+    color: #22d3ee;
     background: linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #22d3ee 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     line-height: 1.1;
-    margin-bottom: 0.5rem;
-    text-shadow: 0 0 60px rgba(59, 130, 246, 0.5);
-    animation: fadeIn 0.6s ease-out 0.3s forwards;
-    opacity: 0;
+    margin-bottom: 0.75rem;
+    margin-top: 0.5rem;
+    filter: drop-shadow(0 0 30px rgba(34, 211, 238, 0.5));
 }
 
 .hero-subtitle {
@@ -878,8 +876,6 @@ HERO_HEADER_CSS = """
     color: #94a3b8;
     max-width: 600px;
     line-height: 1.5;
-    animation: fadeIn 0.6s ease-out 0.4s forwards;
-    opacity: 0;
 }
 
 .hero-glow-line {
