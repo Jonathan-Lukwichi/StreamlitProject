@@ -1,6 +1,7 @@
 from __future__ import annotations
 import streamlit as st
-from app_core.ui.theme import apply_css, hero_card, feature_card, render_fluorescent_effects, is_quiet_mode
+from app_core.ui.theme import apply_css, hero_card, feature_card
+from app_core.ui.effects import inject_fluorescent_effects
 from app_core.ui.components import render_scifi_hero_header
 from app_core.auth.authentication import initialize_session_state
 from app_core.auth.navigation import configure_sidebar_navigation
@@ -29,8 +30,8 @@ apply_css()
 with st.sidebar:
     render_user_preferences()
 
-# Render fluorescent effects (respects Quiet Mode)
-render_fluorescent_effects()
+# Render fluorescent effects
+inject_fluorescent_effects()
 
 # Login button and feature card hover styles (non-animated)
 st.markdown("""
