@@ -19,6 +19,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
@@ -972,19 +973,10 @@ def generate_action_items(forecast: Dict, staffing: Dict, inventory: Dict) -> Li
 # =============================================================================
 # HERO HEADER
 # =============================================================================
-st.markdown(
-    f"""
-    <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
-      <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
-        <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>🏥</div>
-        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Action Center</h1>
-      </div>
-      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
-        Unified dashboard for operational insights • Integrates forecasts, staffing, and inventory data
-      </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
+render_scifi_hero_header(
+    title="Action Center",
+    subtitle="Unified dashboard for operational insights. Integrates forecasts, staffing, and inventory data.",
+    status="SYSTEM ONLINE"
 )
 
 # Current date display

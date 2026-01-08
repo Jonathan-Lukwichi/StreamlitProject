@@ -434,10 +434,10 @@ def page_eda():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Sci-Fi Hero Header - SCANNER Bay
+    # Premium Hero Header
     render_scifi_hero_header(
-        title="SCANNER Bay",
-        subtitle="Deep analytics and pattern recognition. Analyze data signatures and uncover hidden anomalies.",
+        title="Explore Data",
+        subtitle="Uncover patterns, trends, and anomalies. Comprehensive exploratory data analysis and visualization.",
         status="SYSTEM ONLINE"
     )
 

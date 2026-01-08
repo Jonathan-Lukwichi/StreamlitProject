@@ -20,6 +20,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
@@ -918,18 +919,10 @@ def save_forecast_to_session(forecast_data: Dict, model_name: str, horizons: Lis
 # =============================================================================
 # HEADER
 # =============================================================================
-st.markdown(
-    f"""
-    <div class='hf-feature-card' style='text-align: center; margin-bottom: 2rem;'>
-      <div class='hf-feature-icon' style='margin: 0 auto 1.5rem auto;'>🔮</div>
-      <h1 class='hf-feature-title' style='font-size: 2.5rem; margin-bottom: 1rem;'>Patient Forecast</h1>
-      <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 700px; margin: 0 auto;'>
-        View forecasts from trained models<br>
-        <span style='color: #94a3b8; font-size: 0.9rem;'>Uses test set predictions from Benchmarks & Modeling Hub</span>
-      </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
+render_scifi_hero_header(
+    title="Patient Forecast",
+    subtitle="View forecasts from trained models. Uses test set predictions from Benchmarks & Modeling Hub.",
+    status="SYSTEM ONLINE"
 )
 
 

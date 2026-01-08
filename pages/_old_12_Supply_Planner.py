@@ -31,6 +31,7 @@ from app_core.ui.theme import (
 )
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
+from app_core.ui.components import render_scifi_hero_header
 
 # Import Supabase services
 from app_core.data.inventory_service import InventoryService, get_inventory_service
@@ -301,19 +302,10 @@ st.markdown(f"""
 # =============================================================================
 # HERO HEADER
 # =============================================================================
-st.markdown(
-    """
-    <div class='hf-feature-card' style='text-align: left; margin-bottom: 1rem; padding: 1.5rem;'>
-      <div style='display: flex; align-items: center; margin-bottom: 0.5rem;'>
-        <div class='hf-feature-icon' style='margin: 0 1rem 0 0; font-size: 2.5rem;'>📦</div>
-        <h1 class='hf-feature-title' style='font-size: 1.75rem; margin: 0;'>Supply Planner</h1>
-      </div>
-      <p class='hf-feature-description' style='font-size: 1rem; max-width: 800px; margin: 0 0 0 4rem;'>
-        Load inventory data, analyze current situation, apply forecast optimization, and compare results
-      </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
+render_scifi_hero_header(
+    title="Supply Planner",
+    subtitle="Load inventory data, analyze current situation, apply forecast optimization, and compare results.",
+    status="SYSTEM ONLINE"
 )
 
 

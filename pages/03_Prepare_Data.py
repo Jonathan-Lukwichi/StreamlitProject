@@ -895,10 +895,10 @@ def page_data_preparation_studio():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Sci-Fi Hero Header - FORGE Station
+    # Premium Hero Header
     render_scifi_hero_header(
-        title="FORGE Station",
-        subtitle="Data fusion and preparation protocols. Merge multi-source intel for production-ready forecasting systems.",
+        title="Prepare Data",
+        subtitle="Data fusion and feature engineering pipeline. Clean, merge, and prepare datasets for machine learning.",
         status="SYSTEM ONLINE"
     )
 

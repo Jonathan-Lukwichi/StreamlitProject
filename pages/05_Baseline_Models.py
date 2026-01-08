@@ -1666,10 +1666,10 @@ def page_benchmarks():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Sci-Fi Hero Header - CALIBRATE Hub
+    # Premium Hero Header
     render_scifi_hero_header(
-        title="CALIBRATE Hub",
-        subtitle="Statistical baseline protocols. ARIMA and SARIMAX calibration for precision forecasting.",
+        title="Baseline Models",
+        subtitle="Train and evaluate ARIMA and SARIMAX statistical forecasting models with seasonal proportions.",
         status="SYSTEM ONLINE"
     )
 

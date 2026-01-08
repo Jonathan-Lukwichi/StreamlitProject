@@ -1157,10 +1157,10 @@ The best model ({best_model}) outperformed the runner-up ({analysis['runner_up']
 # MAIN PAGE RENDERING
 # =============================================================================
 
-# Sci-Fi Hero Header - VERDICT Terminal
+# Premium Hero Header
 render_scifi_hero_header(
-    title="VERDICT Terminal",
-    subtitle="Performance analysis and model comparison. Mission assessment for thesis-quality reporting.",
+    title="Model Results",
+    subtitle="Performance analysis and model comparison. Comprehensive metrics and thesis-quality reporting.",
     status="SYSTEM ONLINE"
 )
 

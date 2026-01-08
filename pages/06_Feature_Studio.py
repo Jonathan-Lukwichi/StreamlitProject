@@ -1499,10 +1499,10 @@ def main():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Sci-Fi Hero Header - ENGINEER Lab
+    # Premium Hero Header
     render_scifi_hero_header(
-        title="ENGINEER Lab",
-        subtitle="Feature synthesis and engineering matrix. Build predictive signals with temporal and cyclical patterns.",
+        title="Feature Studio",
+        subtitle="Create temporal and cyclical features. Build predictive signals with lag features and rolling statistics.",
         status="SYSTEM ONLINE"
     )
     page_feature_engineering()

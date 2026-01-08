@@ -93,11 +93,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# HERO SECTION - GENESIS Portal (Sci-Fi Theme)
+# HERO SECTION - Premium Header
 # ============================================================================
 render_scifi_hero_header(
-    title="GENESIS Portal",
-    subtitle="Your gateway to predictive healthcare intelligence. Initialize your mission and transform hospital operations with AI-powered forecasting.",
+    title="HealthForecast AI",
+    subtitle="Enterprise Healthcare Intelligence Platform. Transform hospital operations with AI-powered forecasting and optimization.",
     status="SYSTEM ONLINE"
 )
 

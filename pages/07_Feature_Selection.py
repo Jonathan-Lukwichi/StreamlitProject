@@ -684,10 +684,10 @@ def _pick_target(df: pd.DataFrame) -> List[str]:
 
 # ---------- Page ----------
 def page_feature_selection():
-    # Sci-Fi Hero Header - TARGET System
+    # Premium Hero Header
     render_scifi_hero_header(
-        title="TARGET System",
-        subtitle="Precision feature targeting. Optimize signal-to-noise ratio with advanced selection algorithms.",
+        title="Feature Selection",
+        subtitle="Select the most impactful features. Optimize model performance with advanced selection algorithms.",
         status="SYSTEM ONLINE"
     )
 

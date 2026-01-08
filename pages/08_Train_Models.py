@@ -256,11 +256,11 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Sci-Fi Hero Header - NEURAL Core
+# Premium Hero Header
 # -----------------------------------------------------------------------------
 render_scifi_hero_header(
-    title="NEURAL Core",
-    subtitle="Machine learning training protocols. XGBoost, LSTM, and ANN neural network systems.",
+    title="Train Models",
+    subtitle="Configure and train machine learning models. XGBoost, LSTM, ANN, and hybrid architectures.",
     status="SYSTEM ONLINE"
 )
 

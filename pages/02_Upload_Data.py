@@ -377,10 +377,10 @@ def page_data_hub():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Sci-Fi Hero Header - DATA Uplink
+    # Premium Hero Header
     render_scifi_hero_header(
-        title="DATA Uplink",
-        subtitle="Establish data connection. Upload mission-critical datasets for patient, weather, and calendar intelligence.",
+        title="Upload Data",
+        subtitle="Upload and manage your patient, weather, and calendar data for comprehensive healthcare forecasting.",
         status="SYSTEM ONLINE"
     )
 
