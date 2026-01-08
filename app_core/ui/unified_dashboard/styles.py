@@ -1193,6 +1193,269 @@ SYSTEM_HEALTH_CSS = """
 }
 """
 
+# =============================================================================
+# SCI-FI EFFECTS CSS - HORIZON CONTROL
+# =============================================================================
+
+SCIFI_EFFECTS_CSS = """
+/* ========================================
+   HORIZON CONTROL - SCI-FI EFFECTS
+   ======================================== */
+
+/* Holographic Scan Lines */
+.scan-lines {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(34, 211, 238, 0.02) 2px,
+        rgba(34, 211, 238, 0.02) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+    animation: scan-move 10s linear infinite;
+}
+
+@keyframes scan-move {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(100px); }
+}
+
+/* Data Stream Effects */
+.data-stream {
+    position: fixed;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.3;
+}
+
+.data-stream-1 {
+    right: 50px;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(34, 211, 238, 0.8) 50%,
+        transparent 100%
+    );
+    animation: data-flow-1 4s ease-in-out infinite;
+}
+
+.data-stream-2 {
+    right: 100px;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(59, 130, 246, 0.6) 50%,
+        transparent 100%
+    );
+    animation: data-flow-2 5s ease-in-out infinite;
+    animation-delay: 1s;
+}
+
+.data-stream-3 {
+    left: 50px;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(34, 197, 94, 0.5) 50%,
+        transparent 100%
+    );
+    animation: data-flow-1 6s ease-in-out infinite;
+    animation-delay: 2s;
+}
+
+@keyframes data-flow-1 {
+    0%, 100% { transform: translateY(-100%); opacity: 0; }
+    50% { transform: translateY(100%); opacity: 0.4; }
+}
+
+@keyframes data-flow-2 {
+    0%, 100% { transform: translateY(100%); opacity: 0; }
+    50% { transform: translateY(-100%); opacity: 0.3; }
+}
+
+/* Holographic Grid Background */
+.holo-grid {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        linear-gradient(rgba(34, 211, 238, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34, 211, 238, 0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Targeting Reticle Animation */
+@keyframes target-lock {
+    0% { transform: scale(1.2); opacity: 0; }
+    50% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+.target-acquired {
+    position: relative;
+}
+
+.target-acquired::before {
+    content: '[ ]';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 0.65rem;
+    font-family: 'Courier New', monospace;
+    color: #22d3ee;
+    animation: target-lock 2s ease-in-out infinite;
+    text-shadow: 0 0 5px rgba(34, 211, 238, 0.8);
+}
+
+/* Cybernetic Text Effect */
+.cyber-text {
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #22d3ee;
+    text-shadow:
+        0 0 5px rgba(34, 211, 238, 0.8),
+        0 0 10px rgba(34, 211, 238, 0.5),
+        0 0 20px rgba(34, 211, 238, 0.3);
+}
+
+/* Status Indicator Blinking */
+@keyframes status-blink {
+    0%, 50%, 100% { opacity: 1; }
+    25%, 75% { opacity: 0.5; }
+}
+
+.status-online {
+    color: #22c55e;
+    animation: status-blink 2s ease-in-out infinite;
+}
+
+.status-online::before {
+    content: '●';
+    margin-right: 0.5rem;
+}
+
+/* Corner Brackets Effect */
+.corner-brackets {
+    position: relative;
+}
+
+.corner-brackets::before,
+.corner-brackets::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: rgba(34, 211, 238, 0.5);
+    border-style: solid;
+}
+
+.corner-brackets::before {
+    top: 0;
+    left: 0;
+    border-width: 2px 0 0 2px;
+}
+
+.corner-brackets::after {
+    bottom: 0;
+    right: 0;
+    border-width: 0 2px 2px 0;
+}
+
+/* Mission Navigation Buttons */
+.mission-nav-container {
+    background: linear-gradient(135deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(6, 78, 145, 0.1) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.3);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-top: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.mission-nav-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #22d3ee, transparent);
+}
+
+.mission-title {
+    text-align: center;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: #22d3ee;
+    margin-bottom: 1.5rem;
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+}
+
+.mission-category {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #94a3b8;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hexagon Pattern Overlay */
+.hex-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2322d3ee' fill-opacity='0.02'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+}
+
+/* Glitch Effect for Hero Title (subtle) */
+@keyframes glitch {
+    0%, 90%, 100% {
+        transform: translate(0);
+    }
+    92% {
+        transform: translate(-2px, 1px);
+    }
+    94% {
+        transform: translate(2px, -1px);
+    }
+    96% {
+        transform: translate(-1px, 2px);
+    }
+    98% {
+        transform: translate(1px, -2px);
+    }
+}
+
+.hero-title-glitch {
+    animation: glitch 10s ease-in-out infinite;
+}
+"""
+
 RESPONSIVE_CSS = """
 /* ========================================
    RESPONSIVE DESIGN
@@ -1278,6 +1541,7 @@ def get_unified_dashboard_styles() -> str:
 {FLUORESCENT_TABS_CSS}
 {ENHANCED_KPI_CSS}
 {SYSTEM_HEALTH_CSS}
+{SCIFI_EFFECTS_CSS}
 {RESPONSIVE_CSS}
 
 /* Stagger Animation Helper */

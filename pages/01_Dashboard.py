@@ -1,9 +1,9 @@
 # =============================================================================
-# 01_Dashboard.py - Premium Command Center (Unified Dashboard)
+# 01_Dashboard.py - HORIZON Control (Unified Command Center)
 # Consolidates: Dashboard, Patient Forecast, Staff Planner, Supply Planner, Action Center
 # =============================================================================
 """
-Premium Command Center - Ultimate Unified Dashboard
+HORIZON Control - Advanced Predictive Intelligence Hub
 
 This page consolidates 5 operational pages into a single, stunning, interactive dashboard:
 - Executive Summary (Command Center tab)
@@ -39,8 +39,8 @@ configure_sidebar_navigation()
 # PAGE CONFIG
 # =============================================================================
 st.set_page_config(
-    page_title="Command Center - HealthForecast AI",
-    page_icon="🎯",
+    page_title="HORIZON Control - HealthForecast AI",
+    page_icon="🛸",
     layout="wide",
 )
 
@@ -167,16 +167,35 @@ st.markdown("""
 
 
 # =============================================================================
-# STUNNING HERO HEADER - DASHBOARD OVERVIEW
+# SCI-FI EFFECTS - HORIZON CONTROL
 # =============================================================================
 st.markdown("""
-<div class="dashboard-hero">
+<!-- Holographic Grid -->
+<div class="holo-grid"></div>
+
+<!-- Data Streams -->
+<div class="data-stream data-stream-1"></div>
+<div class="data-stream data-stream-2"></div>
+<div class="data-stream data-stream-3"></div>
+
+<!-- Scan Lines Overlay -->
+<div class="scan-lines"></div>
+""", unsafe_allow_html=True)
+
+
+# =============================================================================
+# STUNNING HERO HEADER - HORIZON CONTROL
+# =============================================================================
+st.markdown("""
+<div class="dashboard-hero corner-brackets">
     <div class="hero-content">
-        <div class="hero-eyebrow">HealthForecast AI</div>
-        <h1 class="hero-title">Dashboard Overview</h1>
+        <div class="hero-eyebrow">
+            <span class="status-online">SYSTEM ONLINE</span> · HealthForecast AI
+        </div>
+        <h1 class="hero-title hero-title-glitch">HORIZON Control</h1>
         <p class="hero-subtitle">
-            Your unified command center for hospital operations. Monitor forecasts,
-            optimize staffing, manage inventory, and take action—all in one place.
+            Advanced predictive intelligence hub. Real-time monitoring,
+            autonomous optimization, and mission-critical insights.
         </p>
     </div>
     <div class="hero-glow-line"></div>
@@ -667,3 +686,53 @@ with st.sidebar:
     # Last refresh
     if state.last_refresh:
         st.caption(f"Last refresh: {state.last_refresh.strftime('%H:%M:%S')}")
+
+
+# =============================================================================
+# HORIZON CONTROL - MISSION NAVIGATION
+# =============================================================================
+st.markdown("---")
+st.markdown("""
+<div class="mission-nav-container">
+    <div class="mission-title">▸ MISSION NAVIGATION ◂</div>
+</div>
+""", unsafe_allow_html=True)
+
+# Navigation grid - 3 columns of page links
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown('<div class="mission-category">📥 Data Acquisition</div>', unsafe_allow_html=True)
+    if st.button("📁 Upload Data", key="nav_upload", use_container_width=True):
+        st.switch_page("pages/02_Upload_Data.py")
+    if st.button("🔧 Prepare Data", key="nav_prepare", use_container_width=True):
+        st.switch_page("pages/03_Prepare_Data.py")
+    if st.button("🔍 Explore Data", key="nav_explore", use_container_width=True):
+        st.switch_page("pages/04_Explore_Data.py")
+
+with col2:
+    st.markdown('<div class="mission-category">🧠 Model Training</div>', unsafe_allow_html=True)
+    if st.button("📈 Baseline Models", key="nav_baseline", use_container_width=True):
+        st.switch_page("pages/05_Baseline_Models.py")
+    if st.button("🛠️ Feature Studio", key="nav_features", use_container_width=True):
+        st.switch_page("pages/06_Feature_Studio.py")
+    if st.button("🎯 Feature Selection", key="nav_selection", use_container_width=True):
+        st.switch_page("pages/07_Feature_Selection.py")
+
+with col3:
+    st.markdown('<div class="mission-category">🚀 Results & Analysis</div>', unsafe_allow_html=True)
+    if st.button("🧠 Train Models", key="nav_train", use_container_width=True):
+        st.switch_page("pages/08_Train_Models.py")
+    if st.button("📊 Model Results", key="nav_results", use_container_width=True):
+        st.switch_page("pages/09_Model_Results.py")
+    if st.button("🏠 Home Base", key="nav_home", use_container_width=True):
+        st.switch_page("Welcome.py")
+
+# Footer
+st.markdown("""
+<div style="text-align: center; margin-top: 2rem; padding: 1rem;">
+    <div class="cyber-text" style="font-size: 0.7rem; opacity: 0.6;">
+        HORIZON CONTROL v2.0 · PREDICTIVE INTELLIGENCE SYSTEM
+    </div>
+</div>
+""", unsafe_allow_html=True)
