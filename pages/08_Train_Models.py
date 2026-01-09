@@ -676,6 +676,7 @@ def _create_kpi_indicator(title: str, value, suffix: str = "", color: str = PRIM
         value=display_val,
         number={
             "suffix": suffix,
+            "valueformat": ".2f",  # Prevent SI suffix auto-formatting (K, M, B)
             "font": {
                 "size": 26,
                 "color": number_color,
