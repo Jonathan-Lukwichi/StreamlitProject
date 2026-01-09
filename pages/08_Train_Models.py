@@ -3654,12 +3654,32 @@ def page_hyperparameter_tuning():
     st.subheader("🔄 Cross-Validation Strategy")
 
     # Check for CV config from Feature Studio
-    cv_config_from_studio = st.session_state.get("cv_config", {})
-    if cv_config_from_studio.get("enabled", False):
+    # Handle both CVConfig dataclass and dict formats
+    cv_config_from_studio = st.session_state.get("cv_config")
+    cv_enabled = st.session_state.get("cv_enabled", False)
+
+    # Extract CV parameters safely (works for dataclass or dict)
+    if cv_config_from_studio is not None:
+        if hasattr(cv_config_from_studio, 'n_splits'):
+            # It's a CVConfig dataclass
+            cv_n_splits = getattr(cv_config_from_studio, 'n_splits', 5)
+            cv_gap_val = getattr(cv_config_from_studio, 'gap', 0)
+        elif isinstance(cv_config_from_studio, dict):
+            # It's a dict
+            cv_n_splits = cv_config_from_studio.get('n_splits', cv_config_from_studio.get('n_folds', 5))
+            cv_gap_val = cv_config_from_studio.get('gap', 0)
+        else:
+            cv_n_splits = 5
+            cv_gap_val = 0
+    else:
+        cv_n_splits = 5
+        cv_gap_val = 0
+
+    if cv_enabled and cv_config_from_studio is not None:
         st.info(
             f"💡 **CV Config Detected from Feature Studio:**\n"
-            f"- Folds: {cv_config_from_studio.get('n_folds', 5)}\n"
-            f"- Gap: {cv_config_from_studio.get('gap', 0)} days"
+            f"- Folds: {cv_n_splits}\n"
+            f"- Gap: {cv_gap_val} days"
         )
 
     col1, col2, col3 = st.columns(3)
@@ -3669,7 +3689,7 @@ def page_hyperparameter_tuning():
             "Number of CV Folds",
             min_value=3,
             max_value=10,
-            value=cv_config_from_studio.get("n_folds", cfg.get("tuning_cv_splits", 5)),
+            value=cv_n_splits if cv_enabled else cfg.get("tuning_cv_splits", 5),
             help="TimeSeriesSplit folds - more folds = more robust but slower"
         )
         cfg["tuning_cv_splits"] = n_splits
@@ -3679,7 +3699,7 @@ def page_hyperparameter_tuning():
             "Gap Between Train/Val (days)",
             min_value=0,
             max_value=14,
-            value=cv_config_from_studio.get("gap", cfg.get("tuning_cv_gap", 0)),
+            value=cv_gap_val if cv_enabled else cfg.get("tuning_cv_gap", 0),
             help="Number of samples to skip between train and validation sets. "
                  "Helps prevent autocorrelation leakage. Recommended: 0-7 for daily data."
         )
