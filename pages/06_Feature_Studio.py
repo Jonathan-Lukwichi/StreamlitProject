@@ -82,6 +82,27 @@ st.set_page_config(
 )
 
 # === HELPERS ==================================================================
+
+def render_tab_header(title: str, icon: str = ""):
+    """Render a tab title in a blue fluorescent card style."""
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, rgba(6, 78, 145, 0.25) 0%, rgba(15, 23, 42, 0.9) 100%);
+        border: 1px solid rgba(34, 211, 238, 0.3);
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+    ">
+        <h4 style="
+            margin: 0;
+            color: #22d3ee;
+            font-weight: 700;
+            font-size: 1.25rem;
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
+        ">{icon} {title}</h4>
+    </div>
+    """, unsafe_allow_html=True)
+
 DATE_PREFS = ["datetime", "Date", "date", "timestamp", "ds", "time"]
 HOLIDAY_PREFS = ["is_holiday","Is_holiday","Holiday","holiday","IsHoliday"]
 
@@ -655,7 +676,7 @@ def page_feature_engineering():
     ])
 
     with tab_split:
-        st.markdown("#### Configure Train/Test Split")
+        render_tab_header("Configure Train/Test Split", "📊")
 
         st.info("""
         **Data Leakage Prevention:** Scalers and encoders are fitted on training data ONLY,
@@ -698,7 +719,7 @@ def page_feature_engineering():
     # Academic Reference: Bergmeir & Benítez (2012)
     # =========================================================================
     with tab_cv:
-        st.markdown("#### Time Series Cross-Validation")
+        render_tab_header("Time Series Cross-Validation", "🔄")
 
         st.info("""
         **Why Time Series CV?** Standard k-fold CV randomly shuffles data, which causes
@@ -823,13 +844,11 @@ def page_feature_engineering():
     # Academic Reference: Dickey & Fuller (1979), Box & Jenkins (1976)
     # =========================================================================
     with tab_stationarity:
-        st.markdown("#### Stationarity & Differencing")
+        render_tab_header("Stationarity & Differencing", "📈")
 
         st.info("""
         **Why Differencing?** Many time series models (ARIMA, regression) assume stationarity.
         Differencing removes trends and makes the series stationary by computing: y'(t) = y(t) - y(t-1).
-
-        *Reference: Dickey & Fuller (1979) - Unit Root Tests, Box & Jenkins (1976)*
         """)
 
         # Get stationarity status from EDA page
@@ -994,14 +1013,12 @@ def page_feature_engineering():
     # Academic Reference: Box et al. (2015), Harvey (1989)
     # =========================================================================
     with tab_fourier:
-        st.markdown("#### Fourier Features from FFT Analysis")
+        render_tab_header("Fourier Features from FFT Analysis", "🌊")
 
         st.info("""
         **Why Fourier Features?** Fourier terms (sine/cosine pairs) capture periodic patterns
         in time series data. They are especially effective for capturing seasonality that doesn't
         align with calendar units (e.g., business cycles, bi-weekly patterns).
-
-        *Reference: Box, Jenkins, Reinsel & Ljung (2015) - Time Series Analysis*
         """)
 
         # Check for FFT data from EDA page
@@ -1152,7 +1169,7 @@ def page_feature_engineering():
         }
 
     with tab_options:
-        st.markdown("#### Feature Engineering Options")
+        render_tab_header("Feature Engineering Options", "🧪")
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -1164,7 +1181,7 @@ def page_feature_engineering():
                                             help="Save scalers/encoders for production inference")
 
     with tab_generate:
-        st.markdown("#### Generate Dataset")
+        render_tab_header("Generate Dataset", "🚀")
 
         run = st.button("🚀 Generate Dataset", type="primary")
         if not run:
