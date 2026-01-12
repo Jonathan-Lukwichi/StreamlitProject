@@ -47,10 +47,8 @@ PAGE_STORAGE_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "Feature Studio": {
         "keys": [
-            "feature_engineering", "engineered_features", "lag_features",
-            "target_features", "feature_config", "ed_features",
-            "fe_cfg", "X_engineered", "y_engineered", "feature_names",
-            "train_idx", "cal_idx", "test_idx", "temporal_split", "split_result"
+            "feature_engineering", "cv_config", "cv_enabled", "cv_folds",
+            "differencing_config", "fourier_config"
         ],
         "description": "Engineered features (ED_1...ED_7, Target_1...Target_7)",
         "icon": "🛠️"
