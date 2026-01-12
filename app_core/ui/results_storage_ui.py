@@ -56,11 +56,7 @@ PAGE_STORAGE_CONFIG: Dict[str, Dict[str, Any]] = {
         "icon": "🛠️"
     },
     "Feature Selection": {
-        "keys": [
-            "selected_features", "feature_importance", "selection_report",
-            "feature_rankings", "selection_config", "fs_results", "fs_selected_features",
-            "feature_selection"
-        ],
+        "keys": ["feature_selection"],
         "description": "Selected features and importance analysis",
         "icon": "🎯"
     },
