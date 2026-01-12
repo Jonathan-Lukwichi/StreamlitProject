@@ -4,9 +4,9 @@
       "command": "npx",
       "args": [
         "-y",
-        "@bytebase/dbhub",
-        "--dsn",
-        "postgresql://postgres:jor2xGy7L7VUZP65@db.dxnmuhbveqiihdqsiebs.supabase.co:5432/postgres?sslmode=require"
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "PASTE_YOUR_ACCESS_TOKEN_HERE"
       ]
     }
   }
