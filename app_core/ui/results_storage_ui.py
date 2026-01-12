@@ -60,10 +60,11 @@ PAGE_STORAGE_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "Train Models": {
         "keys": [
-            "ml_mh_results", "xgboost_results", "lstm_results", "ann_results",
-            "hybrid_results", "tuning_results", "model_comparison",
-            "training_history", "best_model_config", "multi_target_results",
-            "forecast_results", "cqr_results"
+            "ml_mh_results", "modeling_config", "seasonal_proportions_config",
+            "ml_all_models_trained", "opt_all_models_results", "opt_last_model",
+            "opt_last_method", "opt_last_mode", "hybrid_pipeline_results",
+            "ensemble_results", "decomposition_results", "stacking_results",
+            "lstm_sarimax_results", "lstm_xgb_results", "lstm_ann_results"
         ],
         "description": "ML model training results (XGBoost, LSTM, ANN, Hybrids)",
         "icon": "🤖"
