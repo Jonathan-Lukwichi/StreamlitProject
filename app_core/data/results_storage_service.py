@@ -230,8 +230,15 @@ class ResultsStorageService:
     def _get_user_id(self) -> str:
         """
         Get current user ID.
-        Uses session-based ID for this app (not Supabase Auth).
+        Uses authenticated username for persistence across sessions.
+        Falls back to session-based ID if not authenticated.
         """
+        # First try to get the authenticated username
+        username = st.session_state.get("username")
+        if username:
+            return f"user_{username}"
+
+        # Fallback to session-based ID (not persistent across sessions)
         if "user_session_id" not in st.session_state:
             import uuid
             st.session_state["user_session_id"] = str(uuid.uuid4())[:12]
