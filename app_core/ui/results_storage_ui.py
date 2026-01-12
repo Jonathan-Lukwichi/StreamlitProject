@@ -36,8 +36,11 @@ PAGE_STORAGE_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "Baseline Models": {
         "keys": [
-            "arima_results", "sarimax_results", "seasonal_proportion_results",
-            "baseline_config", "baseline_metrics", "baseline_forecasts", "backtest_results"
+            "arima_results", "sarimax_results", "arima_mh_results", "sarimax_mh_results",
+            "arima_multi_target_results", "sarimax_multi_target_results",
+            "seasonal_proportions_result", "seasonal_proportions_config",
+            "model_comparison", "selected_model", "arima_order", "sarimax_order",
+            "sarimax_seasonal_order", "sarimax_features", "sarimax_horizons"
         ],
         "description": "ARIMA/SARIMAX model results and seasonal proportions",
         "icon": "📊"
