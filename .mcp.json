@@ -6,7 +6,7 @@
         "-y",
         "@bytebase/dbhub",
         "--dsn",
-        "postgresql://postgres.dxnmuhbveqiihdqsiebs:jor2xGy7L7VUZP65@aws-1-eu-west-3.pooler.supabase.com:6543/postgres?sslmode=require"
+        "postgresql://postgres:jor2xGy7L7VUZP65@db.dxnmuhbveqiihdqsiebs.supabase.co:5432/postgres?sslmode=require"
       ]
     }
   }
