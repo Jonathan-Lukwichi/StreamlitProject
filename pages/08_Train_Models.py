@@ -82,13 +82,12 @@ render_cache_management()
 
 # Results Storage Panel (Supabase persistence)
 render_results_storage_panel(
-    page_type="modeling_hub",
-    page_title="Train Models",
+    page_key="Train Models",
     custom_keys=["ml_model_results", "benchmark_results", "hybrid_results"],
 )
 
 # Auto-load saved results if available
-auto_load_if_available("modeling_hub")
+auto_load_if_available("Train Models")
 
 # Fluorescent effects + Custom Tab Styling
 st.markdown(f"""
