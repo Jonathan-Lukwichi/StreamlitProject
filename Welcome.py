@@ -6,6 +6,7 @@ from app_core.ui.components import render_scifi_hero_header
 from app_core.auth.authentication import initialize_session_state
 from app_core.auth.navigation import configure_sidebar_navigation
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.results_storage_ui import render_pipeline_status_dashboard
 
 # ============================================================================
 # PAGE CONFIGURATION
