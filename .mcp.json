@@ -4,7 +4,7 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-postgres"],
       "env": {
-        "DATABASE_URL": "postgresql://postgres.dxnmuhbveqiihdqsiebs:jor2xGy7L7VUZP65@aws-0-eu-west-2.pooler.supabase.com:6543/postgres"
+        "DATABASE_URL": "postgresql://postgres.dxnmuhbveqiihdqsiebs:jor2xGy7L7VUZP65@aws-1-eu-west-3.pooler.supabase.com:6543/postgres"
       }
     }
   }
