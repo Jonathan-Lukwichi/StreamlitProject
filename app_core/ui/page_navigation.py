@@ -102,7 +102,8 @@ def render_page_navigation(current_page_index: int):
     Render navigation buttons for the current page.
 
     Args:
-        current_page_index: 0-based index of the current page (0 = Dashboard, 12 = Action Center)
+        current_page_index: 0-based index of the current page (0 = Dashboard, 8 = Model Results)
+                           For legacy pages (index >= len(PAGES)), shows Home/HORIZON only.
     """
     # Inject CSS
     st.markdown(get_navigation_css(), unsafe_allow_html=True)
@@ -117,12 +118,20 @@ def render_page_navigation(current_page_index: int):
     # Remove the container div and use columns directly
     st.markdown("<div style='margin-top: -1rem;'></div>", unsafe_allow_html=True)
 
+    # Handle out-of-range indices (legacy _old_ pages)
+    is_legacy_page = current_page_index >= len(PAGES)
+
     # Create button columns
     col1, col2, col3, col4 = st.columns(4)
 
     # Previous button
     with col1:
-        if current_page_index > 0:
+        if is_legacy_page:
+            # Legacy pages: go to last main page
+            last_page = PAGES[-1]
+            if st.button(f"◀ {last_page['name']}", key="nav_prev", use_container_width=True):
+                st.switch_page(last_page["file"])
+        elif current_page_index > 0:
             prev_page = PAGES[current_page_index - 1]
             if st.button(f"◀ {prev_page['name']}", key="nav_prev", use_container_width=True):
                 st.switch_page(prev_page["file"])
@@ -144,7 +153,10 @@ def render_page_navigation(current_page_index: int):
 
     # Next button
     with col4:
-        if current_page_index < len(PAGES) - 1:
+        if is_legacy_page:
+            # Legacy pages: no next, show disabled
+            st.button("Next ▶", key="nav_next_disabled", use_container_width=True, disabled=True)
+        elif current_page_index < len(PAGES) - 1:
             next_page = PAGES[current_page_index + 1]
             if st.button(f"{next_page['name']} ▶", key="nav_next", use_container_width=True):
                 st.switch_page(next_page["file"])
