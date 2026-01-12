@@ -284,6 +284,12 @@ def page_data_hub():
     render_sidebar_brand()
     add_logout_button()
 
+    # Auto-load saved results from cloud storage
+    auto_load_if_available("Upload Data")
+
+    # Cloud storage panel in sidebar
+    render_results_storage_panel(page_key="Upload Data")
+
     # Apply fluorescent effects
     st.markdown("""
     <style>
