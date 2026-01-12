@@ -1,251 +1,393 @@
 # =============================================================================
 # app_core/ui/results_storage_ui.py
-# Reusable UI Component for Results Storage
-# Provides load/save/clear functionality for each page
+# UI components for saving/loading HealthForecast AI pipeline results.
+# Provides buttons, auto-load functionality, and pipeline status dashboard.
+# Based on memory1.md implementation guide.
 # =============================================================================
 
 import streamlit as st
-from typing import Optional, List, Callable
 from datetime import datetime
+from typing import List, Optional, Dict, Any
 
-from app_core.data.results_storage_service import (
-    get_results_storage,
-    compute_current_dataset_hash,
-)
+from app_core.data.results_storage_service import get_storage_service
+
+
+# =====================================================
+# PAGE STORAGE CONFIGURATION
+# Define which session_state keys to persist for each page
+# =====================================================
+
+PAGE_STORAGE_CONFIG: Dict[str, Dict[str, Any]] = {
+    "Upload Data": {
+        "keys": ["uploaded_data", "raw_dataframe", "upload_metadata", "file_info"],
+        "description": "Raw uploaded data files",
+        "icon": "📤"
+    },
+    "Prepare Data": {
+        "keys": ["prepared_data", "fused_data", "cleaning_report", "preparation_config",
+                 "merged_data", "processed_df", "data_summary", "target_columns", "date_column"],
+        "description": "Cleaned and fused datasets",
+        "icon": "🔧"
+    },
+    "Explore Data": {
+        "keys": ["eda_results", "data_quality_report", "visualization_config", "statistical_summary"],
+        "description": "EDA analysis results",
+        "icon": "🔍"
+    },
+    "Baseline Models": {
+        "keys": [
+            "arima_results", "sarimax_results", "seasonal_proportion_results",
+            "baseline_config", "baseline_metrics", "baseline_forecasts", "backtest_results"
+        ],
+        "description": "ARIMA/SARIMAX model results and seasonal proportions",
+        "icon": "📊"
+    },
+    "Feature Studio": {
+        "keys": [
+            "feature_engineering", "engineered_features", "lag_features",
+            "target_features", "feature_config", "ed_features",
+            "fe_cfg", "X_engineered", "y_engineered", "feature_names",
+            "train_idx", "cal_idx", "test_idx", "temporal_split", "split_result"
+        ],
+        "description": "Engineered features (ED_1...ED_7, Target_1...Target_7)",
+        "icon": "🛠️"
+    },
+    "Feature Selection": {
+        "keys": [
+            "selected_features", "feature_importance", "selection_report",
+            "feature_rankings", "selection_config", "fs_results", "fs_selected_features",
+            "feature_selection"
+        ],
+        "description": "Selected features and importance analysis",
+        "icon": "🎯"
+    },
+    "Train Models": {
+        "keys": [
+            "ml_mh_results", "xgboost_results", "lstm_results", "ann_results",
+            "hybrid_results", "tuning_results", "model_comparison",
+            "training_history", "best_model_config", "multi_target_results",
+            "forecast_results", "cqr_results"
+        ],
+        "description": "ML model training results (XGBoost, LSTM, ANN, Hybrids)",
+        "icon": "🤖"
+    },
+    "Model Results": {
+        "keys": ["comparison_results", "metrics_summary", "model_rankings"],
+        "description": "Model comparison and performance metrics",
+        "icon": "📈"
+    },
+    "Patient Forecast": {
+        "keys": [
+            "forecast_results", "category_forecasts", "prediction_intervals",
+            "forecast_config", "forecast_summary"
+        ],
+        "description": "7-day patient forecasts by category",
+        "icon": "🏥"
+    },
+    "Staff Planner": {
+        "keys": [
+            "staff_optimization_results", "schedule_output", "staff_config",
+            "shift_assignments", "staff_costs"
+        ],
+        "description": "Staff scheduling optimization results",
+        "icon": "👥"
+    },
+    "Supply Planner": {
+        "keys": [
+            "inventory_optimization_results", "reorder_schedule",
+            "inventory_config", "supply_costs"
+        ],
+        "description": "Inventory optimization results",
+        "icon": "📦"
+    },
+    "Action Center": {
+        "keys": ["recommendations", "action_items", "ai_insights"],
+        "description": "AI-powered recommendations",
+        "icon": "🎬"
+    }
+}
 
 
 def render_results_storage_panel(
-    page_type: str,
-    page_title: str,
+    page_key: str,
     custom_keys: Optional[List[str]] = None,
-    on_load_callback: Optional[Callable] = None,
-    show_in_expander: bool = True,
-) -> None:
+    show_in_sidebar: bool = True
+):
     """
-    Render the results storage panel for a page.
-
-    This component provides:
-    - Save current results to Supabase
-    - Load previous results from Supabase
-    - Clear saved results
+    Render save/load/delete buttons for pipeline results.
 
     Args:
-        page_type: One of 'data_preparation', 'feature_engineering',
-                   'feature_selection', 'modeling_hub', 'benchmarks'
-        page_title: Display name for the page (e.g., "Data Preparation")
-        custom_keys: Additional session state keys to save/load
-        on_load_callback: Optional callback to run after loading results
-        show_in_expander: Whether to wrap in an expander (default: True)
+        page_key: Must match a key in PAGE_STORAGE_CONFIG
+        custom_keys: Override default keys for this page
+        show_in_sidebar: If True, render in sidebar; else in main area
     """
-    storage = get_results_storage()
+    config = PAGE_STORAGE_CONFIG.get(page_key, {})
+    keys_to_save = custom_keys or config.get("keys", [])
+    description = config.get("description", "Pipeline results")
+    icon = config.get("icon", "💾")
 
-    if not storage.is_connected():
-        st.info("💾 Connect to Supabase to enable results persistence.")
+    container = st.sidebar if show_in_sidebar else st
+
+    with container.expander(f"{icon} Cloud Storage", expanded=False):
+        st.caption(description)
+
+        col1, col2 = st.columns(2)
+
+        # === SAVE BUTTON ===
+        with col1:
+            if st.button("⬆️ Save", key=f"save_btn_{page_key}", use_container_width=True):
+                _execute_save(page_key, keys_to_save)
+
+        # === LOAD BUTTON ===
+        with col2:
+            if st.button("⬇️ Load", key=f"load_btn_{page_key}", use_container_width=True):
+                _execute_load(page_key, keys_to_save)
+
+        # === DELETE BUTTON ===
+        if st.button("🗑️ Clear Saved", key=f"delete_btn_{page_key}", use_container_width=True):
+            _execute_delete(page_key)
+
+        # === SHOW STATUS ===
+        _show_storage_status(page_key)
+
+
+def _execute_save(page_key: str, keys: List[str]):
+    """Execute save operation for specified keys."""
+    try:
+        storage = get_storage_service()
+
+        if not storage.is_connected():
+            st.error("❌ Supabase not connected")
+            return
+
+        saved_count = 0
+        saved_items = []
+
+        with st.spinner("💾 Saving to cloud..."):
+            for key in keys:
+                if key in st.session_state and st.session_state[key] is not None:
+                    success, msg = storage.save_results(
+                        page_key=page_key,
+                        result_key=key,
+                        data=st.session_state[key],
+                        metadata={"source_session_key": key}
+                    )
+                    if success:
+                        saved_count += 1
+                        saved_items.append(key)
+
+        if saved_count > 0:
+            st.success(f"✅ Saved {saved_count} item(s): {', '.join(saved_items)}")
+            st.balloons()
+        else:
+            st.warning("⚠️ No data found to save. Run the pipeline first.")
+
+    except Exception as e:
+        st.error(f"❌ Save failed: {str(e)}")
+
+
+def _execute_load(page_key: str, keys: List[str]):
+    """Execute load operation for specified keys."""
+    try:
+        storage = get_storage_service()
+
+        if not storage.is_connected():
+            st.error("❌ Supabase not connected")
+            return
+
+        loaded_count = 0
+        loaded_items = []
+
+        with st.spinner("☁️ Loading from cloud..."):
+            for key in keys:
+                data = storage.load_results(page_key, key)
+                if data is not None:
+                    st.session_state[key] = data
+                    loaded_count += 1
+                    loaded_items.append(key)
+
+        if loaded_count > 0:
+            st.success(f"✅ Loaded {loaded_count} item(s): {', '.join(loaded_items)}")
+            st.rerun()
+        else:
+            st.info("ℹ️ No saved data found for this page.")
+
+    except Exception as e:
+        st.error(f"❌ Load failed: {str(e)}")
+
+
+def _execute_delete(page_key: str):
+    """Execute delete operation for a page."""
+    try:
+        storage = get_storage_service()
+
+        if not storage.is_connected():
+            st.error("❌ Supabase not connected")
+            return
+
+        storage.delete_all_for_page(page_key)
+        st.success("✅ Cleared saved data for this page")
+    except Exception as e:
+        st.error(f"❌ Delete failed: {str(e)}")
+
+
+def _show_storage_status(page_key: str):
+    """Display what's currently saved for this page."""
+    try:
+        storage = get_storage_service()
+
+        if not storage.is_connected():
+            st.caption("⚠️ Supabase not connected")
+            return
+
+        saved = storage.list_saved_results(page_key)
+
+        if saved:
+            st.caption(f"📦 Saved items ({len(saved)}):")
+            for item in saved:
+                result_key = item.get('result_key', 'unknown')
+                size_bytes = item.get('data_size_bytes', 0) or 0
+                size_kb = size_bytes / 1024
+                updated = item.get('updated_at', '')[:10] if item.get('updated_at') else ''
+                st.caption(f"  • {result_key} ({size_kb:.1f} KB) - {updated}")
+        else:
+            st.caption("📭 No saved data")
+    except Exception:
+        st.caption("⚠️ Could not check storage status")
+
+
+def auto_load_if_available(page_key: str, force_reload: bool = False):
+    """
+    Automatically load saved results when a page loads.
+
+    Call this at the TOP of each page, right after authentication check.
+    Only loads data if session_state is empty (won't overwrite existing data).
+
+    Args:
+        page_key: Must match a key in PAGE_STORAGE_CONFIG
+        force_reload: If True, reload even if data exists in session
+    """
+    # Flag to ensure we only run once per session per page
+    flag_key = f"__autoloaded_{page_key}"
+
+    if not force_reload and st.session_state.get(flag_key, False):
         return
 
-    dataset_hash = compute_current_dataset_hash()
+    config = PAGE_STORAGE_CONFIG.get(page_key, {})
+    keys = config.get("keys", [])
 
-    def _render_panel():
-        # Check for saved results
-        saved_info = storage.get_saved_info(page_type, dataset_hash)
-        has_saved = saved_info is not None
+    if not keys:
+        st.session_state[flag_key] = True
+        return
 
-        # Status indicator
-        if has_saved:
-            saved_at = saved_info.get("saved_at", "")
-            try:
-                # Parse and format the datetime
-                dt = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
-                formatted_time = dt.strftime("%Y-%m-%d %H:%M")
-            except:
-                formatted_time = saved_at[:16] if saved_at else "Unknown"
+    try:
+        storage = get_storage_service()
 
-            keys_count = len(saved_info.get("keys_saved", []))
-            st.success(f"✅ Saved results found ({keys_count} items, last saved: {formatted_time})")
-        else:
-            st.info("📭 No saved results for this dataset")
+        if not storage.is_connected():
+            st.session_state[flag_key] = True
+            return
 
-        # Action buttons
+        loaded_count = 0
+        loaded_items = []
+
+        for key in keys:
+            # Skip if data already exists in session (unless force_reload)
+            if not force_reload and key in st.session_state and st.session_state[key] is not None:
+                continue
+
+            data = storage.load_results(page_key, key)
+            if data is not None:
+                st.session_state[key] = data
+                loaded_count += 1
+                loaded_items.append(key)
+
+        if loaded_count > 0:
+            st.toast(f"☁️ Auto-loaded {loaded_count} saved result(s)", icon="✅")
+
+    except Exception as e:
+        # Fail silently - don't disrupt user experience
+        print(f"Auto-load failed for {page_key}: {e}")
+
+    finally:
+        st.session_state[flag_key] = True
+
+
+def render_pipeline_status_dashboard():
+    """
+    Render a visual dashboard showing pipeline progress and saved stages.
+    Useful for Welcome page or Dashboard.
+    """
+    st.subheader("📊 Pipeline Progress & Cloud Storage")
+
+    try:
+        storage = get_storage_service()
+
+        if not storage.is_connected():
+            st.warning("⚠️ Supabase not connected. Cloud storage unavailable.")
+            return
+
+        all_saved = storage.list_saved_results()
+        stats = storage.get_storage_stats()
+
+        # Group saved items by page
+        by_page = {}
+        for item in all_saved:
+            page = item['page_key']
+            if page not in by_page:
+                by_page[page] = []
+            by_page[page].append(item)
+
+        # Pipeline stages in order
+        pipeline_order = [
+            "Upload Data", "Prepare Data", "Explore Data",
+            "Baseline Models", "Feature Studio", "Feature Selection",
+            "Train Models", "Patient Forecast", "Staff Planner", "Supply Planner"
+        ]
+
+        # Display pipeline progress
+        st.markdown("**Pipeline Stages:**")
+
+        cols = st.columns(5)
+        for i, page in enumerate(pipeline_order):
+            config = PAGE_STORAGE_CONFIG.get(page, {})
+            icon = config.get("icon", "📄")
+
+            with cols[i % 5]:
+                if page in by_page:
+                    count = len(by_page[page])
+                    total_kb = sum((item.get('data_size_bytes', 0) or 0) for item in by_page[page]) / 1024
+                    st.success(f"{icon} **{page}**\n\n✅ {count} items ({total_kb:.0f} KB)")
+                else:
+                    st.warning(f"{icon} **{page}**\n\n⬜ Not saved")
+
+        # Storage summary
+        st.markdown("---")
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button(
-                "💾 Save Results",
-                key=f"save_{page_type}",
-                use_container_width=True,
-                type="primary",
-            ):
-                with st.spinner("Saving..."):
-                    success = storage.save_page_results(
-                        page_type=page_type,
-                        dataset_hash=dataset_hash,
-                        custom_keys=custom_keys,
-                    )
-                    if success:
-                        st.success("✅ Results saved successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to save results")
-
+            st.metric("Total Items", stats.get('total_items', 0))
         with col2:
-            if st.button(
-                "📥 Load Results",
-                key=f"load_{page_type}",
-                use_container_width=True,
-                disabled=not has_saved,
-            ):
-                with st.spinner("Loading..."):
-                    loaded = storage.load_page_results(
-                        page_type=page_type,
-                        dataset_hash=dataset_hash,
-                    )
-                    if loaded:
-                        count = storage.apply_loaded_results(loaded)
-                        st.success(f"✅ Loaded {count} items from saved results!")
-                        if on_load_callback:
-                            on_load_callback()
-                        st.rerun()
-                    else:
-                        st.warning("No results to load")
-
+            st.metric("Total Storage", f"{stats.get('total_mb', 0):.2f} MB")
         with col3:
-            if st.button(
-                "🗑️ Clear Saved",
-                key=f"clear_{page_type}",
-                use_container_width=True,
-                disabled=not has_saved,
-            ):
-                success = storage.clear_page_results(
-                    page_type=page_type,
-                    dataset_hash=dataset_hash,
-                )
-                if success:
-                    st.success("✅ Saved results cleared!")
-                    st.rerun()
+            st.metric("Saved Stages", f"{len(by_page)}/{len(pipeline_order)}")
 
-        # Show saved keys in a small detail section
-        if has_saved and saved_info:
-            keys_saved = saved_info.get("keys_saved", [])
-            if keys_saved:
-                with st.expander("📋 Saved items", expanded=False):
-                    st.write(", ".join(keys_saved))
+        # Clear all button
+        st.markdown("---")
+        if st.button("🗑️ Clear ALL Saved Data", type="secondary"):
+            if st.session_state.get("confirm_clear_all", False):
+                storage.delete_all_user_results()
+                st.success("✅ All saved data cleared")
+                st.session_state["confirm_clear_all"] = False
+                st.rerun()
+            else:
+                st.session_state["confirm_clear_all"] = True
+                st.warning("⚠️ Click again to confirm deletion of ALL saved data")
 
-    # Render in expander or directly
-    if show_in_expander:
-        with st.expander("💾 Results Storage (Supabase)", expanded=False):
-            _render_panel()
-    else:
-        _render_panel()
+    except Exception as e:
+        st.error(f"Could not load pipeline status: {e}")
 
 
-def render_global_storage_status() -> None:
-    """
-    Render a global status view of all saved results.
-    Useful for the sidebar or a settings page.
-    """
-    storage = get_results_storage()
-
-    if not storage.is_connected():
-        st.warning("Supabase not connected")
-        return
-
-    dataset_hash = compute_current_dataset_hash()
-    all_saved = storage.get_all_saved_pages(dataset_hash)
-
-    if not all_saved:
-        st.info("No saved results for current dataset")
-        return
-
-    st.write(f"**Saved Results** (Dataset: `{dataset_hash[:8]}...`)")
-
-    for item in all_saved:
-        page = item.get("page_type", "unknown")
-        saved_at = item.get("saved_at", "")
-        keys = item.get("keys_saved", [])
-
-        try:
-            dt = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
-            formatted_time = dt.strftime("%m/%d %H:%M")
-        except:
-            formatted_time = "?"
-
-        st.caption(f"• {page}: {len(keys)} items ({formatted_time})")
-
-    # Clear all button
-    if st.button("🗑️ Clear All Saved Results", key="clear_all_global"):
-        if storage.clear_all_results(dataset_hash):
-            st.success("All results cleared!")
-            st.rerun()
-
-
-def render_new_dataset_warning() -> bool:
-    """
-    Render a warning when a new dataset is detected with existing saved results.
-
-    Returns:
-        True if user wants to clear old results, False otherwise
-    """
-    storage = get_results_storage()
-
-    if not storage.is_connected():
-        return False
-
-    current_hash = compute_current_dataset_hash()
-    all_saved = storage.get_all_saved_pages()
-
-    # Check if there are results for different datasets
-    other_datasets = [
-        item for item in all_saved
-        if item.get("dataset_hash") != current_hash
-    ]
-
-    if other_datasets:
-        unique_hashes = set(item.get("dataset_hash") for item in other_datasets)
-        st.warning(
-            f"⚠️ Found saved results from {len(unique_hashes)} different dataset(s). "
-            "These won't be loaded for your current dataset."
-        )
-
-        if st.button("🗑️ Clear Old Dataset Results"):
-            for old_hash in unique_hashes:
-                storage.clear_all_results(old_hash)
-            st.success("Old results cleared!")
-            st.rerun()
-            return True
-
-    return False
-
-
-def auto_load_if_available(
-    page_type: str,
-    force_key: str = "auto_loaded",
-) -> bool:
-    """
-    Automatically load saved results if available and not already loaded.
-
-    Args:
-        page_type: The page type to check
-        force_key: Session state key to track if auto-load was done
-
-    Returns:
-        True if results were loaded, False otherwise
-    """
-    # Check if already auto-loaded this session
-    load_key = f"{force_key}_{page_type}"
-    if st.session_state.get(load_key):
-        return False
-
-    storage = get_results_storage()
-    if not storage.is_connected():
-        return False
-
-    dataset_hash = compute_current_dataset_hash()
-
-    if storage.has_saved_results(page_type, dataset_hash):
-        loaded = storage.load_page_results(page_type, dataset_hash)
-        if loaded:
-            storage.apply_loaded_results(loaded)
-            st.session_state[load_key] = True
-            return True
-
-    return False
+def get_page_storage_keys(page_key: str) -> List[str]:
+    """Get the list of session_state keys for a page."""
+    config = PAGE_STORAGE_CONFIG.get(page_key, {})
+    return config.get("keys", [])
