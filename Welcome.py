@@ -516,6 +516,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
+# PIPELINE STATUS DASHBOARD (for authenticated users)
+# ============================================================================
+if st.session_state.get("authenticated", False):
+    st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
+    st.markdown("---")
+    render_pipeline_status_dashboard()
+
+# ============================================================================
 # FOOTER - Fluorescent Styling
 # ============================================================================
 st.markdown("<div style='margin-top: 4rem;'></div>", unsafe_allow_html=True)
