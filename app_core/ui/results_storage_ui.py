@@ -165,25 +165,47 @@ def _execute_save(page_key: str, keys: List[str]):
 
         saved_count = 0
         saved_items = []
+        failed_items = []
+        skipped_items = []
 
         with st.spinner("💾 Saving to cloud..."):
             for key in keys:
                 if key in st.session_state and st.session_state[key] is not None:
-                    success, msg = storage.save_results(
-                        page_key=page_key,
-                        result_key=key,
-                        data=st.session_state[key],
-                        metadata={"source_session_key": key}
-                    )
-                    if success:
-                        saved_count += 1
-                        saved_items.append(key)
+                    try:
+                        success, msg = storage.save_results(
+                            page_key=page_key,
+                            result_key=key,
+                            data=st.session_state[key],
+                            metadata={"source_session_key": key}
+                        )
+                        if success:
+                            saved_count += 1
+                            saved_items.append(key)
+                        else:
+                            failed_items.append(f"{key}: {msg}")
+                    except Exception as save_err:
+                        failed_items.append(f"{key}: {str(save_err)[:50]}")
+                else:
+                    skipped_items.append(key)
 
+        # Show results
         if saved_count > 0:
             st.success(f"✅ Saved {saved_count} item(s): {', '.join(saved_items)}")
             st.balloons()
-        else:
-            st.warning("⚠️ No data found to save. Run the pipeline first.")
+
+        if failed_items:
+            st.error(f"❌ Failed to save {len(failed_items)} item(s):")
+            for item in failed_items[:3]:  # Show first 3 errors
+                st.caption(f"  • {item}")
+            if len(failed_items) > 3:
+                st.caption(f"  ... and {len(failed_items) - 3} more")
+
+        if saved_count == 0 and not failed_items:
+            available_keys = [k for k in keys if k in st.session_state and st.session_state[k] is not None]
+            if available_keys:
+                st.warning(f"⚠️ Found data but failed to save. Keys with data: {', '.join(available_keys)}")
+            else:
+                st.warning("⚠️ No data found to save. Run the pipeline first.")
 
     except Exception as e:
         st.error(f"❌ Save failed: {str(e)}")
