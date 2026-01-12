@@ -129,11 +129,21 @@ def render_results_storage_panel(
     with container.expander(f"{icon} Cloud Storage", expanded=False):
         st.caption(description)
 
+        # Show what data is available to save
+        available_keys = [k for k in keys_to_save if k in st.session_state and st.session_state[k] is not None]
+        if available_keys:
+            st.success(f"✅ Ready to save: {len(available_keys)} item(s)")
+            with st.expander("Show keys", expanded=False):
+                for k in available_keys:
+                    st.caption(f"  • {k}")
+        else:
+            st.warning("⚠️ No data to save yet")
+
         col1, col2 = st.columns(2)
 
         # === SAVE BUTTON ===
         with col1:
-            if st.button("⬆️ Save", key=f"save_btn_{page_key}", use_container_width=True):
+            if st.button("⬆️ Save", key=f"save_btn_{page_key}", use_container_width=True, disabled=len(available_keys) == 0):
                 _execute_save(page_key, keys_to_save)
 
         # === LOAD BUTTON ===
