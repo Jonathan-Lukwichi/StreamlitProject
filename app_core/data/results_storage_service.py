@@ -88,6 +88,36 @@ class NpEncoder(json.JSONEncoder):
         if isinstance(obj, bytes):
             return {"__type__": "bytes", "data": obj.decode('utf-8', errors='replace')}
 
+        # === Sklearn Models (non-serializable) ===
+        # Check for sklearn-like objects by module name
+        obj_module = getattr(type(obj), '__module__', '')
+        if 'sklearn' in obj_module:
+            return {
+                "__type__": "sklearn_model",
+                "class": type(obj).__name__,
+                "params": getattr(obj, 'get_params', lambda: {})()
+            }
+
+        # === Dataclasses ===
+        import dataclasses
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return {
+                "__type__": "dataclass",
+                "class": type(obj).__name__,
+                "data": dataclasses.asdict(obj)
+            }
+
+        # === Objects with __dict__ (custom classes) ===
+        if hasattr(obj, '__dict__') and not isinstance(obj, type):
+            try:
+                return {
+                    "__type__": "object",
+                    "class": type(obj).__name__,
+                    "data": obj.__dict__
+                }
+            except Exception:
+                pass
+
         # === Default ===
         try:
             return super().default(obj)
