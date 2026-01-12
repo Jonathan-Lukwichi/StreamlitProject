@@ -986,12 +986,11 @@ def main():
 
     # Results Storage Panel (Supabase persistence)
     render_results_storage_panel(
-        page_type="feature_selection",
-        page_title="Feature Selection",
+        page_key="Feature Selection",
     )
 
     # Auto-load saved results if available
-    auto_load_if_available("feature_selection")
+    auto_load_if_available("Feature Selection")
 
     # Fluorescent effects
     st.markdown("""
