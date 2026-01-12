@@ -753,13 +753,12 @@ def page_data_preparation_studio():
 
     # Results Storage Panel (Supabase persistence)
     render_results_storage_panel(
-        page_type="data_preparation",
-        page_title="Prepare Data",
+        page_key="Prepare Data",
         custom_keys=["patient_data", "weather_data", "calendar_data", "reason_data"],
     )
 
     # Auto-load saved results if available
-    auto_load_if_available("data_preparation")
+    auto_load_if_available("Prepare Data")
 
     # Apply fluorescent effects + Custom Tab Styling
     st.markdown(f"""
