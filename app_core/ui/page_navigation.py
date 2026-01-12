@@ -170,15 +170,24 @@ def render_compact_navigation(current_page_index: int):
 
     Args:
         current_page_index: 0-based index of the current page
+                           For legacy pages (index >= len(PAGES)), shows Home/HORIZON only.
     """
     st.markdown(get_navigation_css(), unsafe_allow_html=True)
 
     st.markdown("---")
 
+    # Handle out-of-range indices (legacy _old_ pages)
+    is_legacy_page = current_page_index >= len(PAGES)
+
     col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
 
     with col1:
-        if current_page_index > 0:
+        if is_legacy_page:
+            # Legacy pages: go to last main page
+            last_page = PAGES[-1]
+            if st.button(f"◀ Prev", key="nav_prev_c", use_container_width=True, help=f"Go to {last_page['name']}"):
+                st.switch_page(last_page["file"])
+        elif current_page_index > 0:
             prev_page = PAGES[current_page_index - 1]
             if st.button(f"◀ Prev", key="nav_prev_c", use_container_width=True, help=f"Go to {prev_page['name']}"):
                 st.switch_page(prev_page["file"])
@@ -191,15 +200,25 @@ def render_compact_navigation(current_page_index: int):
 
     with col3:
         # Show current page indicator
-        current = PAGES[current_page_index]
-        st.markdown(f"""
-        <div style='text-align: center; padding: 0.5rem; background: rgba(6, 78, 145, 0.2);
-                    border-radius: 8px; border: 1px solid rgba(34, 211, 238, 0.3);'>
-            <span style='color: #22d3ee; font-size: 0.8rem; font-weight: 600;'>
-                {current['icon']} {current_page_index + 1}/{len(PAGES)}
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+        if is_legacy_page:
+            st.markdown(f"""
+            <div style='text-align: center; padding: 0.5rem; background: rgba(6, 78, 145, 0.2);
+                        border-radius: 8px; border: 1px solid rgba(34, 211, 238, 0.3);'>
+                <span style='color: #22d3ee; font-size: 0.8rem; font-weight: 600;'>
+                    📄 Legacy
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            current = PAGES[current_page_index]
+            st.markdown(f"""
+            <div style='text-align: center; padding: 0.5rem; background: rgba(6, 78, 145, 0.2);
+                        border-radius: 8px; border: 1px solid rgba(34, 211, 238, 0.3);'>
+                <span style='color: #22d3ee; font-size: 0.8rem; font-weight: 600;'>
+                    {current['icon']} {current_page_index + 1}/{len(PAGES)}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
 
     with col4:
         if current_page_index != 0:
@@ -209,7 +228,9 @@ def render_compact_navigation(current_page_index: int):
             st.button("🛸 HORIZON", key="nav_dash_c_dis", use_container_width=True, disabled=True)
 
     with col5:
-        if current_page_index < len(PAGES) - 1:
+        if is_legacy_page:
+            st.button("Next ▶", key="nav_next_c_dis", use_container_width=True, disabled=True)
+        elif current_page_index < len(PAGES) - 1:
             next_page = PAGES[current_page_index + 1]
             if st.button(f"Next ▶", key="nav_next_c", use_container_width=True, help=f"Go to {next_page['name']}"):
                 st.switch_page(next_page["file"])
