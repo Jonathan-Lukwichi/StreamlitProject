@@ -1,454 +1,368 @@
 # =============================================================================
 # app_core/data/results_storage_service.py
-# Results Storage Service for HealthForecast AI
-# Stores and retrieves page results from Supabase for session persistence
+# Persistent storage service for HealthForecast AI pipeline results.
+# Handles serialization/deserialization of complex Python objects (DataFrames,
+# NumPy arrays, etc.) and saves them to Supabase for cross-session persistence.
+# Based on memory1.md implementation guide.
 # =============================================================================
 
 from __future__ import annotations
-import streamlit as st
-from typing import Optional, Dict, Any, List
-import pandas as pd
+
 import json
-import hashlib
+import sys
 from datetime import datetime
-import pickle
-import base64
+from typing import Any, Dict, List, Optional, Tuple
 
-from app_core.data.supabase_client import SupabaseService, get_cached_supabase_client
+import numpy as np
+import pandas as pd
+import streamlit as st
+
+from app_core.data.supabase_client import get_cached_supabase_client
 
 
-# Table name for storing results
-RESULTS_TABLE = "pipeline_results"
-
-
-def _compute_dataset_hash(df: pd.DataFrame) -> str:
+class NpEncoder(json.JSONEncoder):
     """
-    Compute a hash to uniquely identify a dataset.
-    Uses shape, columns, and sample data for fast hashing.
+    Custom JSON encoder for NumPy, Pandas, and other non-standard Python types.
+    Encodes objects with type markers for proper reconstruction on load.
     """
-    if df is None or df.empty:
-        return ""
 
-    hash_parts = [
-        str(df.shape),
-        str(sorted(df.columns.tolist())),
-        str(df.head(3).values.tobytes()) if len(df) > 0 else "",
-        str(df.tail(3).values.tobytes()) if len(df) > 3 else "",
-    ]
-    return hashlib.md5("".join(hash_parts).encode()).hexdigest()[:16]
+    def default(self, obj: Any) -> Any:
+        # === NumPy Types ===
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return {
+                "__type__": "ndarray",
+                "data": obj.tolist(),
+                "dtype": str(obj.dtype),
+                "shape": list(obj.shape)
+            }
+
+        # === Pandas Types ===
+        if isinstance(obj, pd.DataFrame):
+            return {
+                "__type__": "dataframe",
+                "data": obj.to_json(orient='split', date_format='iso'),
+                "shape": list(obj.shape),
+                "columns": list(obj.columns),
+                "dtypes": {col: str(dtype) for col, dtype in obj.dtypes.items()}
+            }
+        if isinstance(obj, pd.Series):
+            return {
+                "__type__": "series",
+                "data": obj.to_json(orient='split', date_format='iso'),
+                "name": obj.name,
+                "dtype": str(obj.dtype)
+            }
+        if isinstance(obj, pd.Timestamp):
+            return {"__type__": "pd_timestamp", "data": obj.isoformat()}
+        if isinstance(obj, pd.Timedelta):
+            return {"__type__": "pd_timedelta", "data": str(obj)}
+        if isinstance(obj, pd.Interval):
+            return {"__type__": "pd_interval", "data": str(obj)}
+        if isinstance(obj, (pd.Index, pd.RangeIndex)):
+            return {"__type__": "pd_index", "data": obj.tolist()}
+
+        # === Handle NaN/None ===
+        try:
+            if pd.isna(obj):
+                return None
+        except (ValueError, TypeError):
+            pass
+
+        # === Datetime Types ===
+        if isinstance(obj, datetime):
+            return {"__type__": "datetime", "data": obj.isoformat()}
+
+        # === Sets and Tuples ===
+        if isinstance(obj, set):
+            return {"__type__": "set", "data": list(obj)}
+        if isinstance(obj, tuple):
+            return {"__type__": "tuple", "data": list(obj)}
+
+        # === Bytes ===
+        if isinstance(obj, bytes):
+            return {"__type__": "bytes", "data": obj.decode('utf-8', errors='replace')}
+
+        # === Default ===
+        try:
+            return super().default(obj)
+        except TypeError:
+            # Last resort: convert to string
+            return {"__type__": "str_fallback", "data": str(obj)}
 
 
-def _serialize_value(value: Any) -> str:
-    """Serialize a Python object to base64-encoded pickle string."""
-    try:
-        pickled = pickle.dumps(value)
-        return base64.b64encode(pickled).decode('utf-8')
-    except Exception as e:
-        st.warning(f"Could not serialize value: {e}")
-        return ""
+def decode_special_types(obj: Any) -> Any:
+    """
+    Recursively decode special types from JSON back to Python objects.
+    Handles all types encoded by NpEncoder.
+    """
+    if isinstance(obj, dict):
+        type_marker = obj.get("__type__")
 
+        if type_marker == "dataframe":
+            try:
+                df = pd.read_json(obj["data"], orient='split')
+                return df
+            except Exception:
+                return obj
 
-def _deserialize_value(encoded: str) -> Any:
-    """Deserialize a base64-encoded pickle string back to Python object."""
-    try:
-        if not encoded:
-            return None
-        pickled = base64.b64decode(encoded.encode('utf-8'))
-        return pickle.loads(pickled)
-    except Exception as e:
-        st.warning(f"Could not deserialize value: {e}")
-        return None
+        elif type_marker == "series":
+            try:
+                series = pd.read_json(obj["data"], orient='split', typ='series')
+                series.name = obj.get("name")
+                return series
+            except Exception:
+                return obj
+
+        elif type_marker == "ndarray":
+            try:
+                arr = np.array(obj["data"])
+                dtype = obj.get("dtype")
+                if dtype:
+                    try:
+                        arr = arr.astype(dtype)
+                    except (TypeError, ValueError):
+                        pass
+                return arr
+            except Exception:
+                return obj
+
+        elif type_marker == "pd_timestamp":
+            try:
+                return pd.Timestamp(obj["data"])
+            except Exception:
+                return obj
+
+        elif type_marker == "pd_timedelta":
+            try:
+                return pd.Timedelta(obj["data"])
+            except Exception:
+                return obj
+
+        elif type_marker == "datetime":
+            try:
+                return datetime.fromisoformat(obj["data"])
+            except Exception:
+                return obj
+
+        elif type_marker == "set":
+            return set(obj["data"])
+
+        elif type_marker == "tuple":
+            return tuple(obj["data"])
+
+        elif type_marker == "pd_index":
+            return pd.Index(obj["data"])
+
+        elif type_marker == "bytes":
+            return obj["data"].encode('utf-8')
+
+        elif type_marker == "str_fallback":
+            return obj["data"]
+
+        else:
+            # Regular dict - recurse into values
+            return {k: decode_special_types(v) for k, v in obj.items()}
+
+    elif isinstance(obj, list):
+        return [decode_special_types(item) for item in obj]
+
+    return obj
 
 
 class ResultsStorageService:
     """
-    Service for storing and retrieving pipeline results from Supabase.
+    Service for persisting HealthForecast AI pipeline results to Supabase.
 
-    Each page can save its results with a dataset hash to allow:
-    - Loading previous results when returning to a page
-    - Clearing results when starting with a new dataset
-    - Persisting work across browser sessions
+    Supports:
+    - Saving/loading any Python object (DataFrames, dicts, lists, numpy arrays)
+    - Upsert functionality (update existing or insert new)
+    - Listing saved results with metadata
+    - Deleting results by page or specific key
+    - User isolation via session-based IDs
     """
 
-    # Page types and their associated session state keys
-    PAGE_KEYS = {
-        "data_preparation": [
-            "merged_data",
-            "processed_df",
-            "data_summary",
-            "target_columns",
-            "date_column",
-            "aggregated_categories_enabled",
-        ],
-        "feature_engineering": [
-            "fe_cfg",
-            "X_engineered",
-            "y_engineered",
-            "feature_names",
-            "train_idx",
-            "cal_idx",
-            "test_idx",
-            "temporal_split",
-            "split_result",
-        ],
-        "feature_selection": [
-            "fs_results",
-            "fs_selected_features",
-            "feature_selection",
-        ],
-        "modeling_hub": [
-            "ml_mh_results",
-            "multi_target_results",
-            "forecast_results",
-            "cqr_results",
-        ],
-        "benchmarks": [
-            "arima_results",
-            "sarimax_results",
-            "backtest_results",
-        ],
-    }
+    TABLE_NAME = "app_results"
 
-    def __init__(self):
-        """Initialize the results storage service."""
-        self.client = get_cached_supabase_client()
-        self._service = SupabaseService(RESULTS_TABLE) if self.client else None
+    def __init__(self, client=None):
+        """Initialize with Supabase client."""
+        self.client = client or get_cached_supabase_client()
 
     def is_connected(self) -> bool:
         """Check if Supabase client is available."""
-        return self.client is not None and self._service is not None
+        return self.client is not None
 
     def _get_user_id(self) -> str:
         """
-        Get a unique user identifier.
-        Uses browser session ID or generates one.
+        Get current user ID.
+        Uses session-based ID for this app (not Supabase Auth).
         """
         if "user_session_id" not in st.session_state:
-            # Generate a simple session ID
             import uuid
-            st.session_state["user_session_id"] = str(uuid.uuid4())[:8]
+            st.session_state["user_session_id"] = str(uuid.uuid4())[:12]
         return st.session_state["user_session_id"]
 
-    def save_page_results(
+    def save_results(
         self,
-        page_type: str,
-        dataset_hash: Optional[str] = None,
-        custom_keys: Optional[List[str]] = None,
-    ) -> bool:
+        page_key: str,
+        result_key: str,
+        data: Any,
+        metadata: Optional[Dict] = None
+    ) -> Tuple[bool, str]:
         """
-        Save current session state results for a page to Supabase.
+        Save results to Supabase using upsert (update or insert).
 
         Args:
-            page_type: One of 'data_preparation', 'feature_engineering',
-                       'feature_selection', 'modeling_hub', 'benchmarks'
-            dataset_hash: Hash to identify the dataset (computed from merged_data if not provided)
-            custom_keys: Additional session state keys to save
+            page_key: Page identifier (e.g., 'Upload Data', 'Train Models')
+            result_key: Result identifier (e.g., 'prepared_data', 'ml_results')
+            data: Any Python object to save
+            metadata: Optional additional metadata
 
         Returns:
-            True if successful, False otherwise
+            Tuple of (success: bool, message: str)
         """
         if not self.is_connected():
-            st.warning("⚠️ Supabase not connected. Results not saved.")
-            return False
+            return False, "Supabase not connected"
 
-        if page_type not in self.PAGE_KEYS:
-            st.error(f"Unknown page type: {page_type}")
-            return False
-
-        # Compute dataset hash if not provided
-        if dataset_hash is None:
-            merged = st.session_state.get("merged_data")
-            if merged is not None and isinstance(merged, pd.DataFrame):
-                dataset_hash = _compute_dataset_hash(merged)
-            else:
-                dataset_hash = "no_data"
-
-        # Collect values to save
-        keys_to_save = self.PAGE_KEYS[page_type].copy()
-        if custom_keys:
-            keys_to_save.extend(custom_keys)
-
-        results_data = {}
-        for key in keys_to_save:
-            if key in st.session_state and st.session_state[key] is not None:
-                value = st.session_state[key]
-                # Serialize the value
-                serialized = _serialize_value(value)
-                if serialized:
-                    results_data[key] = serialized
-
-        if not results_data:
-            st.info("No results to save for this page.")
-            return False
-
-        # Prepare record
         user_id = self._get_user_id()
-        record = {
-            "user_id": user_id,
-            "page_type": page_type,
-            "dataset_hash": dataset_hash,
-            "results_json": json.dumps(results_data),
-            "saved_at": datetime.now().isoformat(),
-            "keys_saved": list(results_data.keys()),
-        }
 
         try:
-            # Delete existing record for this user/page/dataset combination
-            self.client.table(RESULTS_TABLE).delete().eq(
+            # Serialize data to JSON
+            json_data = json.loads(json.dumps(data, cls=NpEncoder))
+            json_string = json.dumps(json_data)
+            data_size = len(json_string.encode('utf-8'))
+
+            # Build comprehensive metadata
+            full_metadata = {
+                "saved_at": datetime.now().isoformat(),
+                "data_type": type(data).__name__,
+                "size_bytes": data_size,
+            }
+
+            # Add DataFrame-specific metadata
+            if isinstance(data, pd.DataFrame):
+                full_metadata["shape"] = list(data.shape)
+                full_metadata["columns"] = list(data.columns)[:20]  # First 20 columns
+                full_metadata["memory_mb"] = data.memory_usage(deep=True).sum() / 1024 / 1024
+
+            # Add dict/list length
+            if isinstance(data, (dict, list)):
+                full_metadata["length"] = len(data)
+
+            # Merge with user-provided metadata
+            if metadata:
+                full_metadata.update(metadata)
+
+            # Build record
+            record = {
+                "user_id": user_id,
+                "page_key": page_key,
+                "result_key": result_key,
+                "result_data": json_data,
+                "metadata": full_metadata,
+                "data_size_bytes": data_size
+            }
+
+            # Delete existing record first (workaround for upsert on non-primary key unique constraints)
+            self.client.table(self.TABLE_NAME).delete().eq(
                 "user_id", user_id
             ).eq(
-                "page_type", page_type
+                "page_key", page_key
             ).eq(
-                "dataset_hash", dataset_hash
+                "result_key", result_key
             ).execute()
 
             # Insert new record
-            self.client.table(RESULTS_TABLE).insert(record).execute()
-            return True
+            self.client.table(self.TABLE_NAME).insert(record).execute()
+
+            return True, f"Saved {result_key} ({data_size / 1024:.1f} KB)"
 
         except Exception as e:
-            st.error(f"Error saving results: {e}")
-            return False
+            return False, f"Save failed: {str(e)}"
 
-    def load_page_results(
-        self,
-        page_type: str,
-        dataset_hash: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    def load_results(self, page_key: str, result_key: str) -> Optional[Any]:
         """
-        Load saved results for a page from Supabase.
+        Load results from Supabase.
 
         Args:
-            page_type: The page type to load results for
-            dataset_hash: Hash to identify the dataset
+            page_key: Page identifier
+            result_key: Result identifier
 
         Returns:
-            Dictionary of loaded session state values
+            Deserialized Python object or None if not found
         """
         if not self.is_connected():
-            return {}
-
-        # Compute dataset hash if not provided
-        if dataset_hash is None:
-            merged = st.session_state.get("merged_data")
-            if merged is not None and isinstance(merged, pd.DataFrame):
-                dataset_hash = _compute_dataset_hash(merged)
-            else:
-                dataset_hash = "no_data"
+            return None
 
         user_id = self._get_user_id()
 
         try:
-            response = (
-                self.client.table(RESULTS_TABLE)
-                .select("*")
-                .eq("user_id", user_id)
-                .eq("page_type", page_type)
-                .eq("dataset_hash", dataset_hash)
-                .order("saved_at", desc=True)
-                .limit(1)
+            response = self.client.table(self.TABLE_NAME) \
+                .select("result_data") \
+                .eq("user_id", user_id) \
+                .eq("page_key", page_key) \
+                .eq("result_key", result_key) \
+                .limit(1) \
                 .execute()
-            )
 
             if not response.data:
-                return {}
+                return None
 
-            record = response.data[0]
-            results_json = json.loads(record["results_json"])
-
-            # Deserialize values
-            loaded = {}
-            for key, serialized in results_json.items():
-                value = _deserialize_value(serialized)
-                if value is not None:
-                    loaded[key] = value
-
-            return loaded
+            # Parse and decode special types
+            raw_data = response.data[0]['result_data']
+            return decode_special_types(raw_data)
 
         except Exception as e:
-            st.error(f"Error loading results: {e}")
+            print(f"Load error for {page_key}/{result_key}: {e}")
+            return None
+
+    def load_all_for_page(self, page_key: str) -> Dict[str, Any]:
+        """
+        Load all saved results for a specific page.
+
+        Returns:
+            Dict mapping result_key to deserialized data
+        """
+        if not self.is_connected():
             return {}
 
-    def apply_loaded_results(self, loaded: Dict[str, Any]) -> int:
-        """
-        Apply loaded results to session state.
-
-        Args:
-            loaded: Dictionary of key-value pairs to apply
-
-        Returns:
-            Number of keys applied
-        """
-        count = 0
-        for key, value in loaded.items():
-            st.session_state[key] = value
-            count += 1
-        return count
-
-    def has_saved_results(
-        self,
-        page_type: str,
-        dataset_hash: Optional[str] = None,
-    ) -> bool:
-        """
-        Check if there are saved results for a page.
-
-        Args:
-            page_type: The page type to check
-            dataset_hash: Hash to identify the dataset
-
-        Returns:
-            True if saved results exist
-        """
-        if not self.is_connected():
-            return False
-
-        # Compute dataset hash if not provided
-        if dataset_hash is None:
-            merged = st.session_state.get("merged_data")
-            if merged is not None and isinstance(merged, pd.DataFrame):
-                dataset_hash = _compute_dataset_hash(merged)
-            else:
-                dataset_hash = "no_data"
-
         user_id = self._get_user_id()
 
         try:
-            response = (
-                self.client.table(RESULTS_TABLE)
-                .select("id")
-                .eq("user_id", user_id)
-                .eq("page_type", page_type)
-                .eq("dataset_hash", dataset_hash)
-                .limit(1)
+            response = self.client.table(self.TABLE_NAME) \
+                .select("result_key, result_data") \
+                .eq("user_id", user_id) \
+                .eq("page_key", page_key) \
                 .execute()
-            )
-            return len(response.data) > 0
 
-        except Exception:
-            return False
+            results = {}
+            for record in response.data or []:
+                try:
+                    raw_data = record['result_data']
+                    results[record['result_key']] = decode_special_types(raw_data)
+                except Exception:
+                    continue
 
-    def get_saved_info(
-        self,
-        page_type: str,
-        dataset_hash: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get information about saved results.
-
-        Returns:
-            Dict with saved_at, keys_saved, etc. or None if not found
-        """
-        if not self.is_connected():
-            return None
-
-        if dataset_hash is None:
-            merged = st.session_state.get("merged_data")
-            if merged is not None and isinstance(merged, pd.DataFrame):
-                dataset_hash = _compute_dataset_hash(merged)
-            else:
-                dataset_hash = "no_data"
-
-        user_id = self._get_user_id()
-
-        try:
-            response = (
-                self.client.table(RESULTS_TABLE)
-                .select("saved_at, keys_saved")
-                .eq("user_id", user_id)
-                .eq("page_type", page_type)
-                .eq("dataset_hash", dataset_hash)
-                .order("saved_at", desc=True)
-                .limit(1)
-                .execute()
-            )
-
-            if response.data:
-                return response.data[0]
-            return None
-
-        except Exception:
-            return None
-
-    def clear_page_results(
-        self,
-        page_type: str,
-        dataset_hash: Optional[str] = None,
-    ) -> bool:
-        """
-        Clear saved results for a specific page.
-
-        Args:
-            page_type: The page type to clear
-            dataset_hash: Hash to identify the dataset (None = clear all for this page)
-
-        Returns:
-            True if successful
-        """
-        if not self.is_connected():
-            return False
-
-        user_id = self._get_user_id()
-
-        try:
-            query = (
-                self.client.table(RESULTS_TABLE)
-                .delete()
-                .eq("user_id", user_id)
-                .eq("page_type", page_type)
-            )
-
-            if dataset_hash:
-                query = query.eq("dataset_hash", dataset_hash)
-
-            query.execute()
-            return True
+            return results
 
         except Exception as e:
-            st.error(f"Error clearing results: {e}")
-            return False
+            print(f"Load all error for {page_key}: {e}")
+            return {}
 
-    def clear_all_results(self, dataset_hash: Optional[str] = None) -> bool:
+    def list_saved_results(self, page_key: Optional[str] = None) -> List[Dict]:
         """
-        Clear all saved results for this user.
+        List all saved results with metadata.
 
         Args:
-            dataset_hash: Optional - only clear results for this dataset
+            page_key: Optional filter by page
 
         Returns:
-            True if successful
-        """
-        if not self.is_connected():
-            return False
-
-        user_id = self._get_user_id()
-
-        try:
-            query = (
-                self.client.table(RESULTS_TABLE)
-                .delete()
-                .eq("user_id", user_id)
-            )
-
-            if dataset_hash:
-                query = query.eq("dataset_hash", dataset_hash)
-
-            query.execute()
-            return True
-
-        except Exception as e:
-            st.error(f"Error clearing all results: {e}")
-            return False
-
-    def get_all_saved_pages(self, dataset_hash: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get list of all pages with saved results.
-
-        Args:
-            dataset_hash: Optional - filter by dataset
-
-        Returns:
-            List of dicts with page_type, saved_at info
+            List of result metadata dicts
         """
         if not self.is_connected():
             return []
@@ -456,37 +370,112 @@ class ResultsStorageService:
         user_id = self._get_user_id()
 
         try:
-            query = (
-                self.client.table(RESULTS_TABLE)
-                .select("page_type, saved_at, dataset_hash, keys_saved")
+            query = self.client.table(self.TABLE_NAME) \
+                .select("page_key, result_key, metadata, created_at, updated_at, data_size_bytes") \
                 .eq("user_id", user_id)
-            )
 
-            if dataset_hash:
-                query = query.eq("dataset_hash", dataset_hash)
+            if page_key:
+                query = query.eq("page_key", page_key)
 
-            response = query.order("saved_at", desc=True).execute()
-            return response.data if response.data else []
+            response = query.order("updated_at", desc=True).execute()
+            return response.data or []
 
         except Exception:
             return []
 
+    def delete_results(self, page_key: str, result_key: str) -> bool:
+        """Delete a specific result."""
+        if not self.is_connected():
+            return False
 
-# Singleton instance
-_results_storage: Optional[ResultsStorageService] = None
+        user_id = self._get_user_id()
+
+        try:
+            self.client.table(self.TABLE_NAME) \
+                .delete() \
+                .eq("user_id", user_id) \
+                .eq("page_key", page_key) \
+                .eq("result_key", result_key) \
+                .execute()
+            return True
+        except Exception:
+            return False
+
+    def delete_all_for_page(self, page_key: str) -> bool:
+        """Delete all results for a page."""
+        if not self.is_connected():
+            return False
+
+        user_id = self._get_user_id()
+
+        try:
+            self.client.table(self.TABLE_NAME) \
+                .delete() \
+                .eq("user_id", user_id) \
+                .eq("page_key", page_key) \
+                .execute()
+            return True
+        except Exception:
+            return False
+
+    def delete_all_user_results(self) -> bool:
+        """Delete ALL results for current user (use with caution)."""
+        if not self.is_connected():
+            return False
+
+        user_id = self._get_user_id()
+
+        try:
+            self.client.table(self.TABLE_NAME) \
+                .delete() \
+                .eq("user_id", user_id) \
+                .execute()
+            return True
+        except Exception:
+            return False
+
+    def get_storage_stats(self) -> Dict[str, Any]:
+        """Get storage statistics for current user."""
+        if not self.is_connected():
+            return {}
+
+        user_id = self._get_user_id()
+
+        try:
+            response = self.client.table(self.TABLE_NAME) \
+                .select("page_key, data_size_bytes") \
+                .eq("user_id", user_id) \
+                .execute()
+
+            total_bytes = sum(r.get('data_size_bytes', 0) or 0 for r in response.data or [])
+            by_page = {}
+            for r in response.data or []:
+                page = r['page_key']
+                by_page[page] = by_page.get(page, 0) + (r.get('data_size_bytes', 0) or 0)
+
+            return {
+                "total_bytes": total_bytes,
+                "total_mb": total_bytes / 1024 / 1024,
+                "total_items": len(response.data or []),
+                "by_page": by_page
+            }
+        except Exception:
+            return {}
 
 
-def get_results_storage() -> ResultsStorageService:
-    """Get the singleton results storage service instance."""
-    global _results_storage
-    if _results_storage is None:
-        _results_storage = ResultsStorageService()
-    return _results_storage
+# === Singleton Pattern ===
+_storage_service_instance: Optional[ResultsStorageService] = None
 
 
-def compute_current_dataset_hash() -> str:
-    """Compute hash for the current dataset in session state."""
-    merged = st.session_state.get("merged_data")
-    if merged is not None and isinstance(merged, pd.DataFrame):
-        return _compute_dataset_hash(merged)
-    return "no_data"
+def get_storage_service() -> ResultsStorageService:
+    """Get singleton ResultsStorageService instance."""
+    global _storage_service_instance
+    if _storage_service_instance is None:
+        _storage_service_instance = ResultsStorageService()
+    return _storage_service_instance
+
+
+def reset_storage_service():
+    """Reset singleton (useful for testing or reconnection)."""
+    global _storage_service_instance
+    _storage_service_instance = None
