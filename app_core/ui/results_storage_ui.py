@@ -24,8 +24,8 @@ PAGE_STORAGE_CONFIG: Dict[str, Dict[str, Any]] = {
         "icon": "📤"
     },
     "Prepare Data": {
-        "keys": ["prepared_data", "fused_data", "cleaning_report", "preparation_config",
-                 "merged_data", "processed_df", "data_summary", "target_columns", "date_column"],
+        "keys": ["merged_data", "processed_df", "temporal_features_config",
+                 "temporal_features_info", "use_aggregated_categories"],
         "description": "Cleaned and fused datasets",
         "icon": "🔧"
     },
