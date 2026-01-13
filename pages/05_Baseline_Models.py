@@ -2785,38 +2785,54 @@ def page_benchmarks():
 
                 from app_core.analytics.seasonal_proportions import create_seasonal_heatmap
 
+                # Safely get proportions
+                dow_proportions = _get_sp_attr(sp_result, "dow_proportions")
+                monthly_proportions = _get_sp_attr(sp_result, "monthly_proportions")
+
                 col_dow, col_monthly = st.columns(2)
 
                 with col_dow:
                     st.markdown("##### Day-of-Week Patterns")
-                    fig_dow = create_seasonal_heatmap(
-                        dow_proportions=sp_result.dow_proportions,
-                        monthly_proportions=None,
-                        title="Day-of-Week Proportions"
-                    )
-                    st.plotly_chart(fig_dow, use_container_width=True)
+                    if dow_proportions is not None:
+                        fig_dow = create_seasonal_heatmap(
+                            dow_proportions=dow_proportions,
+                            monthly_proportions=None,
+                            title="Day-of-Week Proportions"
+                        )
+                        st.plotly_chart(fig_dow, use_container_width=True)
+                    else:
+                        st.info("ℹ️ Day-of-week proportions not available")
 
                 with col_monthly:
                     st.markdown("##### Monthly Patterns")
-                    fig_monthly = create_seasonal_heatmap(
-                        dow_proportions=None,
-                        monthly_proportions=sp_result.monthly_proportions,
-                        title="Monthly Proportions"
-                    )
-                    st.plotly_chart(fig_monthly, use_container_width=True)
+                    if monthly_proportions is not None:
+                        fig_monthly = create_seasonal_heatmap(
+                            dow_proportions=None,
+                            monthly_proportions=monthly_proportions,
+                            title="Monthly Proportions"
+                        )
+                        st.plotly_chart(fig_monthly, use_container_width=True)
+                    else:
+                        st.info("ℹ️ Monthly proportions not available")
 
                 # Show proportion tables
                 with st.expander("📋 View Proportion Tables", expanded=False):
                     col_t1, col_t2 = st.columns(2)
                     with col_t1:
                         st.markdown("**Day-of-Week Proportions (%)**")
-                        dow_pct = (sp_result.dow_proportions * 100).round(2)
-                        st.dataframe(dow_pct, use_container_width=True)
+                        if dow_proportions is not None:
+                            dow_pct = (dow_proportions * 100).round(2)
+                            st.dataframe(dow_pct, use_container_width=True)
+                        else:
+                            st.info("Not available")
 
                     with col_t2:
                         st.markdown("**Monthly Proportions (%)**")
-                        monthly_pct = (sp_result.monthly_proportions * 100).round(2)
-                        st.dataframe(monthly_pct, use_container_width=True)
+                        if monthly_proportions is not None:
+                            monthly_pct = (monthly_proportions * 100).round(2)
+                            st.dataframe(monthly_pct, use_container_width=True)
+                        else:
+                            st.info("Not available")
 
             with sp_tab3:
                 st.markdown("#### 7-Day Category Forecast Distribution")
