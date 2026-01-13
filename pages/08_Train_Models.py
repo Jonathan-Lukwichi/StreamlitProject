@@ -2543,10 +2543,12 @@ def page_ml():
             if run_button:
                 # Pass a copy of the config to prevent any potential state pollution between runs
                 current_run_config = cfg.copy()
-                with st.spinner(f"Training {current_run_config['ml_choice']} for {current_run_config.get('ml_horizons', 7)} horizons..."):
+                model_name = current_run_config['ml_choice']
+                with st.spinner(f"Training {model_name} for {current_run_config.get('ml_horizons', 7)} horizons (including clinical categories)..."):
                     try:
-                        results = run_ml_multihorizon(
-                            model_type=current_run_config['ml_choice'],
+                        # Use new function that trains on total + categories and captures residuals
+                        full_results = run_ml_with_categories(
+                            model_type=model_name,
                             config=current_run_config,
                             df=selected_df,
                             feature_cols=current_run_config['ml_feature_cols'],
@@ -2554,12 +2556,34 @@ def page_ml():
                             horizons=current_run_config.get('ml_horizons', 7),
                         )
 
-                        # Store results in session state
+                        # Extract total results for backward compatibility
+                        results = full_results.get("total_results", {})
+
+                        # Store total results in session state (backward compatible)
                         st.session_state["ml_mh_results"] = results
 
                         # Also save to individual model key for hybrid model detection
-                        model_key = f"ml_mh_results_{current_run_config['ml_choice'].lower()}"
+                        model_key = f"ml_mh_results_{model_name.lower()}"
                         st.session_state[model_key] = results
+
+                        # Store residuals for hybrid models (Stage 1 → Stage 2)
+                        total_residuals = full_results.get("total_residuals", {})
+                        if total_residuals:
+                            store_stage1_residuals(model_name, total_residuals)
+                            st.success(f"✅ Residuals captured for {model_name} (ready for hybrid models)")
+
+                        # Store category results for Patient Forecast page
+                        category_results = full_results.get("category_results", {})
+                        if category_results:
+                            st.session_state["ml_category_results"] = {
+                                "model_name": model_name,
+                                "categories": category_results,
+                                "categories_detected": full_results.get("categories_detected", []),
+                                "trained_at": full_results.get("trained_at"),
+                            }
+                            detected = full_results.get("categories_detected", [])
+                            if detected:
+                                st.info(f"📊 Category predictions captured: {', '.join(detected)}")
 
                         # Auto-save to cache for persistence
                         try:
