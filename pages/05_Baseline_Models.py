@@ -2838,16 +2838,26 @@ def page_benchmarks():
                 st.markdown("#### 7-Day Category Forecast Distribution")
                 st.caption("Total patient forecast distributed across clinical categories using seasonal patterns")
 
-                if sp_result.category_forecasts is not None and not sp_result.category_forecasts.empty:
+                # Safely get category_forecasts
+                category_forecasts = _get_sp_attr(sp_result, "category_forecasts")
+
+                # Check if category_forecasts is valid (not None and not empty DataFrame)
+                has_forecasts = (
+                    category_forecasts is not None and
+                    hasattr(category_forecasts, 'empty') and
+                    not category_forecasts.empty
+                )
+
+                if has_forecasts:
                     from app_core.analytics.seasonal_proportions import create_category_forecast_chart
 
                     # Create and display chart
-                    fig_forecast = create_category_forecast_chart(sp_result.category_forecasts)
+                    fig_forecast = create_category_forecast_chart(category_forecasts)
                     st.plotly_chart(fig_forecast, use_container_width=True)
 
                     # Show forecast table
                     st.markdown("##### Forecast Table")
-                    forecast_display = sp_result.category_forecasts.copy()
+                    forecast_display = category_forecasts.copy()
                     forecast_display = forecast_display.round(2)
                     forecast_display['Total'] = forecast_display.sum(axis=1)
 
@@ -2865,8 +2875,8 @@ def page_benchmarks():
                         avg_daily = forecast_display['Total'].mean()
                         st.metric("Avg Daily Forecast", f"{int(avg_daily):,}")
                     with col_s3:
-                        dominant_cat = sp_result.category_forecasts.sum().idxmax()
-                        dominant_pct = (sp_result.category_forecasts.sum()[dominant_cat] / sp_result.category_forecasts.sum().sum() * 100)
+                        dominant_cat = category_forecasts.sum().idxmax()
+                        dominant_pct = (category_forecasts.sum()[dominant_cat] / category_forecasts.sum().sum() * 100)
                         st.metric("Dominant Category", f"{dominant_cat} ({dominant_pct:.1f}%)")
 
                 else:
