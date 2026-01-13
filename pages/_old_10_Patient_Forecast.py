@@ -1314,7 +1314,12 @@ with tab_forecast:
                     )
 
             # --- FORECAST HEADER ---
-            categories_text = " • <span style='color: #10b981;'>Categories Available</span>" if has_categories else ""
+            if using_ml_categories:
+                categories_text = " • <span style='color: #10b981;'>ML Category Predictions</span>"
+            elif has_categories:
+                categories_text = " • <span style='color: #10b981;'>Categories (Proportional)</span>"
+            else:
+                categories_text = ""
             st.markdown(f"""
             <div class='forecast-card' style='padding: 1.5rem;'>
                 <div style='display: flex; justify-content: space-between; align-items: center;'>
