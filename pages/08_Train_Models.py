@@ -2653,15 +2653,19 @@ def page_ml():
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
+                all_category_results = {}  # Track category results for all models
+
                 for idx, model_name in enumerate(all_models):
-                    status_text.markdown(f"**Training {idx+1}/3: {model_name}...**")
+                    status_text.markdown(f"**Training {idx+1}/3: {model_name} (including clinical categories)...**")
                     progress_bar.progress((idx) / len(all_models))
 
                     with st.spinner(f"Training {model_name} for {cfg.get('ml_horizons', 7)} horizons..."):
                         try:
                             # Pass a copy of the config to prevent any potential state pollution between runs
                             current_run_config = cfg.copy()
-                            results = run_ml_multihorizon(
+
+                            # Use new function that trains on total + categories and captures residuals
+                            full_results = run_ml_with_categories(
                                 model_type=model_name,
                                 config=current_run_config,
                                 df=selected_df,
@@ -2670,9 +2674,25 @@ def page_ml():
                                 horizons=current_run_config.get('ml_horizons', 7),
                             )
 
+                            # Extract total results for backward compatibility
+                            results = full_results.get("total_results", {})
+
                             # Store results for each model
                             all_results[model_name] = results
                             st.session_state[f"ml_mh_results_{model_name}"] = results
+
+                            # Store residuals for hybrid models (Stage 1 → Stage 2)
+                            total_residuals = full_results.get("total_residuals", {})
+                            if total_residuals:
+                                store_stage1_residuals(model_name, total_residuals)
+
+                            # Track category results
+                            category_results = full_results.get("category_results", {})
+                            if category_results:
+                                all_category_results[model_name] = {
+                                    "categories": category_results,
+                                    "categories_detected": full_results.get("categories_detected", []),
+                                }
 
                         except Exception as e:
                             st.error(f"❌ **{model_name} training failed:**\n\n```\n{str(e)}\n```")
@@ -2683,6 +2703,24 @@ def page_ml():
                 # Complete progress
                 progress_bar.progress(1.0)
                 status_text.markdown("✅ **All models training completed!**")
+
+                # Store category results from all models for Patient Forecast page
+                if all_category_results:
+                    st.session_state["ml_all_category_results"] = all_category_results
+                    # Count categories detected
+                    all_cats = set()
+                    for model_data in all_category_results.values():
+                        all_cats.update(model_data.get("categories_detected", []))
+                    if all_cats:
+                        st.info(f"📊 Category predictions captured for all models: {', '.join(sorted(all_cats))}")
+
+                # Show residuals status
+                residuals_ready = []
+                for model_name in all_models:
+                    if get_stage1_residuals(model_name):
+                        residuals_ready.append(model_name)
+                if residuals_ready:
+                    st.success(f"✅ Residuals captured for: {', '.join(residuals_ready)} (ready for hybrid models)")
 
                 # Store flag that all models were trained
                 st.session_state["ml_all_models_trained"] = True
