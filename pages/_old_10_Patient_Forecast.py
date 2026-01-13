@@ -497,6 +497,88 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def extract_hybrid_forecast_data(hybrid_key: str) -> Optional[Dict[str, Any]]:
+    """
+    Extract forecast data from two-stage hybrid model results.
+
+    Args:
+        hybrid_key: Key within hybrid_pipeline_results (e.g., "lstm_xgb")
+    """
+    hybrid_results = st.session_state.get("hybrid_pipeline_results", {})
+    if not hybrid_results or hybrid_key not in hybrid_results:
+        return None
+
+    hybrid_data = hybrid_results[hybrid_key]
+    if not hybrid_data or not isinstance(hybrid_data, dict) or not hybrid_data.get("success"):
+        return None
+
+    per_h = hybrid_data.get("per_h", {})
+    if not per_h:
+        return None
+
+    try:
+        horizons = sorted([int(h) for h in per_h.keys()])
+        if not horizons:
+            return None
+
+        H = len(horizons)
+
+        # Get test set length from first horizon
+        first_h = horizons[0]
+        first_h_data = per_h[first_h]
+
+        # Hybrid results store actual values
+        y_actual = first_h_data.get("actual")
+        if y_actual is None:
+            return None
+
+        T = len(y_actual)
+        if T == 0:
+            return None
+
+        # Initialize matrices
+        F = np.full((T, H), np.nan)  # Forecasts (final_pred)
+        L = np.full((T, H), np.nan)  # Lower bound (not available for hybrids)
+        U = np.full((T, H), np.nan)  # Upper bound (not available for hybrids)
+        test_eval_dict = {}
+
+        # Fill matrices from per_h data
+        for idx, h in enumerate(horizons):
+            h_data = per_h[h]
+
+            # Use final_pred as forecast (Stage1 + Stage2 correction)
+            fc = h_data.get("final_pred")
+            if fc is not None:
+                fc_arr = np.array(fc).flatten()
+                F[:len(fc_arr), idx] = fc_arr[:T]
+
+            # Store evaluation metrics
+            test_eval_dict[h] = {
+                "MAE": h_data.get("mae"),
+                "RMSE": h_data.get("rmse"),
+            }
+
+        test_eval = pd.DataFrame(test_eval_dict).T
+        test_eval.index.name = "Horizon"
+        test_eval = test_eval.reset_index()
+
+        model_name = hybrid_data.get("model_name", hybrid_key)
+
+        return {
+            "horizons": horizons,
+            "F": F,
+            "L": L,
+            "U": U,
+            "test_eval": test_eval,
+            "model_name": model_name,
+            "type": "Hybrid",
+        }
+
+    except Exception as e:
+        print(f"Hybrid forecast extraction failed for {hybrid_key}: {e}")
+        return None
+
+
 def get_available_forecast_models() -> List[Dict[str, Any]]:
     """
     Get list of all models with available forecast data.
@@ -537,6 +619,26 @@ def get_available_forecast_models() -> List[Dict[str, Any]]:
                     "extractor": lambda k=key: extract_ml_forecast_data(k),
                     "data": ml_data,
                 })
+
+    # Check two-stage hybrid models
+    hybrid_results = st.session_state.get("hybrid_pipeline_results", {})
+    if hybrid_results and isinstance(hybrid_results, dict):
+        hybrid_name_map = {
+            "lstm_xgb": "LSTM→XGBoost",
+            "sarimax_xgb": "SARIMAX→XGBoost",
+            "lstm_sarimax": "LSTM→SARIMAX"
+        }
+        for hybrid_key, hybrid_data in hybrid_results.items():
+            if hybrid_data and isinstance(hybrid_data, dict) and hybrid_data.get("success"):
+                hybrid_forecast = extract_hybrid_forecast_data(hybrid_key)
+                if hybrid_forecast:
+                    display_name = hybrid_name_map.get(hybrid_key, hybrid_data.get("model_name", hybrid_key))
+                    models.append({
+                        "name": display_name,
+                        "type": "Hybrid",
+                        "extractor": lambda k=hybrid_key: extract_hybrid_forecast_data(k),
+                        "data": hybrid_forecast,
+                    })
 
     return models
 
