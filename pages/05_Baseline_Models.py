@@ -2487,6 +2487,10 @@ def page_benchmarks():
                         st.session_state["sarimax_results"] = sarimax_out
                         st.success(f"✅ SARIMAX trained in {runtime_s:.2f}s.")
 
+                        # Capture residuals for hybrid model use (Stage 1 → Stage 2)
+                        if _store_sarimax_residuals(sarimax_out, data, train_ratio):
+                            st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
+
                         res_df = sarimax_out.get("results_df")
                         if res_df is not None and not res_df.empty:
                             res_df = _sanitize_metrics_df(res_df)
