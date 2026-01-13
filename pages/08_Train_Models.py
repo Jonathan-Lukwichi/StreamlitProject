@@ -5005,7 +5005,18 @@ def page_hyperparameter_tuning():
 # HYBRID MODELS - Ensemble Forecasting
 # -----------------------------------------------------------------------------
 def page_hybrid():
-    """Hybrid Models: Weighted Ensemble and Decomposition + Ensemble."""
+    """
+    Hybrid Models: Two-Stage Residual Correction Approach.
+
+    This tab provides a clean interface for building hybrid models using
+    residuals from Stage 1 models (LSTM, XGBoost, ANN, SARIMAX) to train
+    Stage 2 correctors.
+
+    Three hybrid pipelines available:
+    1. LSTM → XGBoost: XGBoost learns to correct LSTM residuals
+    2. SARIMAX → XGBoost: XGBoost learns to correct SARIMAX residuals
+    3. LSTM → SARIMAX: SARIMAX learns to correct LSTM residuals
+    """
 
     # Main Header
     st.markdown(
@@ -5016,7 +5027,7 @@ def page_hybrid():
             <h1 class='hf-feature-title' style='font-size: 2.5rem; margin: 0;'>Hybrid Models</h1>
           </div>
           <p class='hf-feature-description' style='font-size: 1.125rem; max-width: 750px; margin: 0 0 0 4.5rem;'>
-            Advanced ensemble strategies combining multiple models or decomposing time series components for superior forecasting
+            Two-stage residual correction: Stage 1 model predictions + Stage 2 residual corrections = Superior forecasts
           </p>
         </div>
         """,
@@ -5024,57 +5035,594 @@ def page_hybrid():
     )
 
     # ==========================================================================
-    # HYBRID MODEL DIAGNOSTIC PIPELINE (Available for ALL hybrid strategies)
-    # Diagnoses all trained models BEFORE selecting ensemble strategy
+    # SECTION 1: STAGE 1 READINESS CHECK
     # ==========================================================================
-    _render_hybrid_diagnostic_pipeline()
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+            <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                📊 Stage 1: Check Model Readiness
+            </h3>
+            <p style='color: {TEXT_COLOR}; margin: 0; font-size: 0.95rem;'>
+                Verify which Stage 1 models are trained and have residuals captured for hybrid use
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    if st.button("🔍 Check Stage 1 Models & Residuals", type="secondary", use_container_width=True):
+        _check_stage1_readiness()
+
+    # Always show current status
+    _display_stage1_status()
 
     st.divider()
 
     # ==========================================================================
-    # ENSEMBLE STRATEGY SELECTION (Now AFTER diagnostics)
+    # SECTION 2: BUILD HYBRID MODELS
     # ==========================================================================
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(22, 163, 74, 0.1));
+                    border-left: 4px solid {SUCCESS_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);'>
+            <h3 style='color: {SUCCESS_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);'>
+                🔧 Stage 2: Build Hybrid Models
+            </h3>
+            <p style='color: {TEXT_COLOR}; margin: 0; font-size: 0.95rem;'>
+                Train Stage 2 models on residuals from Stage 1 to create hybrid forecasters
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    # -------------------------------------------------------------------------
-    # DETECT TRAINED MODELS FROM SESSION STATE
-    # -------------------------------------------------------------------------
-    trained_models_status = {
-        "SARIMAX": False,
-        "LSTM": False,
-        "XGBoost": False,
-        "ANN": False,
+    # Check eligibility for each hybrid
+    can_build = _get_hybrid_eligibility()
+
+    # Hybrid selection checkboxes
+    st.markdown("**Select Hybrid Models to Build:**")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        lstm_xgb_disabled = not can_build["LSTM → XGBoost"]
+        build_lstm_xgb = st.checkbox(
+            "🧠→🚀 LSTM → XGBoost",
+            value=False,
+            disabled=lstm_xgb_disabled,
+            help="XGBoost learns to correct LSTM residuals" if not lstm_xgb_disabled else "Requires LSTM residuals"
+        )
+        if lstm_xgb_disabled:
+            st.caption("❌ Missing LSTM residuals")
+
+    with col2:
+        sarimax_xgb_disabled = not can_build["SARIMAX → XGBoost"]
+        build_sarimax_xgb = st.checkbox(
+            "📈→🚀 SARIMAX → XGBoost",
+            value=False,
+            disabled=sarimax_xgb_disabled,
+            help="XGBoost learns to correct SARIMAX residuals" if not sarimax_xgb_disabled else "Requires SARIMAX residuals"
+        )
+        if sarimax_xgb_disabled:
+            st.caption("❌ Missing SARIMAX residuals")
+
+    with col3:
+        lstm_sarimax_disabled = not can_build["LSTM → SARIMAX"]
+        build_lstm_sarimax = st.checkbox(
+            "🧠→📈 LSTM → SARIMAX",
+            value=False,
+            disabled=lstm_sarimax_disabled,
+            help="SARIMAX learns to correct LSTM residuals" if not lstm_sarimax_disabled else "Requires LSTM residuals"
+        )
+        if lstm_sarimax_disabled:
+            st.caption("❌ Missing LSTM residuals")
+
+    # Build button
+    any_selected = build_lstm_xgb or build_sarimax_xgb or build_lstm_sarimax
+
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+    with col_btn2:
+        if st.button(
+            "🚀 Build Hybrid Models",
+            type="primary",
+            use_container_width=True,
+            disabled=not any_selected
+        ):
+            _build_all_hybrids(build_lstm_xgb, build_sarimax_xgb, build_lstm_sarimax)
+
+    if not any_selected:
+        st.info("ℹ️ Select at least one hybrid model to build. Ensure Stage 1 models are trained first.")
+
+    st.divider()
+
+    # ==========================================================================
+    # SECTION 3: RESULTS DISPLAY
+    # ==========================================================================
+    _display_hybrid_results()
+
+    # ==========================================================================
+    # SECTION 4: LEGACY HYBRID OPTIONS (collapsed)
+    # ==========================================================================
+    with st.expander("📋 **Legacy Hybrid Options** (Advanced)", expanded=False):
+        st.caption("These are the original hybrid ensemble strategies. Use the two-stage approach above for best results.")
+
+        # Legacy dropdown for additional options
+        legacy_options = [
+            "⚖️ Weighted Ensemble (Combine Trained Models)",
+            "🔬 Decomposition + Ensemble (Component-Based Modeling)",
+            "🔗 Stacking Ensemble (Meta-Learning)",
+        ]
+
+        legacy_choice = st.selectbox("Select Legacy Strategy", legacy_options, index=0)
+
+        if st.button("Run Legacy Strategy", type="secondary"):
+            if "Weighted Ensemble" in legacy_choice:
+                _page_hybrid_weighted()
+            elif "Decomposition" in legacy_choice:
+                _page_hybrid_decomposition()
+            else:
+                _page_hybrid_stacking()
+
+
+def _check_stage1_readiness():
+    """Display detailed status of Stage 1 models and their residuals."""
+
+    st.markdown("### 🔍 Stage 1 Model Analysis")
+
+    models_status = {
+        "LSTM": {
+            "trained": "ml_mh_results_lstm" in st.session_state and st.session_state.get("ml_mh_results_lstm"),
+            "residuals": bool(get_stage1_residuals("LSTM")),
+        },
+        "XGBoost": {
+            "trained": "ml_mh_results_xgboost" in st.session_state and st.session_state.get("ml_mh_results_xgboost"),
+            "residuals": bool(get_stage1_residuals("XGBoost")),
+        },
+        "ANN": {
+            "trained": "ml_mh_results_ann" in st.session_state and st.session_state.get("ml_mh_results_ann"),
+            "residuals": bool(get_stage1_residuals("ANN")),
+        },
+        "SARIMAX": {
+            "trained": "sarimax_results" in st.session_state and st.session_state.get("sarimax_results"),
+            "residuals": bool(get_stage1_residuals("SARIMAX")),
+        }
     }
 
-    # Check SARIMAX
-    sarimax_results = st.session_state.get("sarimax_results")
-    if sarimax_results and sarimax_results.get("per_h"):
-        trained_models_status["SARIMAX"] = True
+    # Display detailed status
+    for model, status in models_status.items():
+        if status["trained"] and status["residuals"]:
+            st.success(f"✅ **{model}**: Model trained + Residuals captured → Ready for hybrid!")
+        elif status["trained"]:
+            st.warning(f"⚠️ **{model}**: Model trained but residuals NOT captured. Re-train in ML tab to capture residuals.")
+        else:
+            st.error(f"❌ **{model}**: Not trained. Train in ML tab (or Baseline Models for SARIMAX).")
 
-    # Check individual ML models
-    for model_name in ["LSTM", "XGBoost", "ANN"]:
-        key = f"ml_mh_results_{model_name.lower()}"
-        results = st.session_state.get(key, {})
-        if results and results.get("per_h"):
-            trained_models_status[model_name] = True
+    # Show residual statistics if available
+    st.markdown("---")
+    st.markdown("### 📈 Residual Statistics")
 
-    # Also check general ML results
-    ml_results = st.session_state.get("ml_mh_results")
-    if ml_results and ml_results.get("per_h"):
-        model_type = ml_results.get("model_type", "")
-        if "LSTM" in model_type:
-            trained_models_status["LSTM"] = True
-        elif "XGBoost" in model_type:
-            trained_models_status["XGBoost"] = True
-        elif "ANN" in model_type:
-            trained_models_status["ANN"] = True
+    for model in ["LSTM", "XGBoost", "ANN", "SARIMAX"]:
+        residuals = get_stage1_residuals(model)
+        if residuals:
+            val_resid = residuals.get("val_residuals", {})
+            if val_resid:
+                with st.expander(f"📊 {model} Residual Stats", expanded=False):
+                    stats_data = []
+                    for target, resid in val_resid.items():
+                        if resid is not None and len(resid) > 0:
+                            stats_data.append({
+                                "Target": target,
+                                "Mean": np.mean(resid),
+                                "Std": np.std(resid),
+                                "Min": np.min(resid),
+                                "Max": np.max(resid),
+                            })
+                    if stats_data:
+                        st.dataframe(pd.DataFrame(stats_data).style.format({
+                            "Mean": "{:.2f}",
+                            "Std": "{:.2f}",
+                            "Min": "{:.2f}",
+                            "Max": "{:.2f}",
+                        }), use_container_width=True, hide_index=True)
 
-    # Count trained models
-    num_trained = sum(trained_models_status.values())
-    trained_list = [name for name, is_trained in trained_models_status.items() if is_trained]
 
-    # -------------------------------------------------------------------------
-    # DISPLAY TRAINED MODELS STATUS
-    # -------------------------------------------------------------------------
+def _display_stage1_status():
+    """Display compact Stage 1 status cards."""
+
+    models_status = {
+        "LSTM": {
+            "trained": "ml_mh_results_lstm" in st.session_state and st.session_state.get("ml_mh_results_lstm"),
+            "residuals": bool(get_stage1_residuals("LSTM")),
+        },
+        "XGBoost": {
+            "trained": "ml_mh_results_xgboost" in st.session_state and st.session_state.get("ml_mh_results_xgboost"),
+            "residuals": bool(get_stage1_residuals("XGBoost")),
+        },
+        "ANN": {
+            "trained": "ml_mh_results_ann" in st.session_state and st.session_state.get("ml_mh_results_ann"),
+            "residuals": bool(get_stage1_residuals("ANN")),
+        },
+        "SARIMAX": {
+            "trained": "sarimax_results" in st.session_state and st.session_state.get("sarimax_results"),
+            "residuals": bool(get_stage1_residuals("SARIMAX")),
+        }
+    }
+
+    cols = st.columns(4)
+    model_icons = {"LSTM": "🧠", "XGBoost": "🚀", "ANN": "🎯", "SARIMAX": "📈"}
+
+    for i, (model, status) in enumerate(models_status.items()):
+        icon = model_icons.get(model, "📦")
+        with cols[i]:
+            if status["trained"] and status["residuals"]:
+                st.success(f"{icon} **{model}**\n\n✅ Ready")
+            elif status["trained"]:
+                st.warning(f"{icon} **{model}**\n\n⚠️ No residuals")
+            else:
+                st.error(f"{icon} **{model}**\n\n❌ Not trained")
+
+
+def _get_hybrid_eligibility() -> dict:
+    """Check which hybrid models can be built based on available residuals."""
+
+    lstm_residuals = bool(get_stage1_residuals("LSTM"))
+    sarimax_residuals = bool(get_stage1_residuals("SARIMAX"))
+
+    # XGBoost as Stage 2 doesn't need prior training - it will be trained fresh on residuals
+    # SARIMAX as Stage 2 doesn't need prior training - it will be trained fresh on residuals
+
+    return {
+        "LSTM → XGBoost": lstm_residuals,
+        "SARIMAX → XGBoost": sarimax_residuals,
+        "LSTM → SARIMAX": lstm_residuals,
+    }
+
+
+def _build_all_hybrids(build_lstm_xgb: bool, build_sarimax_xgb: bool, build_lstm_sarimax: bool):
+    """Build selected hybrid models using residual correction approach."""
+
+    results = {}
+
+    # Get feature data
+    fe = st.session_state.get("feature_engineering", {})
+    df = fe.get("A") or fe.get("B")
+
+    if df is None or df.empty:
+        st.error("❌ No feature-engineered data found. Run Feature Studio first.")
+        return
+
+    progress = st.progress(0)
+    status = st.empty()
+
+    total_hybrids = sum([build_lstm_xgb, build_sarimax_xgb, build_lstm_sarimax])
+    completed = 0
+
+    with st.spinner("Building hybrid models..."):
+        try:
+            # HYBRID 1: LSTM → XGBoost
+            if build_lstm_xgb:
+                status.info("🔧 Building LSTM → XGBoost hybrid...")
+                results["lstm_xgb"] = _train_hybrid_lstm_xgboost(df)
+                completed += 1
+                progress.progress(completed / total_hybrids)
+
+            # HYBRID 2: SARIMAX → XGBoost
+            if build_sarimax_xgb:
+                status.info("🔧 Building SARIMAX → XGBoost hybrid...")
+                results["sarimax_xgb"] = _train_hybrid_sarimax_xgboost(df)
+                completed += 1
+                progress.progress(completed / total_hybrids)
+
+            # HYBRID 3: LSTM → SARIMAX
+            if build_lstm_sarimax:
+                status.info("🔧 Building LSTM → SARIMAX hybrid...")
+                results["lstm_sarimax"] = _train_hybrid_lstm_sarimax(df)
+                completed += 1
+                progress.progress(completed / total_hybrids)
+
+            progress.progress(1.0)
+            status.empty()
+
+            # Store results
+            st.session_state["hybrid_pipeline_results"] = results
+            st.success(f"✅ Built {len(results)} hybrid model(s) successfully!")
+
+            # Show brief summary
+            for name, res in results.items():
+                if res and res.get("success"):
+                    avg_mae = res.get("avg_mae", 0)
+                    st.info(f"📊 **{name}**: Avg MAE = {avg_mae:.2f}")
+
+        except Exception as e:
+            st.error(f"❌ Hybrid model building failed: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+
+def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
+    """
+    LSTM → XGBoost Hybrid using two-stage residual correction.
+
+    Stage 1: LSTM predictions (already trained, residuals captured)
+    Stage 2: XGBoost learns to correct LSTM residuals
+
+    Final prediction = Stage1_LSTM_pred + Stage2_XGBoost_correction
+    """
+    from xgboost import XGBRegressor
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+    residuals = get_stage1_residuals("LSTM")
+    if not residuals:
+        return {"success": False, "error": "LSTM residuals not found"}
+
+    val_residuals = residuals.get("val_residuals", {})
+    val_predictions = residuals.get("val_predictions", {})
+    feature_data = residuals.get("feature_data", {})
+
+    X_val = feature_data.get("X_val")
+    feature_cols = feature_data.get("feature_cols", [])
+
+    if X_val is None:
+        return {"success": False, "error": "Validation features not found"}
+
+    results = {"per_h": {}, "success": True, "model_name": "LSTM → XGBoost"}
+
+    # Train XGBoost on residuals for each horizon
+    for h in range(1, 8):
+        target_key = f"Target_{h}"
+
+        if target_key not in val_residuals or target_key not in val_predictions:
+            continue
+
+        resid = val_residuals[target_key]
+        stage1_pred = val_predictions[target_key]
+
+        # Get actual values from the target column
+        target_col = f"Target_{h}"
+        if target_col not in df.columns:
+            continue
+
+        # Align data lengths
+        n_samples = min(len(X_val), len(resid))
+        X_train_resid = X_val[:n_samples]
+        y_train_resid = resid[:n_samples]
+
+        # Train XGBoost on residuals
+        xgb_model = XGBRegressor(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            random_state=42,
+            n_jobs=-1
+        )
+        xgb_model.fit(X_train_resid, y_train_resid)
+
+        # Predict residual correction
+        stage2_correction = xgb_model.predict(X_train_resid)
+
+        # Final prediction = Stage1 + Stage2
+        final_pred = stage1_pred[:n_samples] + stage2_correction
+
+        # Get actual values for metrics calculation
+        fe = st.session_state.get("feature_engineering", {})
+        test_idx = fe.get("test_idx")
+        if test_idx is not None and target_col in df.columns:
+            y_actual = df[target_col].iloc[test_idx].values[:n_samples]
+        else:
+            # Fallback: use residuals to compute actual
+            y_actual = stage1_pred[:n_samples] + resid[:n_samples]
+
+        # Calculate metrics
+        mae = mean_absolute_error(y_actual, final_pred)
+        rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
+
+        results["per_h"][h] = {
+            "stage1_pred": stage1_pred[:n_samples],
+            "stage2_correction": stage2_correction,
+            "final_pred": final_pred,
+            "actual": y_actual,
+            "mae": mae,
+            "rmse": rmse,
+        }
+
+    # Calculate average metrics
+    if results["per_h"]:
+        results["avg_mae"] = np.mean([r["mae"] for r in results["per_h"].values()])
+        results["avg_rmse"] = np.mean([r["rmse"] for r in results["per_h"].values()])
+
+    return results
+
+
+def _train_hybrid_sarimax_xgboost(df: pd.DataFrame) -> dict:
+    """
+    SARIMAX → XGBoost Hybrid using two-stage residual correction.
+
+    Stage 1: SARIMAX predictions (already trained, residuals captured)
+    Stage 2: XGBoost learns to correct SARIMAX residuals
+
+    Final prediction = Stage1_SARIMAX_pred + Stage2_XGBoost_correction
+    """
+    from xgboost import XGBRegressor
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+    residuals = get_stage1_residuals("SARIMAX")
+    if not residuals:
+        return {"success": False, "error": "SARIMAX residuals not found"}
+
+    val_residuals = residuals.get("val_residuals", {})
+    val_predictions = residuals.get("val_predictions", {})
+    feature_data = residuals.get("feature_data", {})
+
+    X_val = feature_data.get("X_val")
+
+    if X_val is None:
+        return {"success": False, "error": "Validation features not found"}
+
+    results = {"per_h": {}, "success": True, "model_name": "SARIMAX → XGBoost"}
+
+    # Train XGBoost on residuals for each horizon
+    for h in range(1, 8):
+        target_key = f"Target_{h}"
+
+        if target_key not in val_residuals or target_key not in val_predictions:
+            continue
+
+        resid = val_residuals[target_key]
+        stage1_pred = val_predictions[target_key]
+
+        # Align data lengths
+        n_samples = min(len(X_val), len(resid))
+        X_train_resid = X_val[:n_samples]
+        y_train_resid = resid[:n_samples]
+
+        # Train XGBoost on residuals
+        xgb_model = XGBRegressor(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            random_state=42,
+            n_jobs=-1
+        )
+        xgb_model.fit(X_train_resid, y_train_resid)
+
+        # Predict residual correction
+        stage2_correction = xgb_model.predict(X_train_resid)
+
+        # Final prediction = Stage1 + Stage2
+        final_pred = stage1_pred[:n_samples] + stage2_correction
+
+        # Compute actual from residuals
+        y_actual = stage1_pred[:n_samples] + resid[:n_samples]
+
+        # Calculate metrics
+        mae = mean_absolute_error(y_actual, final_pred)
+        rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
+
+        results["per_h"][h] = {
+            "stage1_pred": stage1_pred[:n_samples],
+            "stage2_correction": stage2_correction,
+            "final_pred": final_pred,
+            "actual": y_actual,
+            "mae": mae,
+            "rmse": rmse,
+        }
+
+    # Calculate average metrics
+    if results["per_h"]:
+        results["avg_mae"] = np.mean([r["mae"] for r in results["per_h"].values()])
+        results["avg_rmse"] = np.mean([r["rmse"] for r in results["per_h"].values()])
+
+    return results
+
+
+def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
+    """
+    LSTM → SARIMAX Hybrid using two-stage residual correction.
+
+    Stage 1: LSTM predictions (already trained, residuals captured)
+    Stage 2: SARIMAX learns to model LSTM residual time series
+
+    Final prediction = Stage1_LSTM_pred + Stage2_SARIMAX_correction
+    """
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
+    import warnings
+    warnings.filterwarnings('ignore')
+
+    residuals = get_stage1_residuals("LSTM")
+    if not residuals:
+        return {"success": False, "error": "LSTM residuals not found"}
+
+    val_residuals = residuals.get("val_residuals", {})
+    val_predictions = residuals.get("val_predictions", {})
+
+    results = {"per_h": {}, "success": True, "model_name": "LSTM → SARIMAX"}
+
+    # Train SARIMAX on residual time series for each horizon
+    for h in range(1, 8):
+        target_key = f"Target_{h}"
+
+        if target_key not in val_residuals or target_key not in val_predictions:
+            continue
+
+        resid = val_residuals[target_key]
+        stage1_pred = val_predictions[target_key]
+
+        n_samples = len(resid)
+        if n_samples < 10:
+            continue
+
+        try:
+            # Train SARIMAX on residual series
+            # Use simple ARIMA order since residuals should be near-stationary
+            sarimax_model = SARIMAX(
+                resid,
+                order=(1, 0, 1),  # Simple ARMA on residuals
+                seasonal_order=(0, 0, 0, 0),  # No seasonality on residuals
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            )
+            sarimax_fit = sarimax_model.fit(disp=False, maxiter=100)
+
+            # Get fitted values as Stage 2 correction
+            stage2_correction = sarimax_fit.fittedvalues
+
+            # Final prediction = Stage1 + Stage2
+            final_pred = stage1_pred + stage2_correction
+
+            # Compute actual from residuals
+            y_actual = stage1_pred + resid
+
+            # Calculate metrics
+            mae = mean_absolute_error(y_actual, final_pred)
+            rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
+
+            results["per_h"][h] = {
+                "stage1_pred": stage1_pred,
+                "stage2_correction": np.array(stage2_correction),
+                "final_pred": final_pred,
+                "actual": y_actual,
+                "mae": mae,
+                "rmse": rmse,
+            }
+
+        except Exception as e:
+            print(f"LSTM→SARIMAX horizon {h} failed: {e}")
+            continue
+
+    # Calculate average metrics
+    if results["per_h"]:
+        results["avg_mae"] = np.mean([r["mae"] for r in results["per_h"].values()])
+        results["avg_rmse"] = np.mean([r["rmse"] for r in results["per_h"].values()])
+
+    return results
+
+
+def _display_hybrid_results():
+    """Display hybrid model results with comparison."""
+
+    if "hybrid_pipeline_results" not in st.session_state:
+        st.info("ℹ️ No hybrid models built yet. Train Stage 1 models in the **Machine Learning** tab, then click **Build Hybrid Models** above.")
+        return
+
+    results = st.session_state["hybrid_pipeline_results"]
+
+    if not results:
+        st.warning("⚠️ Hybrid results are empty.")
+        return
+
     st.markdown(
         f"""
         <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
@@ -5085,145 +5633,130 @@ def page_hybrid():
                     box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
             <h3 style='color: #A855F7; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
                        text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
-                🎯 Select Ensemble Strategy
+                📊 Hybrid Model Results
             </h3>
-            <p style='color: #D1D5DB; margin: 0; font-size: 0.95rem;'>
-                Based on the diagnostic results above, choose the best hybrid approach for your data
-            </p>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # Show trained models status
-    model_icons = {"SARIMAX": "📈", "LSTM": "🧠", "XGBoost": "🚀", "ANN": "🎯"}
+    # Create comparison table
+    comparison_data = []
+    for hybrid_name, hybrid_results in results.items():
+        if hybrid_results and hybrid_results.get("success"):
+            comparison_data.append({
+                "Hybrid Model": hybrid_results.get("model_name", hybrid_name),
+                "Avg MAE": hybrid_results.get("avg_mae", 0),
+                "Avg RMSE": hybrid_results.get("avg_rmse", 0),
+                "Horizons Trained": len(hybrid_results.get("per_h", {})),
+            })
 
-    st.markdown("""
-    <div style='background: rgba(99, 102, 241, 0.1);
-                border-left: 3px solid #6366F1;
-                padding: 0.8rem;
-                border-radius: 8px;
-                margin: 0.5rem 0;'>
-        <span style='color: #6366F1; font-weight: 600;'>📋 Trained Models Detected</span>
-        <span style='color: #9CA3AF; font-size: 0.9rem;'> — Hybrid options are based on available models</span>
-    </div>
-    """, unsafe_allow_html=True)
+    if comparison_data:
+        comparison_df = pd.DataFrame(comparison_data)
 
-    status_cols = st.columns(4)
-    for i, (model_name, is_trained) in enumerate(trained_models_status.items()):
-        icon = model_icons.get(model_name, "✅")
-        with status_cols[i]:
-            if is_trained:
-                st.success(f"{icon} **{model_name}** ✓")
-            else:
-                st.warning(f"{icon} {model_name} ✗")
+        # Highlight best model
+        if len(comparison_df) > 1:
+            best_idx = comparison_df["Avg MAE"].idxmin()
+            st.markdown(f"🏆 **Best Model**: {comparison_df.loc[best_idx, 'Hybrid Model']} (Lowest MAE)")
 
-    if num_trained == 0:
-        st.error("""
-        ⚠️ **No trained models found!**
+        st.dataframe(
+            comparison_df.style.format({
+                "Avg MAE": "{:.2f}",
+                "Avg RMSE": "{:.2f}",
+            }).highlight_min(subset=["Avg MAE", "Avg RMSE"], color="rgba(34, 197, 94, 0.3)"),
+            use_container_width=True,
+            hide_index=True
+        )
 
-        To use hybrid strategies, first train models:
-        1. Go to **Statistical Models** → Train SARIMAX
-        2. Go to **Machine Learning** → Train LSTM, XGBoost, or ANN
-        3. Return here to select a hybrid strategy
-        """)
+        # Detailed tabs for each hybrid
+        if results:
+            tabs = st.tabs([res.get("model_name", name) for name, res in results.items() if res and res.get("success")])
+
+            for tab, (name, res) in zip(tabs, [(n, r) for n, r in results.items() if r and r.get("success")]):
+                with tab:
+                    _plot_hybrid_results(res.get("model_name", name), res)
+
+    else:
+        st.warning("⚠️ No successful hybrid models to display.")
+
+
+def _plot_hybrid_results(name: str, res: dict):
+    """Plot detailed results for a single hybrid model."""
+
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    per_h = res.get("per_h", {})
+
+    if not per_h:
+        st.info("No horizon data available.")
         return
 
-    # -------------------------------------------------------------------------
-    # BUILD DYNAMIC ENSEMBLE OPTIONS
-    # -------------------------------------------------------------------------
-    ensemble_options = []
-    option_requirements = {}
+    # Metrics table
+    metrics_data = []
+    for h, h_data in per_h.items():
+        metrics_data.append({
+            "Horizon": h,
+            "MAE": h_data.get("mae", 0),
+            "RMSE": h_data.get("rmse", 0),
+        })
 
-    # Always available options (work with any trained models)
-    ensemble_options.append("⚖️ Weighted Ensemble (Combine Trained Models)")
-    option_requirements["Weighted Ensemble"] = "Requires 1+ trained models"
+    if metrics_data:
+        st.markdown("**Per-Horizon Metrics:**")
+        st.dataframe(
+            pd.DataFrame(metrics_data).style.format({"MAE": "{:.2f}", "RMSE": "{:.2f}"}),
+            use_container_width=True,
+            hide_index=True
+        )
 
-    ensemble_options.append("🔬 Decomposition + Ensemble (Component-Based Modeling)")
-    option_requirements["Decomposition"] = "Works with any dataset"
+    # Plot actual vs predicted for first horizon
+    first_h = list(per_h.keys())[0]
+    h_data = per_h[first_h]
 
-    # Stacking requires 2+ models
-    if num_trained >= 2:
-        ensemble_options.append("🔗 Stacking Ensemble (Meta-Learning)")
-        option_requirements["Stacking"] = f"Using {num_trained} trained models"
-    else:
-        option_requirements["Stacking"] = "⚠️ Requires 2+ trained models"
+    actual = h_data.get("actual")
+    final_pred = h_data.get("final_pred")
+    stage1_pred = h_data.get("stage1_pred")
 
-    # LSTM-SARIMAX requires both LSTM and SARIMAX
-    if trained_models_status["LSTM"] and trained_models_status["SARIMAX"]:
-        ensemble_options.append("🧠 LSTM-SARIMAX Hybrid (Neural + Statistical)")
-        option_requirements["LSTM-SARIMAX"] = "✓ Both models trained"
-    else:
-        missing = []
-        if not trained_models_status["LSTM"]:
-            missing.append("LSTM")
-        if not trained_models_status["SARIMAX"]:
-            missing.append("SARIMAX")
-        option_requirements["LSTM-SARIMAX"] = f"⚠️ Missing: {', '.join(missing)}"
+    if actual is not None and final_pred is not None:
+        fig = go.Figure()
 
-    # LSTM-XGBoost requires both LSTM and XGBoost
-    if trained_models_status["LSTM"] and trained_models_status["XGBoost"]:
-        ensemble_options.append("🚀 LSTM-XGBoost Hybrid (Neural + Gradient Boosting)")
-        option_requirements["LSTM-XGBoost"] = "✓ Both models trained"
-    else:
-        missing = []
-        if not trained_models_status["LSTM"]:
-            missing.append("LSTM")
-        if not trained_models_status["XGBoost"]:
-            missing.append("XGBoost")
-        option_requirements["LSTM-XGBoost"] = f"⚠️ Missing: {', '.join(missing)}"
+        # Actual values
+        fig.add_trace(go.Scatter(
+            y=actual,
+            mode='lines+markers',
+            name='Actual',
+            line=dict(color=PRIMARY_COLOR, width=2),
+            marker=dict(size=6)
+        ))
 
-    # LSTM-ANN requires both LSTM and ANN
-    if trained_models_status["LSTM"] and trained_models_status["ANN"]:
-        ensemble_options.append("🎯 LSTM-ANN Hybrid (Neural + Neural Residuals)")
-        option_requirements["LSTM-ANN"] = "✓ Both models trained"
-    else:
-        missing = []
-        if not trained_models_status["LSTM"]:
-            missing.append("LSTM")
-        if not trained_models_status["ANN"]:
-            missing.append("ANN")
-        option_requirements["LSTM-ANN"] = f"⚠️ Missing: {', '.join(missing)}"
+        # Stage 1 predictions
+        if stage1_pred is not None:
+            fig.add_trace(go.Scatter(
+                y=stage1_pred,
+                mode='lines',
+                name='Stage 1 (Base Model)',
+                line=dict(color=WARNING_COLOR, width=2, dash='dot'),
+            ))
 
-    # Show available vs unavailable strategies
-    with st.expander("📊 **Strategy Availability** - See which hybrids you can use", expanded=False):
-        st.markdown("**Available Strategies:**")
-        for opt in ensemble_options:
-            st.markdown(f"✅ {opt}")
+        # Final hybrid predictions
+        fig.add_trace(go.Scatter(
+            y=final_pred,
+            mode='lines+markers',
+            name='Hybrid (Stage 1 + Stage 2)',
+            line=dict(color=SUCCESS_COLOR, width=2),
+            marker=dict(size=6)
+        ))
 
-        st.markdown("---")
-        st.markdown("**Strategy Requirements:**")
+        fig.update_layout(
+            title=f"{name} - Horizon {first_h} Predictions",
+            xaxis_title="Sample Index",
+            yaxis_title="Value",
+            height=400,
+            hovermode='x unified',
+            template='plotly_white'
+        )
 
-        for strategy, req in option_requirements.items():
-            if "⚠️" in req:
-                st.markdown(f"❌ **{strategy}**: {req}")
-            else:
-                st.markdown(f"✅ **{strategy}**: {req}")
-
-    # -------------------------------------------------------------------------
-    # ENSEMBLE TYPE SELECTION
-    # -------------------------------------------------------------------------
-    ensemble_type = st.radio(
-        "Choose your hybrid modeling approach",
-        options=ensemble_options,
-        index=0,
-        help="Only strategies with required models trained are shown. Train more models to unlock additional hybrid options."
-    )
-
-    st.divider()
-
-    if "Weighted Ensemble" in ensemble_type:
-        _page_hybrid_weighted()
-    elif "Decomposition" in ensemble_type:
-        _page_hybrid_decomposition()
-    elif "LSTM-SARIMAX" in ensemble_type:
-        _page_hybrid_lstm_sarimax()
-    elif "LSTM-XGBoost" in ensemble_type:
-        _page_hybrid_lstm_xgb()
-    elif "LSTM-ANN" in ensemble_type:
-        _page_hybrid_lstm_ann()
-    else:
-        _page_hybrid_stacking()
+        st.plotly_chart(fig, use_container_width=True)
 
 
 def _get_hybrid_dataset():
