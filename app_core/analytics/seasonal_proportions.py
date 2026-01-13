@@ -537,6 +537,65 @@ def apply_seasonal_proportions_to_forecast(
 # VISUALIZATION FUNCTIONS
 # =============================================================================
 
+def _extract_stl_component(component: Any) -> tuple:
+    """
+    Extract x (index) and y (values) from an STL component.
+
+    Handles both pandas Series (native DecomposeResult) and serialized data
+    (dicts, arrays, or other formats that may result from JSON serialization).
+
+    Returns:
+        tuple: (x_values, y_values) as numpy arrays or lists
+    """
+    # Case 1: pandas Series (native DecomposeResult component)
+    if isinstance(component, pd.Series):
+        return component.index, component.values
+
+    # Case 2: pandas DataFrame (single column)
+    if isinstance(component, pd.DataFrame):
+        if len(component.columns) == 1:
+            return component.index, component.iloc[:, 0].values
+        return component.index, component.values.flatten()
+
+    # Case 3: numpy array
+    if isinstance(component, np.ndarray):
+        return np.arange(len(component)), component
+
+    # Case 4: Dict with 'data' or 'values' key (from JSON serialization)
+    if isinstance(component, dict):
+        # Check for common serialization patterns
+        if 'data' in component:
+            data = component['data']
+            if isinstance(data, (list, np.ndarray)):
+                return np.arange(len(data)), np.array(data)
+        if 'values' in component:
+            values = component['values']
+            if isinstance(values, (list, np.ndarray)):
+                index = component.get('index', np.arange(len(values)))
+                return index, np.array(values)
+        # Dict might be index->value mapping
+        try:
+            keys = list(component.keys())
+            vals = list(component.values())
+            return keys, vals
+        except Exception:
+            pass
+
+    # Case 5: List
+    if isinstance(component, (list, tuple)):
+        return np.arange(len(component)), np.array(component)
+
+    # Case 6: Object with .index and .values attributes (duck typing)
+    if hasattr(component, 'index') and hasattr(component, 'values'):
+        try:
+            return component.index, component.values
+        except Exception:
+            pass
+
+    # Fallback: return empty arrays
+    return [], []
+
+
 def create_stl_decomposition_plot(
     stl_results: Dict[str, Any],
     category: str = None
@@ -547,7 +606,7 @@ def create_stl_decomposition_plot(
     Parameters:
     -----------
     stl_results : Dict
-        Dictionary of category -> DecomposeResult
+        Dictionary of category -> DecomposeResult or serialized decomposition data
     category : str, optional
         Specific category to plot. If None, plots first available
 
@@ -574,6 +633,40 @@ def create_stl_decomposition_plot(
 
     result = stl_results[category]
 
+    # Extract components - handles both native DecomposeResult and serialized data
+    # For native DecomposeResult: result.observed, result.trend, etc. are Series
+    # For serialized data: result might be a dict with 'observed', 'trend', etc. keys
+
+    # Check if result is a dict (serialized) or native object
+    if isinstance(result, dict):
+        observed = result.get('observed')
+        trend = result.get('trend')
+        seasonal = result.get('seasonal')
+        resid = result.get('resid') or result.get('residual')
+    else:
+        # Native DecomposeResult object
+        observed = getattr(result, 'observed', None)
+        trend = getattr(result, 'trend', None)
+        seasonal = getattr(result, 'seasonal', None)
+        resid = getattr(result, 'resid', None)
+
+    # Extract x and y values for each component
+    obs_x, obs_y = _extract_stl_component(observed)
+    trend_x, trend_y = _extract_stl_component(trend)
+    seasonal_x, seasonal_y = _extract_stl_component(seasonal)
+    resid_x, resid_y = _extract_stl_component(resid)
+
+    # Validate we have data
+    if len(obs_y) == 0 and len(trend_y) == 0:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="STL decomposition data could not be extracted. Data may be in an unsupported format.",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color=BODY_TEXT)
+        )
+        return fig
+
     # Create subplots
     fig = make_subplots(
         rows=4, cols=1,
@@ -583,49 +676,53 @@ def create_stl_decomposition_plot(
     )
 
     # Observed
-    fig.add_trace(
-        go.Scatter(
-            x=result.observed.index,
-            y=result.observed.values,
-            line=dict(color=PRIMARY_COLOR, width=1.5),
-            name="Observed"
-        ),
-        row=1, col=1
-    )
+    if len(obs_y) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=obs_x,
+                y=obs_y,
+                line=dict(color=PRIMARY_COLOR, width=1.5),
+                name="Observed"
+            ),
+            row=1, col=1
+        )
 
     # Trend
-    fig.add_trace(
-        go.Scatter(
-            x=result.trend.index,
-            y=result.trend.values,
-            line=dict(color=DANGER_COLOR, width=2),
-            name="Trend"
-        ),
-        row=2, col=1
-    )
+    if len(trend_y) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=trend_x,
+                y=trend_y,
+                line=dict(color=DANGER_COLOR, width=2),
+                name="Trend"
+            ),
+            row=2, col=1
+        )
 
     # Seasonal
-    fig.add_trace(
-        go.Scatter(
-            x=result.seasonal.index,
-            y=result.seasonal.values,
-            line=dict(color=SUCCESS_COLOR, width=1.5),
-            name="Seasonal"
-        ),
-        row=3, col=1
-    )
+    if len(seasonal_y) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=seasonal_x,
+                y=seasonal_y,
+                line=dict(color=SUCCESS_COLOR, width=1.5),
+                name="Seasonal"
+            ),
+            row=3, col=1
+        )
 
     # Residual
-    fig.add_trace(
-        go.Scatter(
-            x=result.resid.index,
-            y=result.resid.values,
-            mode="markers",
-            marker=dict(color=WARNING_COLOR, size=3, opacity=0.7),
-            name="Residual"
-        ),
-        row=4, col=1
-    )
+    if len(resid_y) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=resid_x,
+                y=resid_y,
+                mode="markers",
+                marker=dict(color=WARNING_COLOR, size=3, opacity=0.7),
+                name="Residual"
+            ),
+            row=4, col=1
+        )
 
     # Update layout
     fig.update_layout(
