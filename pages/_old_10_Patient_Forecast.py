@@ -1277,8 +1277,35 @@ with tab_forecast:
             # Pre-calculate category breakdown for each horizon
             category_forecasts_by_horizon = {}
             has_categories = bool(category_proportions)
+            using_ml_categories = False
 
-            if has_categories:
+            # Check if we have actual ML category predictions from training
+            ml_cat_results = st.session_state.get("ml_category_results", {})
+            ml_categories = ml_cat_results.get("categories", {})
+
+            if ml_categories:
+                # Use actual ML predictions for categories
+                using_ml_categories = True
+                has_categories = True
+
+                for h_idx in range(min(forecast_days, len(horizons))):
+                    horizon_num = horizons[h_idx]
+                    horizon_cats = {}
+
+                    for cat_name, cat_data in ml_categories.items():
+                        per_h = cat_data.get("per_h", {})
+                        if horizon_num in per_h:
+                            h_data = per_h[horizon_num]
+                            forecast_arr = h_data.get("forecast")
+                            if forecast_arr is not None and len(forecast_arr) > 0:
+                                # Use the first forecast value (or average if needed)
+                                horizon_cats[cat_name] = int(round(forecast_arr[0]))
+
+                    if horizon_cats:
+                        category_forecasts_by_horizon[horizon_num] = horizon_cats
+
+            elif has_categories:
+                # Fall back to historical proportions distribution
                 for h_idx in range(min(forecast_days, len(horizons))):
                     horizon_num = horizons[h_idx]
                     total_forecast = int(round(float(F[forecast_idx, h_idx])))
