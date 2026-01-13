@@ -393,6 +393,102 @@ def _calculate_baseline_metrics(y_train, y_test):
     except Exception:
         return {}
 
+
+# ---------------------------- SARIMAX Residual Capture for Hybrid Models ----------------------------
+
+def _capture_sarimax_residuals(sarimax_out: dict, data: pd.DataFrame, train_ratio: float = 0.8) -> dict:
+    """
+    Capture SARIMAX residuals for use in hybrid models (Stage 1 → Stage 2).
+
+    This function extracts predictions and residuals from SARIMAX training results
+    and stores them in a format compatible with the hybrid model pipeline.
+
+    Args:
+        sarimax_out: Results from run_sarimax_multihorizon()
+        data: Original training dataframe
+        train_ratio: Train/validation split ratio
+
+    Returns:
+        dict: Structured residuals ready for store_stage1_residuals()
+    """
+    per_h = sarimax_out.get("per_h", {})
+    successful = [h for h in per_h.keys() if isinstance(h, int)]
+
+    if not per_h or not successful:
+        return {}
+
+    residuals = {
+        "val_residuals": {},
+        "val_predictions": {},
+        "train_residuals": {},
+        "train_predictions": {},
+        "feature_data": {},
+        "trained_at": datetime.now().isoformat(),
+    }
+
+    for h in successful:
+        h_data = per_h.get(h, {})
+
+        # Get test/validation predictions and actuals
+        y_test = h_data.get("y_test")
+        forecast = h_data.get("forecast")
+
+        if y_test is not None and forecast is not None:
+            try:
+                y_test_arr = np.array(y_test).flatten()
+                forecast_arr = np.array(forecast).flatten()
+
+                # Align lengths if needed
+                min_len = min(len(y_test_arr), len(forecast_arr))
+                y_test_arr = y_test_arr[:min_len]
+                forecast_arr = forecast_arr[:min_len]
+
+                # Calculate residuals (actual - predicted)
+                val_resid = y_test_arr - forecast_arr
+
+                residuals["val_residuals"][f"Target_{h}"] = val_resid
+                residuals["val_predictions"][f"Target_{h}"] = forecast_arr
+
+            except Exception as e:
+                print(f"SARIMAX residual capture for h={h} failed: {e}")
+                continue
+
+    # Store feature data for Stage 2 training
+    # Get feature columns (excluding target columns)
+    all_cols = data.columns.tolist()
+    feature_cols = [c for c in all_cols if not c.startswith("Target_") and c != "Date"]
+
+    split_idx = int(len(data) * train_ratio)
+
+    if feature_cols:
+        try:
+            X = data[feature_cols].values
+            residuals["feature_data"]["X_train"] = X[:split_idx]
+            residuals["feature_data"]["X_val"] = X[split_idx:]
+            residuals["feature_data"]["feature_cols"] = feature_cols
+        except Exception:
+            pass
+
+    return residuals
+
+
+def _store_sarimax_residuals(sarimax_out: dict, data: pd.DataFrame, train_ratio: float = 0.8):
+    """
+    Capture and store SARIMAX residuals in session state for hybrid model use.
+
+    Args:
+        sarimax_out: Results from run_sarimax_multihorizon()
+        data: Original training dataframe
+        train_ratio: Train/validation split ratio
+    """
+    residuals = _capture_sarimax_residuals(sarimax_out, data, train_ratio)
+
+    if residuals and residuals.get("val_residuals"):
+        st.session_state["stage1_residuals_sarimax"] = residuals
+        return True
+    return False
+
+
 def _build_horizon_performance_chart(metrics_df: pd.DataFrame, title: str = "Forecast Accuracy by Horizon"):
     """
     Create professional horizon-specific performance degradation chart.
