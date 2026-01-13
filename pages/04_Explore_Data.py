@@ -237,6 +237,25 @@ def _render_donut_charts(dff):
         else:
             st.info("Could not derive month names for pie chart.")
 
+def _safe_get_decomp_xy(component):
+    """Safely extract x (index) and y (values) from a decomposition component."""
+    if component is None:
+        return [], []
+    # Handle pandas Series
+    if hasattr(component, 'index') and hasattr(component, 'values'):
+        try:
+            return component.index, component.values
+        except Exception:
+            pass
+    # Handle numpy array
+    if isinstance(component, np.ndarray):
+        return np.arange(len(component)), component
+    # Handle list
+    if isinstance(component, (list, tuple)):
+        return np.arange(len(component)), np.array(component)
+    # Fallback
+    return [], []
+
 def _render_decomposition(df):
     cA, cB = st.columns([3, 1])
     with cB:
@@ -251,11 +270,22 @@ def _render_decomposition(df):
                 res = seasonal_decompose(ts.dropna(), model=model_type, period=int(period), extrapolate_trend="freq")
                 dec_fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.04,
                                         subplot_titles=("Observed", "Trend", "Seasonal", "Residual"))
-                dec_fig.add_trace(go.Scatter(x=res.observed.index, y=res.observed, line=dict(color=PRIMARY_COLOR, width=1.5)), row=1, col=1)
-                dec_fig.add_trace(go.Scatter(x=res.trend.index, y=res.trend, line=dict(color=DANGER_COLOR, width=2)), row=2, col=1)
-                dec_fig.add_trace(go.Scatter(x=res.seasonal.index, y=res.seasonal, line=dict(color=SUCCESS_COLOR, width=1.5)), row=3, col=1)
-                dec_fig.add_trace(go.Scatter(x=res.resid.index, y=res.resid, mode="markers",
-                                             marker=dict(color=WARNING_COLOR, size=3, opacity=0.7)), row=4, col=1)
+
+                # Safely extract components
+                obs_x, obs_y = _safe_get_decomp_xy(res.observed)
+                trend_x, trend_y = _safe_get_decomp_xy(res.trend)
+                seasonal_x, seasonal_y = _safe_get_decomp_xy(res.seasonal)
+                resid_x, resid_y = _safe_get_decomp_xy(res.resid)
+
+                if len(obs_y) > 0:
+                    dec_fig.add_trace(go.Scatter(x=obs_x, y=obs_y, line=dict(color=PRIMARY_COLOR, width=1.5)), row=1, col=1)
+                if len(trend_y) > 0:
+                    dec_fig.add_trace(go.Scatter(x=trend_x, y=trend_y, line=dict(color=DANGER_COLOR, width=2)), row=2, col=1)
+                if len(seasonal_y) > 0:
+                    dec_fig.add_trace(go.Scatter(x=seasonal_x, y=seasonal_y, line=dict(color=SUCCESS_COLOR, width=1.5)), row=3, col=1)
+                if len(resid_y) > 0:
+                    dec_fig.add_trace(go.Scatter(x=resid_x, y=resid_y, mode="markers",
+                                                 marker=dict(color=WARNING_COLOR, size=3, opacity=0.7)), row=4, col=1)
                 dec_fig.update_layout(height=600, showlegend=False, margin=dict(t=50, b=20, l=20, r=20))
                 st.plotly_chart(add_grid(dec_fig), use_container_width=True)
             except Exception as e:
