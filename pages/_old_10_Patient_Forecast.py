@@ -733,6 +733,18 @@ def extract_model_evaluation_metrics(model_key: str, model_info: Dict) -> Dict[s
     """
     metrics = {"MAE": None, "RMSE": None, "MAPE": None, "Accuracy": None}
 
+    # Handle two-stage hybrid models (stored in hybrid_pipeline_results)
+    if model_info.get("source") == "hybrid_pipeline_results":
+        sub_key = model_info.get("sub_key")
+        hybrid_results = st.session_state.get("hybrid_pipeline_results", {})
+        if sub_key and sub_key in hybrid_results:
+            hybrid_data = hybrid_results[sub_key]
+            if hybrid_data and isinstance(hybrid_data, dict):
+                metrics["MAE"] = hybrid_data.get("avg_mae")
+                metrics["RMSE"] = hybrid_data.get("avg_rmse")
+                return metrics
+        return metrics
+
     model_data = st.session_state.get(model_key)
     if not model_data or not isinstance(model_data, dict):
         return metrics
