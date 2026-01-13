@@ -2774,7 +2774,7 @@ def page_benchmarks():
                     )
 
                     from app_core.analytics.seasonal_proportions import create_stl_decomposition_plot
-                    fig_stl = create_stl_decomposition_plot(sp_result.stl_results, selected_cat)
+                    fig_stl = create_stl_decomposition_plot(stl_results, selected_cat)
                     st.plotly_chart(fig_stl, use_container_width=True)
                 else:
                     st.info("ℹ️ STL decomposition not available. Insufficient data or decomposition failed.")
