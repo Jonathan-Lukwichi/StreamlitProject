@@ -1174,6 +1174,238 @@ def run_ml_multihorizon(
         "explainability_data": explainability_data,
     }
 
+
+# =============================================================================
+# CLINICAL CATEGORY DETECTION & RESIDUAL CAPTURE
+# =============================================================================
+CLINICAL_CATEGORIES = [
+    "RESPIRATORY", "CARDIAC", "TRAUMA", "GASTROINTESTINAL",
+    "INFECTIOUS", "NEUROLOGICAL", "OTHER"
+]
+
+
+def detect_category_targets(df: pd.DataFrame, horizons: int = 7) -> dict:
+    """
+    Detect which clinical category target columns exist in the dataframe.
+
+    Args:
+        df: DataFrame with potential category columns (e.g., RESPIRATORY_1, CARDIAC_2)
+        horizons: Number of horizons to check (1-7)
+
+    Returns:
+        Dict mapping category name to list of existing target columns.
+        Example: {"RESPIRATORY": ["RESPIRATORY_1", "RESPIRATORY_2", ...]}
+    """
+    category_targets = {}
+
+    for category in CLINICAL_CATEGORIES:
+        cols = []
+        for h in range(1, horizons + 1):
+            col_name = f"{category}_{h}"
+            if col_name in df.columns:
+                cols.append(col_name)
+        if cols:
+            category_targets[category] = cols
+
+    return category_targets
+
+
+def capture_residuals_from_results(results: dict, df: pd.DataFrame, feature_cols: list,
+                                   split_ratio: float) -> dict:
+    """
+    Extract and structure residuals from ML training results for hybrid models.
+
+    Args:
+        results: Results from run_ml_multihorizon()
+        df: Original training dataframe
+        feature_cols: Feature column names
+        split_ratio: Train/validation split ratio
+
+    Returns:
+        Dict with train and validation residuals per horizon.
+    """
+    per_h = results.get("per_h", {})
+    successful = results.get("successful", [])
+
+    if not per_h or not successful:
+        return {}
+
+    # Get split index
+    fe = st.session_state.get("feature_engineering", {})
+    train_idx = fe.get("train_idx")
+    test_idx = fe.get("test_idx")
+
+    use_fe_split = (
+        train_idx is not None and test_idx is not None and
+        isinstance(train_idx, np.ndarray) and isinstance(test_idx, np.ndarray) and
+        len(train_idx) > 0 and len(test_idx) > 0
+    )
+
+    residuals = {
+        "train_residuals": {},
+        "val_residuals": {},
+        "train_predictions": {},
+        "val_predictions": {},
+        "feature_data": {},
+    }
+
+    for h in successful:
+        h_data = per_h.get(h, {})
+        y_test = h_data.get("y_test")
+        forecast = h_data.get("forecast")
+
+        if y_test is not None and forecast is not None:
+            # Validation residuals (actual - predicted)
+            val_resid = np.array(y_test) - np.array(forecast)
+            residuals["val_residuals"][f"Target_{h}"] = val_resid
+            residuals["val_predictions"][f"Target_{h}"] = np.array(forecast)
+
+            # Get training predictions if pipeline is available
+            # Note: Training residuals would require re-predicting on train set
+            # For now, we'll compute them during hybrid training if needed
+
+    # Store feature data for Stage 2 training
+    if use_fe_split:
+        X = df[feature_cols].values
+        residuals["feature_data"]["X_train"] = X[train_idx]
+        residuals["feature_data"]["X_val"] = X[test_idx]
+        residuals["feature_data"]["train_idx"] = train_idx
+        residuals["feature_data"]["test_idx"] = test_idx
+    else:
+        split_idx = int(len(df) * split_ratio)
+        X = df[feature_cols].values
+        residuals["feature_data"]["X_train"] = X[:split_idx]
+        residuals["feature_data"]["X_val"] = X[split_idx:]
+
+    residuals["feature_data"]["feature_cols"] = feature_cols
+    residuals["trained_at"] = datetime.now().isoformat()
+
+    return residuals
+
+
+def run_ml_with_categories(
+    model_type: str,
+    config: dict,
+    df: pd.DataFrame,
+    feature_cols: list,
+    split_ratio: float,
+    horizons: int = 7,
+) -> dict:
+    """
+    Train ML model for total patient count AND clinical categories.
+
+    This function:
+    1. Trains on Target_1...Target_7 (total patients)
+    2. Trains on CATEGORY_1...CATEGORY_7 for each detected category
+    3. Captures residuals for hybrid model use
+    4. Stores all results in a structured format
+
+    Args:
+        model_type: "LSTM", "ANN", or "XGBoost"
+        config: Model configuration
+        df: Training dataframe
+        feature_cols: Feature column names
+        split_ratio: Train/validation split
+        horizons: Number of horizons (default 7)
+
+    Returns:
+        dict with total_results, category_results, and residuals
+    """
+    from datetime import datetime
+
+    # 1. Train on total patient count (Target_1...Target_7)
+    total_results = run_ml_multihorizon(
+        model_type=model_type,
+        config=config,
+        df=df,
+        feature_cols=feature_cols,
+        split_ratio=split_ratio,
+        horizons=horizons,
+    )
+
+    # 2. Capture residuals from total model
+    total_residuals = capture_residuals_from_results(
+        total_results, df, feature_cols, split_ratio
+    )
+
+    # 3. Detect and train on category targets
+    category_targets = detect_category_targets(df, horizons)
+    category_results = {}
+    category_residuals = {}
+
+    for category, cols in category_targets.items():
+        # Train model for this category's horizons
+        cat_per_h = {}
+        cat_successful = []
+
+        for h in range(1, horizons + 1):
+            target_col = f"{category}_{h}"
+            if target_col not in df.columns:
+                continue
+
+            try:
+                result = run_ml_model(
+                    model_type=model_type,
+                    config=config,
+                    df=df,
+                    target_col=target_col,
+                    feature_cols=feature_cols,
+                    split_ratio=split_ratio,
+                )
+
+                if result.get("success", False):
+                    predictions = result.get("predictions")
+                    cat_per_h[h] = {
+                        "y_test": predictions["actual"].values if predictions is not None else None,
+                        "forecast": predictions["predicted"].values if predictions is not None else None,
+                        "datetime": predictions["datetime"].values if predictions is not None else None,
+                        "mae": result.get("val_metrics", {}).get("MAE"),
+                        "rmse": result.get("val_metrics", {}).get("RMSE"),
+                    }
+                    cat_successful.append(h)
+            except Exception as e:
+                print(f"Category {category} horizon {h} failed: {e}")
+                continue
+
+        if cat_successful:
+            category_results[category] = {
+                "per_h": cat_per_h,
+                "successful": cat_successful,
+            }
+
+            # Capture category residuals
+            cat_resid = {}
+            for h in cat_successful:
+                h_data = cat_per_h.get(h, {})
+                y_test = h_data.get("y_test")
+                forecast = h_data.get("forecast")
+                if y_test is not None and forecast is not None:
+                    cat_resid[f"{category}_{h}"] = np.array(y_test) - np.array(forecast)
+            category_residuals[category] = cat_resid
+
+    return {
+        "model_type": model_type,
+        "total_results": total_results,
+        "category_results": category_results,
+        "total_residuals": total_residuals,
+        "category_residuals": category_residuals,
+        "trained_at": datetime.now().isoformat(),
+        "categories_detected": list(category_targets.keys()),
+    }
+
+
+def store_stage1_residuals(model_name: str, residuals: dict):
+    """Store Stage 1 residuals in session state for hybrid model use."""
+    key = f"stage1_residuals_{model_name.lower()}"
+    st.session_state[key] = residuals
+
+
+def get_stage1_residuals(model_name: str) -> dict:
+    """Retrieve Stage 1 residuals from session state."""
+    key = f"stage1_residuals_{model_name.lower()}"
+    return st.session_state.get(key, {})
+
+
 def ml_to_multihorizon_artifacts(ml_out: dict):
     """
     Convert ML multi-horizon results to unified artifact format (compatible with ARIMA/SARIMAX).
