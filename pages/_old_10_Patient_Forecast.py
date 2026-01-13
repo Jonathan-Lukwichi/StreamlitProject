@@ -679,7 +679,7 @@ def get_all_trained_models_from_session() -> Dict[str, Dict[str, Any]]:
             "status": "🔗 Hybrid"
         }
 
-    # LSTM Hybrid Models
+    # LSTM Hybrid Models (legacy format)
     lstm_hybrid_keys = ["lstm_sarimax_results", "lstm_xgb_results", "lstm_ann_results"]
     lstm_hybrid_names = ["LSTM+SARIMAX", "LSTM+XGBoost", "LSTM+ANN"]
 
@@ -692,6 +692,30 @@ def get_all_trained_models_from_session() -> Dict[str, Dict[str, Any]]:
                 "has_ci": False,
                 "status": "🔗 Hybrid"
             }
+
+    # Two-Stage Residual Correction Hybrid Models (new format from Train Models page)
+    hybrid_results = st.session_state.get("hybrid_pipeline_results", {})
+    if hybrid_results and isinstance(hybrid_results, dict):
+        hybrid_name_map = {
+            "lstm_xgb": "LSTM→XGBoost",
+            "sarimax_xgb": "SARIMAX→XGBoost",
+            "lstm_sarimax": "LSTM→SARIMAX"
+        }
+        for hybrid_key, hybrid_data in hybrid_results.items():
+            if hybrid_data and isinstance(hybrid_data, dict) and hybrid_data.get("success"):
+                display_name = hybrid_name_map.get(hybrid_key, hybrid_data.get("model_name", hybrid_key))
+                model_key = f"hybrid_{hybrid_key}"
+                trained_models[model_key] = {
+                    "name": display_name,
+                    "type": "Hybrid",
+                    "source": "hybrid_pipeline_results",
+                    "sub_key": hybrid_key,
+                    "has_ci": False,
+                    "status": "🧬 Two-Stage",
+                    "horizons": list(hybrid_data.get("per_h", {}).keys()),
+                    "avg_mae": hybrid_data.get("avg_mae"),
+                    "avg_rmse": hybrid_data.get("avg_rmse")
+                }
 
     return trained_models
 
