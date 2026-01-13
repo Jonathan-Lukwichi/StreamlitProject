@@ -2739,6 +2739,19 @@ def page_benchmarks():
 
             sp_result = st.session_state.get("seasonal_proportions_result")
 
+            # Helper to safely get attribute (handles both dataclass and dict)
+            def _get_sp_attr(obj, attr, default=None):
+                if obj is None:
+                    return default
+                if hasattr(obj, attr):
+                    return getattr(obj, attr, default)
+                if isinstance(obj, dict):
+                    # Handle deserialized dict from Supabase
+                    if "data" in obj and isinstance(obj.get("data"), dict):
+                        return obj["data"].get(attr, default)
+                    return obj.get(attr, default)
+                return default
+
             sp_tab1, sp_tab2, sp_tab3 = st.tabs([
                 "📈 STL Decomposition",
                 "🔥 Seasonal Heatmap",
@@ -2749,8 +2762,9 @@ def page_benchmarks():
                 st.markdown("#### STL Decomposition (Seasonal-Trend-Loess)")
                 st.caption("Decompose time series into observed, trend, seasonal, and residual components")
 
-                # Category selector for STL
-                available_categories = [cat for cat, res in sp_result.stl_results.items() if res is not None]
+                # Category selector for STL - safely access stl_results
+                stl_results = _get_sp_attr(sp_result, "stl_results", {})
+                available_categories = [cat for cat, res in (stl_results or {}).items() if res is not None]
 
                 if available_categories:
                     selected_cat = st.selectbox(
