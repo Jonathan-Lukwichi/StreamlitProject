@@ -1423,7 +1423,7 @@ with tab_forecast:
 
             # Pre-calculate category breakdown for each horizon
             category_forecasts_by_horizon = {}
-            has_categories = bool(category_proportions)
+            has_seasonal_props = seasonal_props is not None
             using_ml_categories = False
 
             # Check if we have actual ML category predictions from training
@@ -1433,7 +1433,6 @@ with tab_forecast:
             if ml_categories:
                 # Use actual ML predictions for categories
                 using_ml_categories = True
-                has_categories = True
 
                 for h_idx in range(min(forecast_days, len(horizons))):
                     horizon_num = horizons[h_idx]
@@ -1451,20 +1450,36 @@ with tab_forecast:
                     if horizon_cats:
                         category_forecasts_by_horizon[horizon_num] = horizon_cats
 
-            elif has_categories:
-                # Fall back to historical proportions distribution
+            elif has_seasonal_props:
+                # Use SEASONAL PROPORTIONS (DOW x Monthly) for distribution
                 for h_idx in range(min(forecast_days, len(horizons))):
                     horizon_num = horizons[h_idx]
                     total_forecast = int(round(float(F[forecast_idx, h_idx])))
+
+                    # Calculate forecast date for this horizon
+                    try:
+                        forecast_date = pd.Timestamp(base_date) + pd.Timedelta(days=horizon_num)
+                    except:
+                        forecast_date = pd.Timestamp.now() + pd.Timedelta(days=horizon_num)
+
+                    # Get seasonal proportions for this specific date (DOW x Monthly)
+                    date_proportions = combine_proportions_multiplicatively(
+                        dow_proportions=seasonal_props.dow_proportions,
+                        monthly_proportions=seasonal_props.monthly_proportions,
+                        target_date=forecast_date,
+                        category_cols=list(category_config.keys())
+                    )
+
+                    # Distribute using seasonal proportions with smart rounding
                     category_forecasts_by_horizon[horizon_num] = distribute_with_smart_rounding(
-                        total_forecast, category_proportions
+                        total_forecast, date_proportions
                     )
 
             # --- FORECAST HEADER ---
             if using_ml_categories:
                 categories_text = " • <span style='color: #10b981;'>ML Category Predictions</span>"
-            elif has_categories:
-                categories_text = " • <span style='color: #10b981;'>Categories (Proportional)</span>"
+            elif has_seasonal_props:
+                categories_text = " • <span style='color: #10b981;'>Categories (Seasonal DOW×Monthly)</span>"
             else:
                 categories_text = ""
             st.markdown(f"""
