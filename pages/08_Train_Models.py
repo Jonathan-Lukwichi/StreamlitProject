@@ -1,6 +1,6 @@
 # =============================================================================
-# 08_Modeling_Hub.py
-# Unified Modeling Hub (foundation only)
+# 08_Train_Models.py - Modelling Studio
+# Unified Modelling Studio (foundation only)
 # - Benchmarks (ARIMA / SARIMAX): Model selection dropdown + Auto/Manual + Train/Test
 # - ML (LSTM / ANN / XGBoost): Model selection dropdown ("Choose a ml model") with XGBoost default + Auto/Manual + Train/Test
 # - Hybrids (LSTM-XGBoost / LSTM-ANN / LSTM-SARIMAX): Model selection dropdown + Auto/Manual + Train/Test
