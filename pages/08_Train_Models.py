@@ -782,8 +782,7 @@ def _render_seasonal_category_forecast(predictions: list, dates: list, title: st
     data = st.session_state.get("cfg", {}).get("training_data")
 
     if data is None or data.empty:
-        st.warning("Cannot calculate seasonal proportions: A dataset must be selected first.")
-        return
+        return  # Silently skip if no dataset selected
 
     try:
         # This function should return the proportion data needed for rendering
