@@ -1605,15 +1605,28 @@ with tab_forecast:
                         st.markdown(actual_html, unsafe_allow_html=True)
 
             # --- CATEGORY STATISTICS SECTION ---
-            if has_categories:
+            if has_seasonal_props or using_ml_categories:
                 st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
                 st.markdown("""
                 <div class='forecast-card' style='padding: 1.25rem;'>
                     <div style='margin-bottom: 1rem;'>
                         <div style='font-size: 1rem; font-weight: 700; color: #e2e8f0;'>📊 Category Statistics</div>
-                        <div style='font-size: 0.75rem; color: #64748b;'>Average daily arrivals and historical proportion per category</div>
+                        <div style='font-size: 0.75rem; color: #64748b;'>Average daily arrivals and seasonal proportion (DOW × Monthly) per category</div>
                     </div>
                 """, unsafe_allow_html=True)
+
+                # Get seasonal proportions for base_date (for display)
+                base_date_proportions = {}
+                if seasonal_props is not None:
+                    try:
+                        base_date_proportions = combine_proportions_multiplicatively(
+                            dow_proportions=seasonal_props.dow_proportions,
+                            monthly_proportions=seasonal_props.monthly_proportions,
+                            target_date=pd.Timestamp(base_date),
+                            category_cols=list(category_config.keys())
+                        )
+                    except:
+                        pass
 
                 # Create summary cards for each category
                 num_cats = len(category_config)
@@ -1629,8 +1642,8 @@ with tab_forecast:
                             count += 1
                     avg_for_cat = total_for_cat / count if count > 0 else 0
 
-                    # Get proportion for this category
-                    proportion = category_proportions.get(cat, 0) * 100
+                    # Get seasonal proportion for this category (from base_date)
+                    proportion = base_date_proportions.get(cat, 0) * 100
 
                     # Color based on proportion
                     if proportion >= 15:
