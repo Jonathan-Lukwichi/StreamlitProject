@@ -2487,69 +2487,217 @@ with tab_explainability:
                 st.warning(f"No pipeline data found for Horizon {selected_horizon}. Please re-train the model.")
 
 # -----------------------------------------------------------------------------
-# TAB 7: THESIS EXPORT
+# TAB 8: EXPORT (Enhanced)
 # -----------------------------------------------------------------------------
-with tab_thesis:
-    st.markdown("### Thesis-Quality Summary")
-    st.caption("Academic-grade analysis ready for thesis inclusion")
+with tab_export:
+    st.markdown("### Export Results")
+    st.caption("Export model results to CSV, Markdown, or LaTeX for thesis and reporting")
 
-    # Generate summary
-    thesis_summary = generate_thesis_summary(all_models_df, best_model, analysis)
+    # Initialize experiment service
+    export_exp_service = get_experiment_service()
 
-    # Display in markdown
-    st.markdown(thesis_summary)
+    # --- Section 1: Export Scope Selection ---
+    st.markdown("#### Export Scope")
 
-    # Export options
-    st.markdown("---")
-    st.markdown("### Export Options")
+    export_scope = st.radio(
+        "Select what to export:",
+        ["Current Session Results", "All Experiment History", "Filtered Experiments"],
+        horizontal=True,
+        key="export_scope_radio"
+    )
 
-    col1, col2, col3 = st.columns(3)
+    # --- Section 2: Filters (if Filtered Experiments selected) ---
+    if export_scope == "Filtered Experiments":
+        st.markdown("##### Filter Options")
 
-    with col1:
-        # Export summary as markdown
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
+
+        with filter_col1:
+            # Get unique models from experiments
+            if export_exp_service.is_connected():
+                all_models_list = export_exp_service.get_unique_values("model_name")
+            else:
+                all_models_list = []
+            filter_models = st.multiselect(
+                "Filter by Model:",
+                options=all_models_list,
+                key="export_filter_models"
+            )
+
+        with filter_col2:
+            if export_exp_service.is_connected():
+                all_methods_list = export_exp_service.get_unique_values("feature_selection_method")
+            else:
+                all_methods_list = []
+            filter_methods = st.multiselect(
+                "Filter by Feature Selection Method:",
+                options=all_methods_list,
+                key="export_filter_methods"
+            )
+
+        with filter_col3:
+            if export_exp_service.is_connected():
+                all_datasets_list = export_exp_service.get_unique_values("dataset_id")
+            else:
+                all_datasets_list = []
+            filter_datasets = st.multiselect(
+                "Filter by Dataset ID:",
+                options=all_datasets_list,
+                key="export_filter_datasets"
+            )
+
+    st.divider()
+
+    # --- Section 3: Generate Export ---
+    st.markdown("#### Generate Export Files")
+
+    export_col1, export_col2 = st.columns(2)
+
+    with export_col1:
+        st.markdown("##### CSV Exports")
+
+        # Current Session Results
+        if export_scope == "Current Session Results":
+            if not all_models_df.empty:
+                csv_data = all_models_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Current Results (CSV)",
+                    csv_data,
+                    f"model_results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    "text/csv",
+                    use_container_width=True,
+                )
+
+                # Also offer rankings
+                ranked_df = compute_model_rankings(all_models_df)
+                ranked_csv = ranked_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Rankings (CSV)",
+                    ranked_csv,
+                    f"model_rankings_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    "text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.info("No current session results to export.")
+
+        # All Experiment History
+        elif export_scope == "All Experiment History":
+            if export_exp_service.is_connected():
+                exp_csv = export_exp_service.export_to_csv()
+                if exp_csv:
+                    st.download_button(
+                        "📥 Download All Experiments (CSV)",
+                        exp_csv,
+                        f"all_experiments_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        "text/csv",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("No experiments in database to export.")
+            else:
+                st.warning("Supabase not connected.")
+
+        # Filtered Experiments
+        else:
+            if export_exp_service.is_connected():
+                filters = {}
+                if filter_models:
+                    filters["model_name"] = filter_models
+                if filter_methods:
+                    filters["feature_selection_method"] = filter_methods
+
+                filtered_csv = export_exp_service.export_to_csv(filters if filters else None)
+                if filtered_csv:
+                    st.download_button(
+                        "📥 Download Filtered Experiments (CSV)",
+                        filtered_csv,
+                        f"filtered_experiments_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        "text/csv",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("No experiments match the selected filters.")
+            else:
+                st.warning("Supabase not connected.")
+
+    with export_col2:
+        st.markdown("##### Thesis Exports")
+
+        # Thesis summary
+        thesis_summary = generate_thesis_summary(all_models_df, best_model, analysis)
+
         st.download_button(
-            "📥 Download Summary (Markdown)",
+            "📥 Download Thesis Summary (Markdown)",
             thesis_summary,
-            "model_comparison_summary.md",
+            f"thesis_summary_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
             "text/markdown",
             use_container_width=True,
         )
 
-    with col2:
-        # Export full results as CSV
-        csv_data = all_models_df.to_csv(index=False)
-        st.download_button(
-            "📥 Download Results (CSV)",
-            csv_data,
-            "model_results.csv",
-            "text/csv",
-            use_container_width=True,
-        )
-
-    with col3:
-        # Export rankings as CSV
-        ranked_csv = compute_model_rankings(all_models_df).to_csv(index=False)
-        st.download_button(
-            "📥 Download Rankings (CSV)",
-            ranked_csv,
-            "model_rankings.csv",
-            "text/csv",
-            use_container_width=True,
-        )
-
-    # LaTeX table generation
-    st.markdown("### LaTeX Table Export")
-
-    with st.expander("📋 LaTeX Table Code"):
+        # LaTeX table
         latex_table = _generate_latex_table(all_models_df)
-        st.code(latex_table, language="latex")
-
         st.download_button(
-            "📥 Download LaTeX",
+            "📥 Download LaTeX Table",
             latex_table,
-            "model_comparison_table.tex",
+            f"model_comparison_{datetime.now().strftime('%Y%m%d_%H%M')}.tex",
             "text/plain",
+            use_container_width=True,
         )
+
+    st.divider()
+
+    # --- Section 4: Upload to Supabase ---
+    st.markdown("#### Import Experiments from CSV")
+
+    uploaded_file = st.file_uploader(
+        "Upload CSV file to import experiments:",
+        type=["csv"],
+        key="exp_csv_upload"
+    )
+
+    if uploaded_file:
+        try:
+            import_df = pd.read_csv(uploaded_file)
+            st.success(f"Loaded CSV with {len(import_df)} rows")
+
+            # Preview
+            with st.expander("Preview Data"):
+                st.dataframe(import_df.head(10), use_container_width=True)
+
+            # Required columns check
+            required_cols = ["dataset_id", "model_name"]
+            missing_cols = [c for c in required_cols if c not in import_df.columns]
+
+            if missing_cols:
+                st.error(f"Missing required columns: {', '.join(missing_cols)}")
+            else:
+                if st.button("📤 Import to Supabase", type="primary"):
+                    if export_exp_service.is_connected():
+                        success_count = export_exp_service.bulk_import(import_df)
+                        if success_count > 0:
+                            st.success(f"✅ Successfully imported {success_count} experiments!")
+                        else:
+                            st.warning("No experiments were imported. Check the data format.")
+                    else:
+                        st.error("Supabase not connected. Cannot import.")
+
+        except Exception as e:
+            st.error(f"Error reading CSV: {str(e)}")
+
+    st.divider()
+
+    # --- Section 5: Thesis Summary Preview ---
+    st.markdown("#### Thesis Summary Preview")
+
+    with st.expander("📄 View Thesis Summary", expanded=False):
+        st.markdown(thesis_summary)
+
+    # --- Section 6: LaTeX Table Preview ---
+    st.markdown("#### LaTeX Table Preview")
+
+    with st.expander("📋 View LaTeX Code", expanded=False):
+        st.code(latex_table, language="latex")
 
 
 # =============================================================================
