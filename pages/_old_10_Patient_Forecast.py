@@ -1700,6 +1700,45 @@ with tab_forecast:
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
+                # --- SEASONAL PROPORTIONS INFO EXPANDER ---
+                if seasonal_props is not None:
+                    with st.expander("📊 Seasonal Proportions Details (DOW × Monthly)", expanded=False):
+                        st.markdown("""
+                        <div style='font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem;'>
+                            Seasonal proportions combine <strong>Day-of-Week</strong> and <strong>Monthly</strong> patterns
+                            to distribute total forecasts across clinical categories. Each cell shows the proportion
+                            of that category for that time period.
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("**Day-of-Week Proportions:**")
+                            dow_display = seasonal_props.dow_proportions.copy()
+                            dow_display = dow_display * 100  # Convert to percentage
+                            st.dataframe(
+                                dow_display.style.format("{:.1f}%").background_gradient(cmap='Blues', axis=0),
+                                use_container_width=True,
+                                height=300
+                            )
+                        with col2:
+                            st.markdown("**Monthly Proportions:**")
+                            monthly_display = seasonal_props.monthly_proportions.copy()
+                            monthly_display = monthly_display * 100  # Convert to percentage
+                            st.dataframe(
+                                monthly_display.style.format("{:.1f}%").background_gradient(cmap='Greens', axis=0),
+                                use_container_width=True,
+                                height=300
+                            )
+
+                        st.info(f"""
+                        **How it works:** For a forecast on {base_date_str}:
+                        - Get DOW factor for that day (e.g., Monday)
+                        - Get Monthly factor for that month (e.g., January)
+                        - Multiply: Final = DOW × Monthly
+                        - Normalize so all categories sum to 100%
+                        """)
+
         # --- TIME SERIES CHART ---
         st.markdown("### 📊 Forecast vs Actual")
 
