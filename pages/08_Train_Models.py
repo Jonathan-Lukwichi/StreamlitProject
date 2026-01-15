@@ -69,7 +69,7 @@ require_admin_access()
 configure_sidebar_navigation()
 
 st.set_page_config(
-    page_title="Train Models - HealthForecast AI",
+    page_title="Modelling Studio - HealthForecast AI",
     page_icon="🧠",
     layout="wide",
 )
