@@ -255,7 +255,7 @@ st.markdown(f"""
 # Premium Hero Header
 # -----------------------------------------------------------------------------
 render_scifi_hero_header(
-    title="Train Models",
+    title="Modelling Studio",
     subtitle="Configure and train machine learning models. XGBoost, LSTM, ANN, and hybrid architectures.",
     status="SYSTEM ONLINE"
 )
