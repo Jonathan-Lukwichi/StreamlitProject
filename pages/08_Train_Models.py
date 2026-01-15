@@ -90,7 +90,7 @@ auto_load_if_available("Modelling Studio")
 st.markdown(f"""
 <style>
 /* ========================================
-   FLUORESCENT EFFECTS FOR MODELING HUB
+   FLUORESCENT EFFECTS FOR MODELLING STUDIO
    ======================================== */
 
 @keyframes float-orb {{
