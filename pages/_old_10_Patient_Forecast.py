@@ -1370,34 +1370,36 @@ with tab_forecast:
                 "OTHER": {"icon": "📋", "color": "#6b7280"},
             }
 
-            # Calculate historical proportions from processed_df
-            category_proportions = {}
+            # Calculate SEASONAL proportions (DOW x Monthly) for category distribution
+            seasonal_props = None
             merged_df = st.session_state.get("processed_df")
             if merged_df is None or merged_df.empty:
                 merged_df = st.session_state.get("merged_data")
 
             if merged_df is not None and not merged_df.empty:
-                col_map = {col.upper(): col for col in merged_df.columns}
-                cat_totals = {}
-                for cat in category_config.keys():
-                    cat_upper = cat.upper()
-                    matching_cols = []
-                    for col_upper, original_col in col_map.items():
-                        if col_upper == cat_upper or col_upper.startswith(cat_upper + "_"):
-                            matching_cols.append(original_col)
-                    if matching_cols:
-                        total_for_cat = 0
-                        for col in matching_cols:
-                            col_sum = merged_df[col].sum()
-                            if pd.notna(col_sum):
-                                total_for_cat += col_sum
-                        if total_for_cat > 0:
-                            cat_totals[cat] = total_for_cat
+                # Find date column
+                date_col = None
+                for col in ["Date", "date", "DATE"]:
+                    if col in merged_df.columns:
+                        date_col = col
+                        break
 
-                total_cat_sum = sum(cat_totals.values()) if cat_totals else 0
-                if total_cat_sum > 0:
-                    for cat, cat_sum in cat_totals.items():
-                        category_proportions[cat] = cat_sum / total_cat_sum
+                if date_col is not None:
+                    try:
+                        config = SeasonalProportionConfig(
+                            use_dow_seasonality=True,
+                            use_monthly_seasonality=True,
+                            normalization_method="multiplicative",
+                        )
+                        seasonal_props = calculate_seasonal_proportions(
+                            df=merged_df,
+                            config=config,
+                            date_col=date_col,
+                            category_cols=list(category_config.keys()),
+                        )
+                    except Exception as e:
+                        st.warning(f"Could not calculate seasonal proportions: {e}")
+                        seasonal_props = None
 
             # Helper function for smart rounding
             def distribute_with_smart_rounding(total: int, proportions: dict) -> dict:
