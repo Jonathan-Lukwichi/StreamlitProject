@@ -1513,6 +1513,400 @@ with tab_rankings:
         """)
 
 # -----------------------------------------------------------------------------
+# TAB 5: DATASET EXPERIMENTS
+# -----------------------------------------------------------------------------
+with tab_experiments:
+    st.markdown("### Dataset-Based Experiment Tracking")
+    st.caption("Track and compare model performance across different feature configurations")
+
+    # Initialize experiment service
+    exp_service = get_experiment_service()
+
+    # --- Section 1: Current Dataset Info ---
+    st.markdown("#### Current Dataset Configuration")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # Get current feature engineering and selection info from session state
+        fe_state = st.session_state.get("feature_engineering", {})
+        fs_state = st.session_state.get("feature_selection", {})
+
+        # Extract method name from results
+        fs_results = fs_state.get("results", {})
+        current_method = "Unknown"
+        current_features = []
+
+        # Try to get the active method index
+        method_idx = st.session_state.get("fs_selected_method_idx", 0)
+
+        # Get method names from results
+        method_names = {
+            0: "Baseline (All Features)",
+            1: "Permutation Importance",
+            2: "Lasso Regularization",
+            3: "Gradient Boosting"
+        }
+
+        if fs_results:
+            for method_key, method_data in fs_results.items():
+                if isinstance(method_data, dict) and method_data.get("method_name"):
+                    current_method = method_data.get("method_name")
+                    break
+
+        current_method = method_names.get(method_idx, current_method)
+
+        # Get feature count from selected features
+        selected_features = fs_state.get("selected_features", {})
+        if selected_features:
+            # Get features for the current method index
+            for key, features in selected_features.items():
+                if isinstance(features, list):
+                    current_features = features
+                    break
+
+        feature_count = len(current_features) if current_features else 0
+
+        # Get engineering variant
+        fe_summary = fe_state.get("summary", {})
+        current_variant = fe_summary.get("variant_used", "Unknown")
+
+        st.info(f"""
+        **Current Dataset Configuration:**
+        - Feature Selection Method: **{current_method}**
+        - Engineering Variant: **{current_variant}**
+        - Feature Count: **{feature_count}**
+        """)
+
+    with col2:
+        # Generate dataset ID
+        if feature_count > 0:
+            dataset_id = ExperimentResultsService.generate_dataset_id(
+                method=current_method,
+                date=datetime.now(),
+                feature_count=feature_count
+            )
+            st.code(f"Dataset ID: {dataset_id}", language=None)
+        else:
+            dataset_id = None
+            st.warning("No features selected. Please run Feature Selection first.")
+
+    st.divider()
+
+    # --- Section 2: Save Current Results ---
+    st.markdown("#### Save Current Model Results to Experiment Database")
+
+    # Get available models with results
+    available_models_to_save = []
+    for model_name in ["XGBoost", "LSTM", "ANN", "ARIMA", "SARIMAX"]:
+        if model_name in ["ARIMA", "SARIMAX"]:
+            results_key = f"{model_name.lower()}_mh_results" if model_name == "ARIMA" else f"{model_name.lower()}_results"
+        else:
+            results_key = f"ml_mh_results_{model_name}"
+
+        if st.session_state.get(results_key):
+            available_models_to_save.append(model_name)
+
+    if available_models_to_save and dataset_id:
+        models_to_save = st.multiselect(
+            "Select models to save:",
+            options=available_models_to_save,
+            default=available_models_to_save,
+            key="exp_models_to_save"
+        )
+
+        notes = st.text_area(
+            "Experiment Notes (optional):",
+            placeholder="Add any notes about this experiment...",
+            key="exp_notes"
+        )
+
+        col_save1, col_save2 = st.columns([1, 3])
+
+        with col_save1:
+            if st.button("💾 Save to Experiment Database", type="primary", use_container_width=True):
+                saved_count = 0
+                error_count = 0
+
+                progress_bar = st.progress(0)
+
+                for i, model_name in enumerate(models_to_save):
+                    try:
+                        # Get model results
+                        if model_name in ["ARIMA", "SARIMAX"]:
+                            results_key = "arima_mh_results" if model_name == "ARIMA" else "sarimax_results"
+                        else:
+                            results_key = f"ml_mh_results_{model_name}"
+
+                        ml_results = st.session_state.get(results_key)
+
+                        if ml_results:
+                            results_df = ml_results.get("results_df")
+
+                            if results_df is not None and not results_df.empty:
+                                # Extract metrics per horizon
+                                horizon_metrics = []
+                                predictions = {}
+
+                                for _, row in results_df.iterrows():
+                                    horizon = int(row.get("Horizon", 1))
+                                    horizon_metrics.append({
+                                        "horizon": horizon,
+                                        "mae": float(row.get("Test_MAE", row.get("MAE", 0))),
+                                        "rmse": float(row.get("Test_RMSE", row.get("RMSE", 0))),
+                                        "mape": float(row.get("Test_MAPE", row.get("MAPE_%", 0))),
+                                        "accuracy": float(row.get("Test_Acc", row.get("Accuracy_%", 0))),
+                                    })
+
+                                # Get predictions from per_h data
+                                per_h = ml_results.get("per_h", {})
+                                for h, h_data in per_h.items():
+                                    y_test = h_data.get("y_test")
+                                    y_pred = h_data.get("y_test_pred", h_data.get("y_pred"))
+
+                                    if y_test is not None and y_pred is not None:
+                                        predictions[h] = {
+                                            "actual": y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test),
+                                            "predicted": y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred),
+                                        }
+
+                                # Create experiment record
+                                record = ExperimentRecord(
+                                    dataset_id=dataset_id,
+                                    feature_selection_method=current_method,
+                                    feature_engineering_variant=current_variant,
+                                    feature_count=feature_count,
+                                    feature_names=current_features[:50] if current_features else [],  # Limit to 50 features
+                                    model_name=model_name,
+                                    model_category=get_model_category(model_name),
+                                    model_params=ml_results.get("params", {}),
+                                    horizon_metrics=horizon_metrics,
+                                    avg_mae=float(results_df["Test_MAE"].mean()) if "Test_MAE" in results_df.columns else float(results_df.get("MAE", pd.Series([0])).mean()),
+                                    avg_rmse=float(results_df["Test_RMSE"].mean()) if "Test_RMSE" in results_df.columns else float(results_df.get("RMSE", pd.Series([0])).mean()),
+                                    avg_mape=float(results_df["Test_MAPE"].mean()) if "Test_MAPE" in results_df.columns else float(results_df.get("MAPE_%", pd.Series([0])).mean()),
+                                    avg_accuracy=float(results_df["Test_Acc"].mean()) if "Test_Acc" in results_df.columns else float(results_df.get("Accuracy_%", pd.Series([0])).mean()),
+                                    avg_r2=None,
+                                    runtime_seconds=float(ml_results.get("runtime_s", 0)),
+                                    predictions=predictions,
+                                    trained_at=datetime.now(),
+                                    horizons_trained=ml_results.get("successful", list(range(1, 8))),
+                                    train_size=fe_summary.get("train_size", 0),
+                                    test_size=fe_summary.get("test_size", 0),
+                                    notes=notes if notes else None,
+                                )
+
+                                success, msg = exp_service.save_experiment(record)
+
+                                if success:
+                                    saved_count += 1
+                                else:
+                                    error_count += 1
+
+                    except Exception as e:
+                        error_count += 1
+                        st.error(f"Error saving {model_name}: {str(e)}")
+
+                    progress_bar.progress((i + 1) / len(models_to_save))
+
+                progress_bar.empty()
+
+                if saved_count > 0:
+                    st.success(f"✅ Successfully saved {saved_count} model(s) to experiment database!")
+                if error_count > 0:
+                    st.warning(f"⚠️ Failed to save {error_count} model(s)")
+
+    elif not available_models_to_save:
+        st.info("No trained models available to save. Please train models from the Modelling Studio first.")
+    elif not dataset_id:
+        st.info("Please configure Feature Engineering and Feature Selection before saving experiments.")
+
+    st.divider()
+
+    # --- Section 3: Experiment History Table ---
+    st.markdown("#### Experiment History")
+
+    if exp_service.is_connected():
+        experiments_df = exp_service.list_experiments()
+
+        if not experiments_df.empty:
+            # Format the dataframe for display
+            display_cols = ["dataset_id", "model_name", "feature_selection_method",
+                           "feature_count", "avg_rmse", "avg_accuracy", "trained_at"]
+            available_display_cols = [c for c in display_cols if c in experiments_df.columns]
+
+            st.dataframe(
+                experiments_df[available_display_cols].style.format({
+                    "avg_rmse": "{:.4f}",
+                    "avg_accuracy": "{:.2f}%",
+                    "trained_at": lambda x: x.strftime("%Y-%m-%d %H:%M") if pd.notna(x) else "—"
+                }, na_rep="—"),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # Delete functionality
+            with st.expander("🗑️ Delete Experiments"):
+                unique_datasets = experiments_df["dataset_id"].unique().tolist()
+                unique_models = experiments_df["model_name"].unique().tolist()
+
+                del_col1, del_col2 = st.columns(2)
+                with del_col1:
+                    del_dataset = st.selectbox("Select Dataset:", [""] + unique_datasets, key="del_dataset")
+                with del_col2:
+                    del_model = st.selectbox("Select Model:", [""] + unique_models, key="del_model")
+
+                if del_dataset and del_model:
+                    if st.button("🗑️ Delete Selected Experiment", type="secondary"):
+                        if exp_service.delete_experiment(del_dataset, del_model):
+                            st.success(f"Deleted {del_model} for dataset {del_dataset}")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete experiment")
+
+        else:
+            st.info("No experiments saved yet. Train some models and save them to the database.")
+    else:
+        st.warning("⚠️ Supabase not connected. Experiment tracking is unavailable.")
+
+    st.divider()
+
+    # --- Section 4: Dataset Comparison Charts ---
+    st.markdown("#### Performance Variation Across Datasets")
+
+    if exp_service.is_connected():
+        experiments_df = exp_service.list_experiments()
+
+        if not experiments_df.empty:
+            unique_models = experiments_df["model_name"].unique().tolist()
+
+            selected_model_compare = st.selectbox(
+                "Select model to compare across datasets:",
+                options=unique_models,
+                key="exp_compare_model"
+            )
+
+            if selected_model_compare:
+                comparison_df = exp_service.compare_across_datasets(selected_model_compare)
+
+                if not comparison_df.empty:
+                    # Create visualizations
+                    viz_col1, viz_col2 = st.columns(2)
+
+                    with viz_col1:
+                        # Histogram: RMSE distribution
+                        if "avg_rmse" in comparison_df.columns:
+                            fig_hist = px.histogram(
+                                comparison_df,
+                                x="avg_rmse",
+                                color="feature_selection_method" if "feature_selection_method" in comparison_df.columns else None,
+                                title=f"{selected_model_compare}: RMSE Distribution Across Datasets",
+                                nbins=15,
+                                color_discrete_sequence=px.colors.qualitative.Set2
+                            )
+                            fig_hist.update_layout(
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                font=dict(color=TEXT_COLOR),
+                                height=350
+                            )
+                            st.plotly_chart(fig_hist, use_container_width=True)
+
+                    with viz_col2:
+                        # Histogram: Accuracy distribution
+                        if "avg_accuracy" in comparison_df.columns:
+                            fig_acc_hist = px.histogram(
+                                comparison_df,
+                                x="avg_accuracy",
+                                color="feature_selection_method" if "feature_selection_method" in comparison_df.columns else None,
+                                title=f"{selected_model_compare}: Accuracy Distribution",
+                                nbins=15,
+                                color_discrete_sequence=px.colors.qualitative.Set2
+                            )
+                            fig_acc_hist.update_layout(
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                font=dict(color=TEXT_COLOR),
+                                height=350
+                            )
+                            st.plotly_chart(fig_acc_hist, use_container_width=True)
+
+                    # Bar Chart: Metrics by dataset
+                    st.markdown("##### Metrics by Dataset")
+
+                    if len(comparison_df) > 0:
+                        metrics_to_plot = ["avg_mae", "avg_rmse", "avg_mape"]
+                        available_metrics = [m for m in metrics_to_plot if m in comparison_df.columns]
+
+                        if available_metrics:
+                            # Melt for grouped bar chart
+                            melted_df = comparison_df.melt(
+                                id_vars=["dataset_id"],
+                                value_vars=available_metrics,
+                                var_name="Metric",
+                                value_name="Value"
+                            )
+
+                            fig_bar = px.bar(
+                                melted_df,
+                                x="dataset_id",
+                                y="Value",
+                                color="Metric",
+                                barmode="group",
+                                title=f"{selected_model_compare}: Error Metrics by Dataset"
+                            )
+                            fig_bar.update_layout(
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                font=dict(color=TEXT_COLOR),
+                                xaxis_tickangle=-45,
+                                height=400
+                            )
+                            st.plotly_chart(fig_bar, use_container_width=True)
+
+                    # Line Chart: Performance trend over time
+                    st.markdown("##### Performance Trend Over Time")
+
+                    if "trained_at" in comparison_df.columns and "avg_accuracy" in comparison_df.columns:
+                        sorted_df = comparison_df.sort_values("trained_at")
+
+                        fig_trend = px.line(
+                            sorted_df,
+                            x="trained_at",
+                            y="avg_accuracy",
+                            markers=True,
+                            title=f"{selected_model_compare}: Accuracy Trend Over Experiments"
+                        )
+                        fig_trend.update_layout(
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            font=dict(color=TEXT_COLOR),
+                            height=350
+                        )
+                        st.plotly_chart(fig_trend, use_container_width=True)
+
+                    # Feature selection method comparison
+                    st.markdown("##### Performance by Feature Selection Method")
+
+                    if "feature_selection_method" in comparison_df.columns:
+                        method_stats = comparison_df.groupby("feature_selection_method").agg({
+                            "avg_rmse": ["mean", "std", "min", "max"],
+                            "avg_accuracy": ["mean", "std", "min", "max"],
+                        }).round(4)
+
+                        # Flatten column names
+                        method_stats.columns = ['_'.join(col).strip() for col in method_stats.columns.values]
+                        method_stats = method_stats.reset_index()
+
+                        st.dataframe(method_stats, use_container_width=True, hide_index=True)
+
+                else:
+                    st.info(f"No experiments found for {selected_model_compare}.")
+        else:
+            st.info("No experiments in database. Save some model results first.")
+    else:
+        st.warning("⚠️ Supabase not connected.")
+
+# -----------------------------------------------------------------------------
 # TAB 5: HYPERPARAMETER TUNING RESULTS
 # -----------------------------------------------------------------------------
 with tab_hyperparams:
