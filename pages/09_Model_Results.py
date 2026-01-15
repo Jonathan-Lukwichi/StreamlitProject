@@ -40,6 +40,14 @@ from app_core.ui.page_navigation import render_page_navigation
 from app_core.ui.components import render_scifi_hero_header
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
+# Experiment tracking service
+from app_core.data.experiment_results_service import (
+    ExperimentResultsService,
+    ExperimentRecord,
+    get_experiment_service,
+    get_model_category,
+)
+
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
 # ============================================================================
