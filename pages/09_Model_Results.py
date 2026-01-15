@@ -1248,8 +1248,8 @@ st.markdown(
 )
 
 # Main tabs
-tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_hyperparams, tab_explainability, tab_thesis = st.tabs([
-    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "🔬 Hyperparameter Tuning", "🔍 Explainability", "📝 Thesis Export"
+tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_experiments, tab_hyperparams, tab_explainability, tab_export = st.tabs([
+    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "🧪 Dataset Experiments", "🔬 Hyperparameter Tuning", "🔍 Explainability", "📤 Export"
 ])
 
 # -----------------------------------------------------------------------------
