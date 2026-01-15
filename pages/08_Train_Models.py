@@ -84,7 +84,7 @@ render_cache_management()
 render_results_storage_panel(page_key="Modelling Studio")
 
 # Auto-load saved results if available
-auto_load_if_available("Train Models")
+auto_load_if_available("Modelling Studio")
 
 # Fluorescent effects + Custom Tab Styling
 st.markdown(f"""
