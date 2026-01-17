@@ -2073,87 +2073,87 @@ def page_benchmarks():
             arima_h = int(st.session_state.get("arima_h", 7))
 
             if st.button("🚀 Train ARIMA (multi-horizon)", use_container_width=True, type="primary", key="train_arima_btn"):
-                    with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
-                        t0 = time.time()
-                        try:
-                            arima_mh_out = run_arima_multihorizon(
-                                df=data,
-                                date_col="Date",
-                                horizons=int(arima_h),
-                                train_ratio=train_ratio,
-                                order=order,
-                                auto_select=use_auto,
-                                cv_strategy=st.session_state.get("cv_strategy", "expanding"),
-                            )
-                            runtime_s = time.time() - t0
-                            st.session_state["arima_mh_results"] = arima_mh_out
-                            st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
+                with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
+                    t0 = time.time()
+                    try:
+                        arima_mh_out = run_arima_multihorizon(
+                            df=data,
+                            date_col="Date",
+                            horizons=int(arima_h),
+                            train_ratio=train_ratio,
+                            order=order,
+                            auto_select=use_auto,
+                            cv_strategy=st.session_state.get("cv_strategy", "expanding"),
+                        )
+                        runtime_s = time.time() - t0
+                        st.session_state["arima_mh_results"] = arima_mh_out
+                        st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
 
-                            res_df = arima_mh_out.get("results_df")
-                            if res_df is not None and not res_df.empty:
-                                res_df = _sanitize_metrics_df(res_df)
-                                best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
-                                best_row = res_df.loc[best_idx]
-                                kpis = {
-                                    "MAE": _safe_float(best_row.get("Test_MAE")),
-                                    "RMSE": _safe_float(best_row.get("Test_RMSE")),
-                                    "MAPE": _safe_float(best_row.get("Test_MAPE")),
-                                    "Accuracy": _safe_float(best_row.get("Test_Acc")),
-                                }
-                                model_params = f"order={order if order else 'auto'}; H={arima_h}"
-                                _append_to_comparison(
-                                    model_name=f"ARIMA (best h={int(best_row.get('Horizon', 1))})",
-                                    train_ratio=train_ratio,
-                                    kpis=kpis,
-                                    model_params=model_params,
-                                    runtime_s=runtime_s
+                        res_df = arima_mh_out.get("results_df")
+                        if res_df is not None and not res_df.empty:
+                            res_df = _sanitize_metrics_df(res_df)
+                            best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                            best_row = res_df.loc[best_idx]
+                            kpis = {
+                                "MAE": _safe_float(best_row.get("Test_MAE")),
+                                "RMSE": _safe_float(best_row.get("Test_RMSE")),
+                                "MAPE": _safe_float(best_row.get("Test_MAPE")),
+                                "Accuracy": _safe_float(best_row.get("Test_Acc")),
+                            }
+                            model_params = f"order={order if order else 'auto'}; H={arima_h}"
+                            _append_to_comparison(
+                                model_name=f"ARIMA (best h={int(best_row.get('Horizon', 1))})",
+                                train_ratio=train_ratio,
+                                kpis=kpis,
+                                model_params=model_params,
+                                runtime_s=runtime_s
+                            )
+
+                        # ============================================================
+                        # APPLY SEASONAL PROPORTIONS
+                        # ============================================================
+                        if st.session_state.get("enable_seasonal_proportions", False):
+                            try:
+                                from app_core.analytics.seasonal_proportions import (
+                                    calculate_seasonal_proportions,
+                                    distribute_forecast_to_categories
                                 )
 
-                            # ============================================================
-                            # APPLY SEASONAL PROPORTIONS
-                            # ============================================================
-                            if st.session_state.get("enable_seasonal_proportions", False):
-                                try:
-                                    from app_core.analytics.seasonal_proportions import (
-                                        calculate_seasonal_proportions,
-                                        distribute_forecast_to_categories
-                                    )
+                                with st.spinner("📊 Calculating seasonal proportions..."):
+                                    sp_config = st.session_state.get("seasonal_proportions_config")
+                                    sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
 
-                                    with st.spinner("📊 Calculating seasonal proportions..."):
-                                        sp_config = st.session_state.get("seasonal_proportions_config")
-                                        sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
+                                    # Extract forecast from per_h structure
+                                    best_h = int(best_row.get('Horizon', 7))
+                                    if 'per_h' in arima_mh_out and best_h in arima_mh_out['per_h']:
+                                        forecast_series = arima_mh_out['per_h'][best_h].get('forecast')
 
-                                        # Extract forecast from per_h structure
-                                        best_h = int(best_row.get('Horizon', 7))
-                                        if 'per_h' in arima_mh_out and best_h in arima_mh_out['per_h']:
-                                            forecast_series = arima_mh_out['per_h'][best_h].get('forecast')
+                                        if forecast_series is not None and len(forecast_series) > 0:
+                                            # forecast_series should already be a pandas Series with dates
+                                            if not isinstance(forecast_series, pd.Series):
+                                                # Convert to Series if needed
+                                                last_date = pd.to_datetime(data['Date'].max())
+                                                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
+                                                forecast_series = pd.Series(forecast_series, index=forecast_dates)
 
-                                            if forecast_series is not None and len(forecast_series) > 0:
-                                                # forecast_series should already be a pandas Series with dates
-                                                if not isinstance(forecast_series, pd.Series):
-                                                    # Convert to Series if needed
-                                                    last_date = pd.to_datetime(data['Date'].max())
-                                                    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
-                                                    forecast_series = pd.Series(forecast_series, index=forecast_dates)
+                                            # Distribute forecast to categories
+                                            category_forecasts = distribute_forecast_to_categories(
+                                                forecast_series,
+                                                sp_result.dow_proportions,
+                                                sp_result.monthly_proportions
+                                            )
 
-                                                # Distribute forecast to categories
-                                                category_forecasts = distribute_forecast_to_categories(
-                                                    forecast_series,
-                                                    sp_result.dow_proportions,
-                                                    sp_result.monthly_proportions
-                                                )
+                                            sp_result.category_forecasts = category_forecasts
 
-                                                sp_result.category_forecasts = category_forecasts
+                                    # Store results
+                                    st.session_state["seasonal_proportions_result"] = sp_result
+                                    st.success(f"✅ Seasonal proportions calculated and applied!")
 
-                                        # Store results
-                                        st.session_state["seasonal_proportions_result"] = sp_result
-                                        st.success(f"✅ Seasonal proportions calculated and applied!")
+                            except Exception as e:
+                                st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
 
-                                except Exception as e:
-                                    st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
-
-                        except Exception as e:
-                            st.error(f"❌ ARIMA multi-horizon training failed: {e}")
+                    except Exception as e:
+                        st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
         elif current_model == "SARIMAX":
             exog_vars      = st.session_state.get("sarimax_features", [])
