@@ -39,15 +39,11 @@ from app_core.plots import build_multihorizon_results_dashboard
 from app_core.models.sarimax_pipeline import (
     run_sarimax_multihorizon,
     to_multihorizon_artifacts,
-    run_sarimax_multi_target_pipeline,
-    get_reason_target_columns as get_sarimax_target_columns,
 )
 
 # === ARIMA helpers (with graceful fallbacks for plotting) ===
 from app_core.models.arima_pipeline import (
     run_arima_pipeline,
-    run_arima_multi_target_pipeline,
-    get_reason_target_columns as get_arima_target_columns,
 )
 try:
     from app_core.plots import plot_arima_forecast
