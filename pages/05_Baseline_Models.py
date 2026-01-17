@@ -2163,106 +2163,106 @@ def page_benchmarks():
             seasonal_order = st.session_state.get("sarimax_seasonal_order")
 
             if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
-                    t0 = time.time()
+                t0 = time.time()
+                try:
+                    kwargs = dict(
+                        df_merged=data,
+                        date_col="Date",
+                        train_ratio=train_ratio,
+                        season_length=season_len,
+                        horizons=horizons,
+                        use_all_features=(len(exog_vars) == 0),
+                        include_dow_ohe=True,
+                        selected_features=exog_vars if exog_vars else None,
+                        search_mode="aic_only",  # Fast AIC-only search (4-5x faster than hybrid)
+                    )
+                    if order is not None and seasonal_order is not None:
+                        kwargs.update(dict(order=order, seasonal_order=seasonal_order))
+
                     try:
-                        kwargs = dict(
-                            df_merged=data,
-                            date_col="Date",
+                        sarimax_out = run_sarimax_multihorizon(**kwargs)
+                    except TypeError:
+                        kwargs.pop("order", None)
+                        kwargs.pop("seasonal_order", None)
+                        kwargs.pop("selected_features", None)
+                        sarimax_out = run_sarimax_multihorizon(**kwargs)
+
+                    runtime_s = time.time() - t0
+                    st.session_state["sarimax_results"] = sarimax_out
+                    st.success(f"✅ SARIMAX trained in {runtime_s:.2f}s.")
+
+                    # Capture residuals for hybrid model use (Stage 1 → Stage 2)
+                    if _store_sarimax_residuals(sarimax_out, data, train_ratio):
+                        st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
+
+                    res_df = sarimax_out.get("results_df")
+                    if res_df is not None and not res_df.empty:
+                        res_df = _sanitize_metrics_df(res_df)
+                        best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                        best_row = res_df.loc[best_idx]
+                        kpis = {
+                            "MAE": _safe_float(best_row.get("Test_MAE") if "Test_MAE" in res_df.columns else best_row.get("MAE")),
+                            "RMSE": _safe_float(best_row.get("Test_RMSE") if "Test_RMSE" in res_df.columns else best_row.get("RMSE")),
+                            "MAPE": _safe_float(best_row.get("Test_MAPE") if "Test_MAPE" in res_df.columns else best_row.get("MAPE_%")),
+                            "Accuracy": _safe_float(best_row.get("Test_Acc") if "Test_Acc" in res_df.columns else best_row.get("Accuracy_%")),
+                        }
+                        order_str = "auto" if order is None else str(order)
+                        seas_str  = "auto" if seasonal_order is None else str(seasonal_order)
+                        feats = exog_vars if exog_vars else ["ALL"]
+                        model_params = f"order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={','.join(map(str, feats))}"
+                        _append_to_comparison(
+                            model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
                             train_ratio=train_ratio,
-                            season_length=season_len,
-                            horizons=horizons,
-                            use_all_features=(len(exog_vars) == 0),
-                            include_dow_ohe=True,
-                            selected_features=exog_vars if exog_vars else None,
-                            search_mode="aic_only",  # Fast AIC-only search (4-5x faster than hybrid)
+                            kpis=kpis,
+                            model_params=model_params,
+                            runtime_s=runtime_s
                         )
-                        if order is not None and seasonal_order is not None:
-                            kwargs.update(dict(order=order, seasonal_order=seasonal_order))
 
-                        try:
-                            sarimax_out = run_sarimax_multihorizon(**kwargs)
-                        except TypeError:
-                            kwargs.pop("order", None)
-                            kwargs.pop("seasonal_order", None)
-                            kwargs.pop("selected_features", None)
-                            sarimax_out = run_sarimax_multihorizon(**kwargs)
+                        # ============================================================
+                        # APPLY SEASONAL PROPORTIONS
+                        # ============================================================
+                        if st.session_state.get("enable_seasonal_proportions", False):
+                            try:
+                                from app_core.analytics.seasonal_proportions import (
+                                    calculate_seasonal_proportions,
+                                    distribute_forecast_to_categories
+                                )
 
-                        runtime_s = time.time() - t0
-                        st.session_state["sarimax_results"] = sarimax_out
-                        st.success(f"✅ SARIMAX trained in {runtime_s:.2f}s.")
+                                with st.spinner("📊 Calculating seasonal proportions..."):
+                                    sp_config = st.session_state.get("seasonal_proportions_config")
+                                    sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
 
-                        # Capture residuals for hybrid model use (Stage 1 → Stage 2)
-                        if _store_sarimax_residuals(sarimax_out, data, train_ratio):
-                            st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
+                                    # Extract forecast from per_h structure
+                                    best_h = int(best_row.get('Horizon', 7))
+                                    if 'per_h' in sarimax_out and best_h in sarimax_out['per_h']:
+                                        forecast_series = sarimax_out['per_h'][best_h].get('forecast')
 
-                        res_df = sarimax_out.get("results_df")
-                        if res_df is not None and not res_df.empty:
-                            res_df = _sanitize_metrics_df(res_df)
-                            best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
-                            best_row = res_df.loc[best_idx]
-                            kpis = {
-                                "MAE": _safe_float(best_row.get("Test_MAE") if "Test_MAE" in res_df.columns else best_row.get("MAE")),
-                                "RMSE": _safe_float(best_row.get("Test_RMSE") if "Test_RMSE" in res_df.columns else best_row.get("RMSE")),
-                                "MAPE": _safe_float(best_row.get("Test_MAPE") if "Test_MAPE" in res_df.columns else best_row.get("MAPE_%")),
-                                "Accuracy": _safe_float(best_row.get("Test_Acc") if "Test_Acc" in res_df.columns else best_row.get("Accuracy_%")),
-                            }
-                            order_str = "auto" if order is None else str(order)
-                            seas_str  = "auto" if seasonal_order is None else str(seasonal_order)
-                            feats = exog_vars if exog_vars else ["ALL"]
-                            model_params = f"order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={','.join(map(str, feats))}"
-                            _append_to_comparison(
-                                model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
-                                train_ratio=train_ratio,
-                                kpis=kpis,
-                                model_params=model_params,
-                                runtime_s=runtime_s
-                            )
+                                        if forecast_series is not None and len(forecast_series) > 0:
+                                            # forecast_series should already be a pandas Series with dates
+                                            if not isinstance(forecast_series, pd.Series):
+                                                # Convert to Series if needed
+                                                last_date = pd.to_datetime(data['Date'].max())
+                                                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
+                                                forecast_series = pd.Series(forecast_series, index=forecast_dates)
 
-                            # ============================================================
-                            # APPLY SEASONAL PROPORTIONS
-                            # ============================================================
-                            if st.session_state.get("enable_seasonal_proportions", False):
-                                try:
-                                    from app_core.analytics.seasonal_proportions import (
-                                        calculate_seasonal_proportions,
-                                        distribute_forecast_to_categories
-                                    )
+                                            # Distribute forecast to categories
+                                            category_forecasts = distribute_forecast_to_categories(
+                                                forecast_series,
+                                                sp_result.dow_proportions,
+                                                sp_result.monthly_proportions
+                                            )
 
-                                    with st.spinner("📊 Calculating seasonal proportions..."):
-                                        sp_config = st.session_state.get("seasonal_proportions_config")
-                                        sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
+                                            sp_result.category_forecasts = category_forecasts
 
-                                        # Extract forecast from per_h structure
-                                        best_h = int(best_row.get('Horizon', 7))
-                                        if 'per_h' in sarimax_out and best_h in sarimax_out['per_h']:
-                                            forecast_series = sarimax_out['per_h'][best_h].get('forecast')
+                                    # Store results
+                                    st.session_state["seasonal_proportions_result"] = sp_result
+                                    st.success(f"✅ Seasonal proportions calculated and applied!")
 
-                                            if forecast_series is not None and len(forecast_series) > 0:
-                                                # forecast_series should already be a pandas Series with dates
-                                                if not isinstance(forecast_series, pd.Series):
-                                                    # Convert to Series if needed
-                                                    last_date = pd.to_datetime(data['Date'].max())
-                                                    forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
-                                                    forecast_series = pd.Series(forecast_series, index=forecast_dates)
+                            except Exception as e:
+                                st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
 
-                                                # Distribute forecast to categories
-                                                category_forecasts = distribute_forecast_to_categories(
-                                                    forecast_series,
-                                                    sp_result.dow_proportions,
-                                                    sp_result.monthly_proportions
-                                                )
-
-                                                sp_result.category_forecasts = category_forecasts
-
-                                        # Store results
-                                        st.session_state["seasonal_proportions_result"] = sp_result
-                                        st.success(f"✅ Seasonal proportions calculated and applied!")
-
-                                except Exception as e:
-                                    st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
-
-                    except Exception as e:
-                        st.error(f"❌ SARIMAX training failed: {e}")
+                except Exception as e:
+                    st.error(f"❌ SARIMAX training failed: {e}")
 
     # ------------------------------------------------------------
     # 📊 Results — Unified Template (SARIMAX-style artifacts for both)
