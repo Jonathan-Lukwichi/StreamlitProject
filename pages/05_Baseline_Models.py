@@ -2067,84 +2067,12 @@ def page_benchmarks():
         train_ratio = train_size / 100.0
         st.caption(f"Train/Test split: {train_size}% / {100-train_size}%")
 
-        # Check forecast mode (from Configuration tab radio button)
-        forecast_mode = st.session_state.get("forecast_mode_radio", "Single-Target (Patient Arrivals Only)")
-        is_multi_target = "Multi-Target" in forecast_mode
-
-        if is_multi_target:
-            multi_targets = st.session_state.get("multi_target_columns", [])
-            if multi_targets:
-                st.info(f"📊 **Multi-Target Mode**: Forecasting {len(multi_targets)} targets")
-            else:
-                st.warning("⚠️ No targets selected. Go to Configuration tab to select targets.")
-
         if current_model == "ARIMA":
             order = st.session_state.get("arima_order")
             use_auto = order is None
             arima_h = int(st.session_state.get("arima_h", 7))
 
-            # ============================================================
-            # MULTI-TARGET ARIMA TRAINING
-            # ============================================================
-            if is_multi_target:
-                multi_targets = st.session_state.get("multi_target_columns", [])
-                if not multi_targets:
-                    st.warning("⚠️ Please select target columns in the Configuration tab first.")
-                else:
-                    if st.button(f"🚀 Train ARIMA Multi-Target ({len(multi_targets)} targets)", use_container_width=True, type="primary", key="train_arima_multi_btn"):
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-
-                        def update_progress(target_name, idx, total):
-                            progress = (idx + 1) / total
-                            progress_bar.progress(progress)
-                            status_text.text(f"Training ARIMA for: {target_name} ({idx + 1}/{total})")
-
-                        t0 = time.time()
-                        try:
-                            multi_results = run_arima_multi_target_pipeline(
-                                df=data.copy(),
-                                target_columns=multi_targets,
-                                order=order,
-                                train_ratio=train_ratio,
-                                auto_select=use_auto,
-                                search_mode="aic_only",
-                                cv_strategy=st.session_state.get("cv_strategy", "expanding"),
-                                progress_callback=update_progress,
-                            )
-                            runtime_s = time.time() - t0
-                            st.session_state["arima_multi_target_results"] = multi_results
-                            progress_bar.progress(1.0)
-                            status_text.empty()
-
-                            # Display summary
-                            successful = len(multi_results.get("successful_targets", []))
-                            failed = len(multi_results.get("failed_targets", []))
-                            st.success(f"✅ ARIMA Multi-Target training completed in {runtime_s:.2f}s! ({successful} successful, {failed} failed)")
-
-                            # Show summary table
-                            summary_df = multi_results.get("summary")
-                            if summary_df is not None and not summary_df.empty:
-                                st.markdown("### Multi-Target Results Summary")
-                                st.dataframe(summary_df.style.format({
-                                    "MAE": "{:.3f}",
-                                    "RMSE": "{:.3f}",
-                                    "MAPE_%": "{:.2f}",
-                                    "Accuracy_%": "{:.2f}",
-                                    "R2": "{:.3f}",
-                                    "Direction_Acc_%": "{:.2f}",
-                                }, na_rep="—"), use_container_width=True)
-
-                        except Exception as e:
-                            st.error(f"❌ ARIMA Multi-Target training failed: {e}")
-                            progress_bar.empty()
-                            status_text.empty()
-
-            # ============================================================
-            # SINGLE-TARGET ARIMA TRAINING (Original)
-            # ============================================================
-            else:
-                if st.button("🚀 Train ARIMA (multi-horizon)", use_container_width=True, type="primary", key="train_arima_btn"):
+            if st.button("🚀 Train ARIMA (multi-horizon)", use_container_width=True, type="primary", key="train_arima_btn"):
                     with st.spinner(f"Training ARIMA multi-horizon (h=1..{arima_h})..."):
                         t0 = time.time()
                         try:
