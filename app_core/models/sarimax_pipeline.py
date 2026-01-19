@@ -773,6 +773,11 @@ def run_sarimax_multihorizon(
 
         X = X.interpolate("linear").ffill().bfill()
 
+        # Ensure numeric types for SARIMAX (prevents "dtype of object" error)
+        for c in X.columns:
+            X[c] = pd.to_numeric(X[c], errors="coerce").astype(float)
+        X = X.dropna(axis=1, how="all").fillna(0)
+
         # Train/test split
         n = len(y)
         split = int(n * float(train_ratio))
