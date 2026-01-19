@@ -698,6 +698,7 @@ def run_sarimax_multihorizon(
     # Search mode: "rmse_only" (default - seeks lowest RMSE), "aic_only", "hybrid"
     search_mode: str = "rmse_only",
     n_folds: int = 3,
+    cv_strategy: str = "expanding",
 ) -> Dict[str, Any]:
     """
     Train SARIMAX per horizon 1..H (expects columns Target_1..Target_H).
