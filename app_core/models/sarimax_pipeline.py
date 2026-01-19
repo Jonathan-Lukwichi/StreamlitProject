@@ -117,6 +117,7 @@ def _exog_all(
 
     # Add calendar OHE on DOW if requested
     cal = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
+    cal = cal.reset_index(drop=True)  # Align integer index with X
 
     # Combine
     X = pd.concat([X, cal], axis=1)
