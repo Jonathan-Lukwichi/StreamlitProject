@@ -1985,7 +1985,6 @@ def page_benchmarks():
                             horizontal=True, key="arima_mode")
             max_h_present = max([int(c.split("_")[1]) for c in data.columns if c.startswith("Target_")] or [1])
             arima_h = st.number_input("Max Forecast Horizon (days)", 1, max(30, max_h_present), min(7, max_h_present), step=1, key="arima_h")
-            st.session_state["cv_strategy"] = st.radio("Validation Strategy", ["expanding", "rolling"], index=0, horizontal=True, key="cv_strategy_arima")
             if mode.startswith("Automatic"):
                 st.markdown("ARIMA parameters will be found automatically (AIC-driven).")
                 st.session_state["arima_order"] = None
