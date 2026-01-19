@@ -486,7 +486,6 @@ def page_data_hub():
 
                 if success_count == 4:
                     st.success(f"✅ Successfully loaded all data for **{selected_hospital}**!")
-                    st.balloons()
                 elif success_count > 0:
                     st.warning(f"⚠️ Loaded {success_count}/4 datasets for {selected_hospital}")
 
