@@ -445,7 +445,16 @@ def _auto_order_hybrid(
             fold_size = max(20, len(y_tr) // (n_folds + 1))
 
             for i in range(n_folds):
-                train_end = fold_size * (i + 2)
+                # Calculate train window based on cv_strategy
+                if cv_strategy == "expanding":
+                    # Expanding window: training grows over time
+                    train_start = 0
+                    train_end = fold_size * (i + 2)
+                else:
+                    # Rolling window: fixed-size training window
+                    train_start = fold_size * i
+                    train_end = fold_size * (i + 2)
+
                 if train_end > len(y_tr):
                     break
 
@@ -455,11 +464,11 @@ def _auto_order_hybrid(
                 if test_end <= test_start:
                     continue
 
-                y_cv_train = y_tr.iloc[:train_end]
+                y_cv_train = y_tr.iloc[train_start:train_end]
                 y_cv_test = y_tr.iloc[test_start:test_end]
 
                 if X_tr is not None and X_tr.shape[1] > 0:
-                    X_cv_train = X_tr.iloc[:train_end]
+                    X_cv_train = X_tr.iloc[train_start:train_end]
                     X_cv_test = X_tr.iloc[test_start:test_end]
                 else:
                     X_cv_train = None
