@@ -97,16 +97,20 @@ def optimize_arima_order_with_pmdarima(
 def optimize_arima_order_rmse_only(
     y_train: np.ndarray,
     n_folds: int = 3,
+    cv_strategy: str = "expanding",
 ) -> Tuple[int, int, int]:
     """
     Find optimal ARIMA order by minimizing PURE CV-RMSE (no AIC penalty).
 
-    Uses expanding window cross-validation for robust RMSE estimation.
+    Uses time series cross-validation for robust RMSE estimation.
     This method prioritizes out-of-sample prediction accuracy over model complexity.
 
     Args:
         y_train: Training data array
         n_folds: Number of CV folds (default 3)
+        cv_strategy: Cross-validation strategy - "expanding" (default) or "rolling"
+                     - "expanding": Training window grows over time (recommended for time series)
+                     - "rolling": Fixed-size training window slides forward
 
     Returns:
         Tuple (p, d, q) with optimal ARIMA order (lowest CV-RMSE)
@@ -125,8 +129,16 @@ def optimize_arima_order_rmse_only(
             fold_size = max(12, len(y_train) // (n_folds + 1))
 
             for i in range(n_folds):
-                # Expanding window
-                train_end = fold_size * (i + 2)
+                # Calculate train window based on cv_strategy
+                if cv_strategy == "expanding":
+                    # Expanding window: training grows over time
+                    train_start = 0
+                    train_end = fold_size * (i + 2)
+                else:
+                    # Rolling window: fixed-size training window
+                    train_start = fold_size * i
+                    train_end = fold_size * (i + 2)
+
                 if train_end > len(y_train):
                     break
 
@@ -136,7 +148,7 @@ def optimize_arima_order_rmse_only(
                 if test_end <= test_start or test_start >= len(y_train):
                     continue
 
-                y_cv_train = y_train[:train_end]
+                y_cv_train = y_train[train_start:train_end]
                 y_cv_test = y_train[test_start:test_end]
 
                 if len(y_cv_train) < 10 or len(y_cv_test) == 0:
