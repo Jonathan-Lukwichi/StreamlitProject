@@ -132,6 +132,17 @@ def _exog_all(
             X = X[keep]
 
     X = X.interpolate("linear").ffill().bfill()
+
+    # Ensure all columns are numeric float64 (SARIMAX requires numeric data)
+    for c in X.columns:
+        X[c] = pd.to_numeric(X[c], errors="coerce").astype(float)
+
+    # Drop columns that are entirely NaN (can't be used as features)
+    X = X.dropna(axis=1, how="all")
+
+    # Fill any remaining NaN with 0 to avoid dtype issues
+    X = X.fillna(0)
+
     return X
 
 def _auto_order_rmse_only(
