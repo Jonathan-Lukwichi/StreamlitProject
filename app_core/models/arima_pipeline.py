@@ -664,6 +664,7 @@ def run_arima_multi_horizon_pipeline(
             order = optimize_arima_order_rmse_only(
                 y_train=y0,
                 n_folds=n_folds,
+                cv_strategy=cv_strategy,
             )
             auto_select = False
         except Exception:
