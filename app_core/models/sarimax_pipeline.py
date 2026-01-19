@@ -592,6 +592,11 @@ def run_sarimax_single(
         )
     else:
         X_all = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
+        X_all = X_all.reset_index(drop=True)  # Align integer index
+        # Ensure numeric types for SARIMAX
+        for c in X_all.columns:
+            X_all[c] = pd.to_numeric(X_all[c], errors="coerce").astype(float)
+        X_all = X_all.fillna(0)
     X_all.index = df_full[date_col]
 
     # Split
