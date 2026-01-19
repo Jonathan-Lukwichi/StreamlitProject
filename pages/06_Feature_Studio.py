@@ -1333,6 +1333,89 @@ def main():
             display: none;
         }
     }
+
+    /* ========================================
+       PREMIUM TAB STYLING - BLUE FLUORESCENT
+       ======================================== */
+
+    /* Tab container */
+    .stTabs {
+        background: transparent;
+        margin-top: 1rem;
+    }
+
+    /* Tab list (container for all tab buttons) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.5rem;
+        background: linear-gradient(135deg, rgba(6, 78, 145, 0.4), rgba(15, 23, 42, 0.9));
+        padding: 0.75rem;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        box-shadow:
+            0 0 30px rgba(59, 130, 246, 0.15),
+            0 4px 20px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    /* Individual tab buttons */
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(30, 41, 59, 0.4));
+        border-radius: 12px;
+        padding: 0 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: rgba(148, 163, 184, 0.9);
+        border: 1px solid rgba(59, 130, 246, 0.15);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Tab button hover effect */
+    .stTabs [data-baseweb="tab"]:hover {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(34, 211, 238, 0.1));
+        border-color: rgba(59, 130, 246, 0.4);
+        color: #e2e8f0;
+        transform: translateY(-2px);
+        box-shadow:
+            0 0 20px rgba(59, 130, 246, 0.3),
+            0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    /* Active/selected tab */
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(34, 211, 238, 0.2)) !important;
+        border: 1px solid rgba(59, 130, 246, 0.6) !important;
+        color: #f1f5f9 !important;
+        box-shadow:
+            0 0 25px rgba(59, 130, 246, 0.4),
+            0 0 50px rgba(34, 211, 238, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+        text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    }
+
+    /* Active tab indicator (underline) - hide it */
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: transparent !important;
+    }
+
+    /* Tab panels (content area) */
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 2rem;
+        background: transparent;
+    }
+
+    /* Mobile responsive tabs */
+    @media (max-width: 768px) {
+        .stTabs [data-baseweb="tab-list"] {
+            flex-direction: column;
+            padding: 0.5rem;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            width: 100%;
+            justify-content: center;
+        }
+    }
     </style>
 
     <!-- Fluorescent Floating Orbs -->
