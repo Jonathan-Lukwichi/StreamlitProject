@@ -1990,14 +1990,6 @@ def page_benchmarks():
                 st.info(f"📊 ARIMA Order set to: ({p}, {d}, {q})")
 
         elif current_model == "SARIMAX":
-            all_candidates = [c for c in data.columns if c not in ["Date"] and not c.startswith("Target_")]
-            st.markdown("#### Exogenous Feature Selection")
-            select_all = st.checkbox("Select all features", value=True, key="sarimax_select_all")
-            default_feats = all_candidates if select_all else st.session_state.get("sarimax_features", [])
-            chosen = st.multiselect("Choose exogenous variables", options=all_candidates, default=default_feats)
-            st.session_state["sarimax_features"] = chosen
-
-            st.markdown("---")
             st.markdown("#### Parameter Mode")
             mode = st.radio("Parameter Mode", ["Automatic (recommended)", "Manual (enter orders)"],
                             horizontal=True, key="sarimax_mode")
