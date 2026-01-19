@@ -54,7 +54,7 @@ class SeasonalProportionConfig:
     normalization_method: str = "multiplicative"
     min_samples_per_period: int = 4
     stl_period: int = 7
-    stl_model: str = "additive"
+    stl_model: str = "multiplicative"
 
 
 @dataclass
