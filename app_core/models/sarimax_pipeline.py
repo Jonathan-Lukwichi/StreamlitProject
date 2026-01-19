@@ -771,7 +771,7 @@ def run_sarimax_multihorizon(
                 # RMSE-only mode: optimize pure CV-RMSE (DEFAULT - seeks lowest RMSE)
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_rmse_only(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                    n_folds=n_folds,
+                    n_folds=n_folds, cv_strategy=cv_strategy,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
@@ -779,7 +779,7 @@ def run_sarimax_multihorizon(
                 # Hybrid mode: optimize AIC + CV-RMSE (70% RMSE weight)
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_hybrid(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                    n_folds=n_folds, alpha=0.3, beta=0.7,
+                    n_folds=n_folds, cv_strategy=cv_strategy, alpha=0.3, beta=0.7,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
