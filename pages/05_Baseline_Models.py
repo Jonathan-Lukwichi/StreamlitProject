@@ -1935,35 +1935,25 @@ def page_benchmarks():
         )
 
         if enable_seasonal:
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                use_dow = st.checkbox(
-                    "Day-of-Week Seasonality",
-                    value=True,
-                    key="seasonal_use_dow",
-                    help="Use different proportions for each day of the week"
-                )
-                use_monthly = st.checkbox(
-                    "Monthly Seasonality",
-                    value=True,
-                    key="seasonal_use_monthly",
-                    help="Use different proportions for each month (requires ≥12 months data)"
-                )
-            with col_s2:
-                stl_period = st.selectbox(
-                    "STL Period",
-                    options=[7, 30, 365],
-                    index=0,
-                    key="seasonal_stl_period",
-                    help="Seasonal period for STL decomposition: 7=weekly, 30=monthly, 365=yearly"
-                )
+            use_dow = st.checkbox(
+                "Day-of-Week Seasonality",
+                value=True,
+                key="seasonal_use_dow",
+                help="Use different proportions for each day of the week"
+            )
+            use_monthly = st.checkbox(
+                "Monthly Seasonality",
+                value=True,
+                key="seasonal_use_monthly",
+                help="Use different proportions for each month (requires ≥12 months data)"
+            )
 
             # Store configuration in session state
             from app_core.analytics.seasonal_proportions import SeasonalProportionConfig
             st.session_state["seasonal_proportions_config"] = SeasonalProportionConfig(
                 use_dow_seasonality=use_dow,
                 use_monthly_seasonality=use_monthly,
-                stl_period=stl_period,
+                stl_period=7,  # Default: weekly (most common for healthcare daily data)
                 stl_model="multiplicative"  # Default: multiplicative approach for healthcare data
             )
 
