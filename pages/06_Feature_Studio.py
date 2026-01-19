@@ -666,10 +666,9 @@ def page_feature_engineering():
     # FEATURE ENGINEERING TABS
     # Academic Reference: Bergmeir & Benítez (2012), Tashman (2000)
     # =========================================================================
-    tab_split, tab_cv, tab_stationarity, tab_fourier, tab_options, tab_generate = st.tabs([
+    tab_split, tab_cv, tab_fourier, tab_options, tab_generate = st.tabs([
         "📊 Data Split",
         "🔄 Cross-Validation",
-        "📈 Stationarity",
         "🌊 Fourier Features",
         "🧪 Options",
         "🚀 Generate"
