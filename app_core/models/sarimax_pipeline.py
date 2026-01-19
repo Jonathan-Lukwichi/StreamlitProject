@@ -333,6 +333,7 @@ def _auto_order_hybrid(
     X_tr: Optional[pd.DataFrame],
     m: int = 7,
     n_folds: int = 3,
+    cv_strategy: str = "expanding",
     alpha: float = 0.3,  # AIC weight
     beta: float = 0.7,   # CV-RMSE weight
     max_p: int = 3, max_q: int = 3, max_d: int = 2,
@@ -342,7 +343,7 @@ def _auto_order_hybrid(
     Find optimal SARIMAX orders by minimizing weighted composite score:
     Score = alpha * Normalized_AIC + beta * Normalized_CV_RMSE
 
-    Uses expanding window cross-validation for robust RMSE estimation.
+    Uses time series cross-validation for robust RMSE estimation.
     Leverages pmdarima for efficient candidate generation.
 
     Args:
@@ -350,6 +351,9 @@ def _auto_order_hybrid(
         X_tr: Training exogenous features
         m: Seasonal period
         n_folds: Number of CV folds (default 3)
+        cv_strategy: Cross-validation strategy - "expanding" (default) or "rolling"
+                     - "expanding": Training window grows over time (recommended for time series)
+                     - "rolling": Fixed-size training window slides forward
         alpha: Weight for AIC (complexity penalty), default 0.3
         beta: Weight for CV-RMSE (prediction accuracy), default 0.7
         max_p, max_q, max_d: Non-seasonal parameter bounds
