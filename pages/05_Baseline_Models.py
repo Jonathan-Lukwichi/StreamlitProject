@@ -1964,7 +1964,7 @@ def page_benchmarks():
                 use_dow_seasonality=use_dow,
                 use_monthly_seasonality=use_monthly,
                 stl_period=stl_period,
-                stl_model=stl_model
+                stl_model="multiplicative"  # Default: multiplicative approach for healthcare data
             )
 
             st.success("✅ Seasonal proportions will be applied to forecasts")
