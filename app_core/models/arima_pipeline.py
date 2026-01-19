@@ -453,6 +453,7 @@ def run_arima_pipeline(
             order = optimize_arima_order_rmse_only(
                 y_train=y_train,
                 n_folds=n_folds,
+                cv_strategy=cv_strategy,
             )
             auto_select = False
         except Exception:
@@ -467,6 +468,7 @@ def run_arima_pipeline(
                 n_folds=n_folds,
                 alpha=0.3,  # AIC weight
                 beta=0.7,   # CV-RMSE weight
+                cv_strategy=cv_strategy,
             )
             auto_select = False
         except Exception:
