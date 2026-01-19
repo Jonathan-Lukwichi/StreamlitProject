@@ -1957,13 +1957,6 @@ def page_benchmarks():
                     key="seasonal_stl_period",
                     help="Seasonal period for STL decomposition: 7=weekly, 30=monthly, 365=yearly"
                 )
-                stl_model = st.selectbox(
-                    "STL Model",
-                    options=["additive", "multiplicative"],
-                    index=0,
-                    key="seasonal_stl_model",
-                    help="Additive: Y = Trend + Seasonal + Residual; Multiplicative: Y = Trend × Seasonal × Residual"
-                )
 
             # Store configuration in session state
             from app_core.analytics.seasonal_proportions import SeasonalProportionConfig
