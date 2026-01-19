@@ -2112,7 +2112,7 @@ def page_benchmarks():
                         # ============================================================
                         # APPLY SEASONAL PROPORTIONS
                         # ============================================================
-                        if st.session_state.get("enable_seasonal_proportions", False):
+                        if st.session_state.get("enable_seasonal_proportions", True):  # Default=True matches UI
                             try:
                                 from app_core.analytics.seasonal_proportions import (
                                     calculate_seasonal_proportions,
