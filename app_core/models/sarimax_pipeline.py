@@ -253,10 +253,10 @@ def _auto_order_rmse_only(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
-                # Convert to numpy to avoid index alignment issues
-                y_cv_arr = y_cv_train.values
-                X_cv_arr = X_cv_train.values if X_cv_train is not None else None
-                X_cv_test_arr = X_cv_test.values if X_cv_test is not None else None
+                # Convert to numpy with explicit dtype to avoid index alignment issues
+                y_cv_arr = np.asarray(y_cv_train.values, dtype=np.float64).ravel()
+                X_cv_arr = np.asarray(X_cv_train.values, dtype=np.float64) if X_cv_train is not None else None
+                X_cv_test_arr = np.asarray(X_cv_test.values, dtype=np.float64) if X_cv_test is not None else None
 
                 cv_model = SARIMAX(
                     endog=y_cv_arr,
@@ -502,10 +502,10 @@ def _auto_order_hybrid(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
-                # Convert to numpy to avoid index alignment issues
-                y_cv_arr = y_cv_train.values
-                X_cv_arr = X_cv_train.values if X_cv_train is not None else None
-                X_cv_test_arr = X_cv_test.values if X_cv_test is not None else None
+                # Convert to numpy with explicit dtype to avoid index alignment issues
+                y_cv_arr = np.asarray(y_cv_train.values, dtype=np.float64).ravel()
+                X_cv_arr = np.asarray(X_cv_train.values, dtype=np.float64) if X_cv_train is not None else None
+                X_cv_test_arr = np.asarray(X_cv_test.values, dtype=np.float64) if X_cv_test is not None else None
 
                 cv_model = SARIMAX(
                     endog=y_cv_arr,
