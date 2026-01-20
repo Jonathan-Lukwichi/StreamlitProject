@@ -138,14 +138,13 @@ def _auto_order_rmse_only(
     X_tr: Optional[pd.DataFrame],
     m: int = 7,
     n_folds: int = 3,
-    cv_strategy: str = "expanding",
     max_p: int = 3, max_q: int = 3, max_d: int = 2,
     max_P: int = 2, max_Q: int = 2, max_D: int = 1,
 ) -> Tuple[Tuple[int,int,int], Tuple[int,int,int,int], float, float]:
     """
     Find optimal SARIMAX orders by minimizing PURE CV-RMSE (no AIC penalty).
 
-    Uses time series cross-validation for robust RMSE estimation.
+    Uses expanding window cross-validation for robust RMSE estimation.
     This method prioritizes out-of-sample prediction accuracy over model complexity.
 
     Args:
@@ -153,9 +152,6 @@ def _auto_order_rmse_only(
         X_tr: Training exogenous features
         m: Seasonal period
         n_folds: Number of CV folds (default 3)
-        cv_strategy: Cross-validation strategy - "expanding" (default) or "rolling"
-                     - "expanding": Training window grows over time (recommended for time series)
-                     - "rolling": Fixed-size training window slides forward
         max_p, max_q, max_d: Non-seasonal parameter bounds
         max_P, max_Q, max_D: Seasonal parameter bounds
 
@@ -209,16 +205,7 @@ def _auto_order_rmse_only(
             fold_size = max(20, len(y_tr) // (n_folds + 1))
 
             for i in range(n_folds):
-                # Calculate train window based on cv_strategy
-                if cv_strategy == "expanding":
-                    # Expanding window: training grows over time
-                    train_start = 0
-                    train_end = fold_size * (i + 2)
-                else:
-                    # Rolling window: fixed-size training window
-                    train_start = fold_size * i
-                    train_end = fold_size * (i + 2)
-
+                train_end = fold_size * (i + 2)
                 if train_end > len(y_tr):
                     break
 
@@ -228,11 +215,11 @@ def _auto_order_rmse_only(
                 if test_end <= test_start:
                     continue
 
-                y_cv_train = y_tr.iloc[train_start:train_end]
+                y_cv_train = y_tr.iloc[:train_end]
                 y_cv_test = y_tr.iloc[test_start:test_end]
 
                 if X_tr is not None and X_tr.shape[1] > 0:
-                    X_cv_train = X_tr.iloc[train_start:train_end]
+                    X_cv_train = X_tr.iloc[:train_end]
                     X_cv_test = X_tr.iloc[test_start:test_end]
                 else:
                     X_cv_train = None
@@ -333,7 +320,6 @@ def _auto_order_hybrid(
     X_tr: Optional[pd.DataFrame],
     m: int = 7,
     n_folds: int = 3,
-    cv_strategy: str = "expanding",
     alpha: float = 0.3,  # AIC weight
     beta: float = 0.7,   # CV-RMSE weight
     max_p: int = 3, max_q: int = 3, max_d: int = 2,
@@ -343,7 +329,7 @@ def _auto_order_hybrid(
     Find optimal SARIMAX orders by minimizing weighted composite score:
     Score = alpha * Normalized_AIC + beta * Normalized_CV_RMSE
 
-    Uses time series cross-validation for robust RMSE estimation.
+    Uses expanding window cross-validation for robust RMSE estimation.
     Leverages pmdarima for efficient candidate generation.
 
     Args:
@@ -351,9 +337,6 @@ def _auto_order_hybrid(
         X_tr: Training exogenous features
         m: Seasonal period
         n_folds: Number of CV folds (default 3)
-        cv_strategy: Cross-validation strategy - "expanding" (default) or "rolling"
-                     - "expanding": Training window grows over time (recommended for time series)
-                     - "rolling": Fixed-size training window slides forward
         alpha: Weight for AIC (complexity penalty), default 0.3
         beta: Weight for CV-RMSE (prediction accuracy), default 0.7
         max_p, max_q, max_d: Non-seasonal parameter bounds
@@ -445,16 +428,7 @@ def _auto_order_hybrid(
             fold_size = max(20, len(y_tr) // (n_folds + 1))
 
             for i in range(n_folds):
-                # Calculate train window based on cv_strategy
-                if cv_strategy == "expanding":
-                    # Expanding window: training grows over time
-                    train_start = 0
-                    train_end = fold_size * (i + 2)
-                else:
-                    # Rolling window: fixed-size training window
-                    train_start = fold_size * i
-                    train_end = fold_size * (i + 2)
-
+                train_end = fold_size * (i + 2)
                 if train_end > len(y_tr):
                     break
 
@@ -464,11 +438,11 @@ def _auto_order_hybrid(
                 if test_end <= test_start:
                     continue
 
-                y_cv_train = y_tr.iloc[train_start:train_end]
+                y_cv_train = y_tr.iloc[:train_end]
                 y_cv_test = y_tr.iloc[test_start:test_end]
 
                 if X_tr is not None and X_tr.shape[1] > 0:
-                    X_cv_train = X_tr.iloc[train_start:train_end]
+                    X_cv_train = X_tr.iloc[:train_end]
                     X_cv_test = X_tr.iloc[test_start:test_end]
                 else:
                     X_cv_train = None
@@ -698,7 +672,6 @@ def run_sarimax_multihorizon(
     # Search mode: "rmse_only" (default - seeks lowest RMSE), "aic_only", "hybrid"
     search_mode: str = "rmse_only",
     n_folds: int = 3,
-    cv_strategy: str = "expanding",
 ) -> Dict[str, Any]:
     """
     Train SARIMAX per horizon 1..H (expects columns Target_1..Target_H).
@@ -771,7 +744,7 @@ def run_sarimax_multihorizon(
                 # RMSE-only mode: optimize pure CV-RMSE (DEFAULT - seeks lowest RMSE)
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_rmse_only(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                    n_folds=n_folds, cv_strategy=cv_strategy,
+                    n_folds=n_folds,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
@@ -779,7 +752,7 @@ def run_sarimax_multihorizon(
                 # Hybrid mode: optimize AIC + CV-RMSE (70% RMSE weight)
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_hybrid(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                    n_folds=n_folds, cv_strategy=cv_strategy, alpha=0.3, beta=0.7,
+                    n_folds=n_folds, alpha=0.3, beta=0.7,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
@@ -810,14 +783,14 @@ def run_sarimax_multihorizon(
             if search_mode == "rmse_only":
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_rmse_only(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                    n_folds=n_folds, cv_strategy=cv_strategy,
+                    n_folds=n_folds,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
             elif search_mode == "hybrid":
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_hybrid(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
-                    n_folds=n_folds, cv_strategy=cv_strategy, alpha=0.3, beta=0.7,
+                    n_folds=n_folds, alpha=0.3, beta=0.7,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
