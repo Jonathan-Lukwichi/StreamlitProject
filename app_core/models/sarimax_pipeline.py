@@ -618,10 +618,13 @@ def run_sarimax_single(
     else:
         use_order, use_sorder = order, seasonal_order
 
-    # Fit
+    # Fit - convert to numpy arrays to avoid index alignment issues
+    y_tr_arr = y_tr.values
+    X_tr_arr = X_tr.values if X_tr.shape[1] > 0 else None
+
     fit = SARIMAX(
-        endog=y_tr,
-        exog=X_tr if X_tr.shape[1] > 0 else None,
+        endog=y_tr_arr,
+        exog=X_tr_arr,
         order=use_order,
         seasonal_order=use_sorder,
         enforce_stationarity=False,
@@ -629,10 +632,11 @@ def run_sarimax_single(
     ).fit(disp=False)
 
     # In-sample/fitted
-    fitted = fit.fittedvalues.reindex(y_tr.index)
+    fitted = pd.Series(fit.fittedvalues, index=y_tr.index)
 
-    # Forecast on test
-    fc = fit.get_forecast(steps=len(y_te), exog=(X_te if X_te.shape[1] > 0 else None))
+    # Forecast on test - convert X_te to numpy
+    X_te_arr = X_te.values if X_te.shape[1] > 0 else None
+    fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
     mean = fc.predicted_mean
     ci = fc.conf_int(alpha=0.05)
     mean.index = y_te.index
