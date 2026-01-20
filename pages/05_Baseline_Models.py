@@ -2015,6 +2015,24 @@ def page_benchmarks():
             st.session_state["sarimax_season_length"] = int(season_length)
             st.session_state["sarimax_horizons"] = int(horizons)
 
+            # Search Speed setting
+            st.markdown("#### ⚡ Search Speed")
+            speed_mode = st.radio(
+                "Parameter Search Mode",
+                ["Fast (Recommended)", "Balanced", "Thorough"],
+                horizontal=True,
+                key="sarimax_speed_mode",
+                help="Fast: 3 candidates (~30 sec), Balanced: AIC stepwise (~2 min), Thorough: CV-RMSE (~5 min)"
+            )
+
+            # Store search mode in session state
+            if speed_mode == "Fast (Recommended)":
+                st.session_state["sarimax_search_mode"] = "fast"
+            elif speed_mode == "Balanced":
+                st.session_state["sarimax_search_mode"] = "aic_only"
+            else:
+                st.session_state["sarimax_search_mode"] = "rmse_only"
+
     # ------------------------------------------------------------
     # 🚀 Train Model
     # ------------------------------------------------------------
