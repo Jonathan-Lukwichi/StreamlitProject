@@ -2134,6 +2134,24 @@ def page_benchmarks():
             order          = st.session_state.get("sarimax_order")
             seasonal_order = st.session_state.get("sarimax_seasonal_order")
 
+            # Speed mode selector for parameter search
+            st.markdown("#### ⚡ Search Speed")
+            speed_mode = st.radio(
+                "Parameter Search Mode",
+                ["Fast (Recommended)", "Balanced", "Thorough"],
+                horizontal=True,
+                key="sarimax_speed_mode",
+                help="Fast: 3 candidates (~30 sec), Balanced: AIC stepwise (~2 min), Thorough: CV-RMSE (~5 min)"
+            )
+
+            # Map UI choice to search_mode
+            if speed_mode == "Fast (Recommended)":
+                search_mode_val = "fast"
+            elif speed_mode == "Balanced":
+                search_mode_val = "aic_only"
+            else:
+                search_mode_val = "rmse_only"
+
             if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
                 t0 = time.time()
                 try:
