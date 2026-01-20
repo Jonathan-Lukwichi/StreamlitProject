@@ -75,6 +75,8 @@ def _clean_daily(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
 def _exog_calendar(index, include_dow_ohe: bool = True) -> pd.DataFrame:
     """Calendar features (DOW one-hot, weekend flag, yearly sin/cos).
 
+    Returns DataFrame with RangeIndex and all float64 columns.
+
     Args:
         index: DatetimeIndex or Series of datetime values
         include_dow_ohe: Whether to include day-of-week one-hot encoding
@@ -85,16 +87,24 @@ def _exog_calendar(index, include_dow_ohe: bool = True) -> pd.DataFrame:
     else:
         dt_index = index
 
-    X = pd.DataFrame(index=dt_index)
-    dow = dt_index.dayofweek
+    dow = dt_index.dayofweek.values
+
+    # Build features as numpy arrays first (guaranteed numeric)
+    features = {}
+
     if include_dow_ohe:
-        # Mon..Sun one-hot
         for i, name in enumerate(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]):
-            X[f"is_{name}"] = (dow == i).astype(int)
-    X["is_weekend"] = (dow >= 5).astype(int)
-    t = dt_index.dayofyear.astype(float)
-    X["sin_y"] = np.sin(2*np.pi*t/365.25)
-    X["cos_y"] = np.cos(2*np.pi*t/365.25)
+            features[f"is_{name}"] = (dow == i).astype(np.float64)
+
+    features["is_weekend"] = (dow >= 5).astype(np.float64)
+
+    t = dt_index.dayofyear.values.astype(np.float64)
+    features["sin_y"] = np.sin(2*np.pi*t/365.25)
+    features["cos_y"] = np.cos(2*np.pi*t/365.25)
+
+    # Create DataFrame with RangeIndex (NOT DatetimeIndex)
+    X = pd.DataFrame(features)
+
     return X
 
 def _exog_all(
