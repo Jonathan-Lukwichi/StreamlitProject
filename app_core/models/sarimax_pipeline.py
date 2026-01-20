@@ -897,10 +897,14 @@ def run_sarimax_multihorizon(
             use_sorder = sord_auto if seasonal_order is None else seasonal_order
             aic_ref, bic_ref = aic_auto, bic_auto
 
+        # Convert to numpy arrays for SARIMAX
+        y_tr_arr, X_tr_arr = _prepare_sarimax_input(y_tr, X_tr)
+        _, X_te_arr = _prepare_sarimax_input(y_te, X_te)
+
         # Fit model
         fit = SARIMAX(
-            endog=y_tr,
-            exog=X_tr if X_tr.shape[1] > 0 else None,
+            endog=y_tr_arr,
+            exog=X_tr_arr,
             order=use_order,
             seasonal_order=use_sorder,
             enforce_stationarity=False,
@@ -908,14 +912,14 @@ def run_sarimax_multihorizon(
         ).fit(disp=False)
 
         # In-sample fit
-        fitted = fit.fittedvalues.reindex(y_tr.index)
+        fitted = pd.Series(fit.fittedvalues, index=y_tr.index)
 
         # Out-of-sample forecast
-        fc = fit.get_forecast(steps=len(y_te), exog=(X_te if X_te.shape[1] > 0 else None))
+        fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
         mean = fc.predicted_mean
         ci = fc.conf_int(alpha=0.05)
-        mean.index = y_te.index
-        ci.index = y_te.index
+        mean = pd.Series(mean, index=y_te.index)
+        ci = pd.DataFrame(ci, index=y_te.index)
 
         # ------------ metrics ------------
         tr_mae = float(mean_absolute_error(y_tr, fitted))
