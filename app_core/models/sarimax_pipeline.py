@@ -376,7 +376,7 @@ def _auto_order(
             start_P=0, max_P=max_P, start_Q=0, max_Q=max_Q,
             D=None, max_D=max_D, stepwise=True, suppress_warnings=True,
             error_action="ignore", information_criterion="aic",
-            random_state=SEED, maxiter=200,
+            random_state=SEED, maxiter=100,
         )
         return a.order, a.seasonal_order, float(a.aic()), float(a.bic())
     # Fallback: modest seasonal default (weekly seasonality)
