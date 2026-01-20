@@ -647,8 +647,6 @@ def run_sarimax_single(
         },
         "residuals": pd.Series(fit.resid, index=y_tr.index).dropna(),
         "fitted_values": fitted,
-        "seasonal_proportions": None,
-        "category_forecasts": None,
     }
 
 # ---------- multi-horizon SARIMAX (h = 1..H) ----------
@@ -875,13 +873,7 @@ def run_sarimax_multihorizon(
         raise RuntimeError("SARIMAX: not enough data to train any horizon.")
 
     results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
-    return {
-        "results_df": results_df,
-        "per_h": per_h,
-        "successful": ok,
-        "seasonal_proportions": None,
-        "category_forecasts": None,
-    }
+    return {"results_df": results_df, "per_h": per_h, "successful": ok}
 
 # ---------- helpers to adapt outputs for dashboards ----------
 def calculate_multi_horizon_metrics_from_rows(results_df: pd.DataFrame) -> pd.DataFrame:
@@ -958,3 +950,233 @@ def to_multihorizon_artifacts(sarimax_out: Dict[str, Any]):
     res = per_h[horizons[0]].get("res", None)
 
     return metrics_df, F, L, U, test_eval, train, res, horizons
+
+
+# ===========================================
+# Multi-Target SARIMAX Pipeline (Matches ARIMA pattern)
+# ===========================================
+def run_sarimax_multi_target_pipeline(
+    df: pd.DataFrame,
+    target_columns: List[str],
+    date_col: str = "Date",
+    train_ratio: float = 0.80,
+    season_length: int = 7,
+    use_all_features: bool = False,
+    include_dow_ohe: bool = True,
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+    selected_features: Optional[List[str]] = None,
+    max_p: int = 3, max_q: int = 3, max_d: int = 2,
+    max_P: int = 2, max_Q: int = 2, max_D: int = 1,
+    search_mode: str = "rmse_only",  # "rmse_only" (default - seeks lowest RMSE), "aic_only", "hybrid"
+    n_folds: int = 3,
+    progress_callback: Optional[callable] = None,
+) -> Dict[str, Any]:
+    """
+    Run SARIMAX pipeline for multiple target columns (patient arrivals + reasons).
+    Follows the same pattern as run_arima_multi_target_pipeline for consistency.
+    """
+    all_results = {}
+    metrics_summary = []
+    total_targets = len(target_columns)
+
+    # ========== DIAGNOSTIC OUTPUT ==========
+    print("\n" + "="*60)
+    print("SARIMAX MULTI-TARGET PIPELINE STARTING")
+    print("="*60)
+    print(f"DataFrame shape: {df.shape}")
+    print(f"DataFrame columns ({len(df.columns)}): {list(df.columns)[:20]}{'...' if len(df.columns) > 20 else ''}")
+    print(f"Target columns requested ({len(target_columns)}): {target_columns[:10]}{'...' if len(target_columns) > 10 else ''}")
+    print(f"Date column: '{date_col}' - exists: {date_col in df.columns}")
+    if date_col in df.columns:
+        print(f"Date column dtype: {df[date_col].dtype}")
+        print(f"Date range: {df[date_col].min()} to {df[date_col].max()}")
+    print("="*60 + "\n")
+    # ========================================
+
+    for idx, target_col in enumerate(target_columns):
+        if progress_callback:
+            progress_callback(target_col, idx, total_targets)
+
+        # Check if target column exists
+        if target_col not in df.columns:
+            all_results[target_col] = {
+                "status": "error",
+                "message": f"Column '{target_col}' not found in dataframe"
+            }
+            continue
+
+        # Check for sufficient data
+        valid_count = df[target_col].dropna().shape[0]
+        print(f"[SARIMAX CHECK] {target_col}: valid_count={valid_count}")
+        if valid_count < 24:
+            print(f"[SARIMAX SKIP] {target_col}: Insufficient data ({valid_count} < 24)")
+            all_results[target_col] = {
+                "status": "error",
+                "message": f"Insufficient data for '{target_col}' (need >= 24 points, got {valid_count})"
+            }
+            continue
+
+        try:
+            # Create a simple dataframe with just date and target (like ARIMA does)
+            df_simple = df[[date_col, target_col]].copy()
+
+            # Debug: Check data before running
+            print(f"[SARIMAX DEBUG] {target_col}: {len(df_simple)} rows, {df_simple[target_col].notna().sum()} non-null")
+
+            # Run single-target SARIMAX
+            result = run_sarimax_single(
+                df_merged=df_simple,
+                date_col=date_col,
+                target_col=target_col,
+                train_ratio=train_ratio,
+                season_length=season_length,
+                use_all_features=False,  # Only use calendar features
+                include_dow_ohe=include_dow_ohe,
+                order=order,
+                seasonal_order=seasonal_order,
+                max_p=max_p, max_q=max_q, max_d=max_d,
+                max_P=max_P, max_Q=max_Q, max_D=max_D,
+            )
+
+            # Store results (match ARIMA structure exactly)
+            all_results[target_col] = {
+                "status": "success",
+                "results": result,
+                "order": result.get("model_info", {}).get("order", (1, 1, 1)),
+                "seasonal_order": result.get("model_info", {}).get("seasonal_order", (1, 1, 0, 7)),
+            }
+
+            # Extract metrics for summary
+            test_metrics = result.get("test_metrics", {})
+            model_info = result.get("model_info", {})
+            metrics_summary.append({
+                "Target": target_col,
+                "Order": str(model_info.get("order", "N/A")),
+                "Seasonal": str(model_info.get("seasonal_order", "N/A")),
+                "MAE": test_metrics.get("MAE", np.nan),
+                "RMSE": test_metrics.get("RMSE", np.nan),
+                "MAPE_%": test_metrics.get("MAPE", np.nan),
+                "Accuracy_%": test_metrics.get("Accuracy", np.nan),
+                "R2": test_metrics.get("R2", np.nan),
+                "Direction_Acc_%": test_metrics.get("Direction_Accuracy_%", np.nan),
+            })
+
+        except Exception as e:
+            import traceback
+            print(f"[SARIMAX ERROR] {target_col}: {str(e)}")
+            traceback.print_exc()
+            all_results[target_col] = {
+                "status": "error",
+                "message": str(e)
+            }
+            metrics_summary.append({
+                "Target": target_col,
+                "Order": "Error",
+                "Seasonal": "Error",
+                "MAE": np.nan,
+                "RMSE": np.nan,
+                "MAPE_%": np.nan,
+                "Accuracy_%": np.nan,
+                "R2": np.nan,
+                "Direction_Acc_%": np.nan,
+            })
+
+    # Create summary dataframe
+    summary_df = pd.DataFrame(metrics_summary)
+
+    # Add average row
+    if not summary_df.empty:
+        numeric_cols = ["MAE", "RMSE", "MAPE_%", "Accuracy_%", "R2", "Direction_Acc_%"]
+        avg_row = {"Target": "AVERAGE", "Order": "-", "Seasonal": "-"}
+        for col in numeric_cols:
+            avg_row[col] = summary_df[col].mean()
+        summary_df = pd.concat([summary_df, pd.DataFrame([avg_row])], ignore_index=True)
+
+    all_results["summary"] = summary_df
+    all_results["successful_targets"] = [t for t, r in all_results.items()
+                                          if isinstance(r, dict) and r.get("status") == "success"]
+    all_results["failed_targets"] = [t for t, r in all_results.items()
+                                      if isinstance(r, dict) and r.get("status") == "error"]
+
+    return all_results
+
+
+def get_reason_target_columns(df: pd.DataFrame, horizon: Optional[int] = None) -> List[str]:
+    """
+    Detect all FUTURE target columns in the dataframe for multi-target forecasting.
+
+    These are the dependent variables (what we want to predict):
+    - Target_1, Target_2, ..., Target_7 (patient arrivals for horizons 1-7)
+    - asthma_1, asthma_2, ..., asthma_7 (asthma cases for horizons 1-7)
+    - pneumonia_1, pneumonia_2, etc. (and all other medical reasons)
+
+    Args:
+        df: DataFrame with preprocessed columns
+        horizon: If specified, only return targets for this specific horizon (1-7)
+                 If None, return all available target columns
+
+    Returns:
+        List of future target column names (dependent variables)
+    """
+    # Medical reason base names (without horizon suffix)
+    # Includes both granular reasons AND aggregated clinical categories
+    reason_bases = [
+        # Aggregated clinical categories (recommended for forecasting)
+        'respiratory', 'cardiac', 'trauma', 'gastrointestinal', 'infectious', 'neurological', 'other',
+        # Granular medical reasons
+        'asthma', 'pneumonia', 'shortness_of_breath', 'chest_pain', 'arrhythmia',
+        'hypertensive_emergency', 'fracture', 'laceration', 'burn', 'fall_injury',
+        'abdominal_pain', 'vomiting', 'diarrhea', 'flu_symptoms', 'fever',
+        'viral_infection', 'headache', 'dizziness', 'allergic_reaction', 'mental_health'
+    ]
+
+    target_cols = []
+
+    for col in df.columns:
+        col_lower = col.lower()
+
+        # Skip lag columns (features, not targets)
+        if '_lag_' in col_lower or col_lower.startswith('ed_'):
+            continue
+
+        # Check for Target_N pattern (patient arrivals)
+        if col_lower.startswith('target_'):
+            try:
+                h = int(col_lower.split('_')[1])
+                if horizon is None or h == horizon:
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        target_cols.append(col)
+            except (IndexError, ValueError):
+                pass
+            continue
+
+        # Check for reason_N pattern (e.g., asthma_1, pneumonia_2)
+        for base in reason_bases:
+            if col_lower.startswith(base + '_'):
+                try:
+                    suffix = col_lower[len(base) + 1:]
+                    h = int(suffix)
+                    if 1 <= h <= 7:  # Valid horizon range
+                        if horizon is None or h == horizon:
+                            if pd.api.types.is_numeric_dtype(df[col]):
+                                target_cols.append(col)
+                except ValueError:
+                    pass
+                break
+
+    # Sort by horizon for consistent ordering
+    def sort_key(col):
+        col_lower = col.lower()
+        if col_lower.startswith('target_'):
+            return (0, int(col_lower.split('_')[1]))
+        for i, base in enumerate(reason_bases):
+            if col_lower.startswith(base + '_'):
+                try:
+                    h = int(col_lower[len(base) + 1:])
+                    return (i + 1, h)
+                except ValueError:
+                    return (100, 0)
+        return (100, 0)
+
+    return sorted(target_cols, key=sort_key)
