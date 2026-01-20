@@ -383,6 +383,61 @@ def _auto_order(
     return (1, 1, 1), (1, 1, 0, m), float("nan"), float("nan")
 
 
+def _auto_order_fast(
+    y_tr: pd.Series,
+    X_tr: Optional[pd.DataFrame],
+    m: int = 7,
+) -> Tuple[Tuple[int,int,int], Tuple[int,int,int,int], float, float]:
+    """
+    Ultra-fast order selection using only common seasonal patterns.
+    Evaluates just 3 candidates instead of 30-80 from pmdarima stepwise.
+
+    Ideal for: Quick prototyping, large datasets, interactive use.
+    Trade-off: May not find globally optimal parameters.
+
+    Args:
+        y_tr: Training target series
+        X_tr: Training exogenous features (optional)
+        m: Seasonal period (default 7 for weekly)
+
+    Returns:
+        Tuple (order, seasonal_order, aic, bic)
+    """
+    # Pre-defined common weekly seasonal patterns (from ED forecasting literature)
+    candidates = [
+        ((1, 1, 1), (1, 1, 0, m)),  # Most common seasonal ARIMA
+        ((1, 0, 1), (1, 0, 1, m)),  # Alternative without differencing
+        ((0, 1, 1), (0, 1, 1, m)),  # Simple exponential smoothing style
+    ]
+
+    best_aic = float('inf')
+    best_bic = float('nan')
+    best_order = candidates[0][0]
+    best_sorder = candidates[0][1]
+
+    for order, sorder in candidates:
+        try:
+            y_arr, X_arr = _prepare_sarimax_input(y_tr, X_tr)
+            model = SARIMAX(
+                endog=y_arr,
+                exog=X_arr,
+                order=order,
+                seasonal_order=sorder,
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            ).fit(disp=False, maxiter=50)
+
+            if model.aic < best_aic:
+                best_aic = model.aic
+                best_bic = model.bic
+                best_order = order
+                best_sorder = sorder
+        except Exception:
+            continue
+
+    return best_order, best_sorder, best_aic, best_bic
+
+
 def _auto_order_hybrid(
     y_tr: pd.Series,
     X_tr: Optional[pd.DataFrame],
