@@ -299,9 +299,9 @@ def _auto_order_rmse_only(
 
     # Fit full model to get AIC/BIC for reporting
     try:
-        # Convert to numpy to avoid index alignment issues
-        y_tr_arr = y_tr.values
-        X_tr_arr = X_tr.values if X_tr is not None and X_tr.shape[1] > 0 else None
+        # Convert to numpy with explicit dtype to avoid index alignment issues
+        y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()
+        X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr is not None and X_tr.shape[1] > 0 else None
 
         full_model = SARIMAX(
             endog=y_tr_arr,
