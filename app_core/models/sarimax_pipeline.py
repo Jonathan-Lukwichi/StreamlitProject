@@ -1362,6 +1362,8 @@ def _calculate_baseline_metrics(
     """
     Calculate per-horizon metrics for baseline pipeline.
     Matches the format expected by plotting functions.
+
+    Includes robust handling of NaN/Inf values to prevent numerical explosions.
     """
     if F.ndim == 1:
         F = F.reshape(-1, 1)
@@ -1375,14 +1377,25 @@ def _calculate_baseline_metrics(
         if col_name not in test_eval.columns:
             continue
 
-        actual = test_eval[col_name].values
-        pred = F[:, h]
-        l95 = L[:, h]
-        u95 = U[:, h]
+        actual = test_eval[col_name].values.astype(np.float64)
+        pred = F[:, h].astype(np.float64)
+        l95 = L[:, h].astype(np.float64)
+        u95 = U[:, h].astype(np.float64)
 
-        # Filter valid indices
+        # Filter valid indices - must be finite for both actual and predicted
         valid_idx = np.isfinite(actual) & np.isfinite(pred)
         if not np.any(valid_idx):
+            # No valid data points - skip this horizon
+            results.append({
+                "Horizon": f"h={h_idx}",
+                "MAE": np.nan,
+                "RMSE": np.nan,
+                "MAPE_%": np.nan,
+                "Accuracy_%": np.nan,
+                "R2": np.nan,
+                "CI_Coverage_%": np.nan,
+                "Direction_Accuracy_%": np.nan,
+            })
             continue
 
         actual_v = actual[valid_idx]
@@ -1390,38 +1403,84 @@ def _calculate_baseline_metrics(
         l95_v = l95[valid_idx]
         u95_v = u95[valid_idx]
 
+        # Replace any remaining non-finite values in CI bounds
+        l95_v = np.where(np.isfinite(l95_v), l95_v, pred_v - np.std(actual_v) * 2)
+        u95_v = np.where(np.isfinite(u95_v), u95_v, pred_v + np.std(actual_v) * 2)
+
         # MAE
-        mae_h = float(mean_absolute_error(actual_v, pred_v))
+        try:
+            mae_h = float(mean_absolute_error(actual_v, pred_v))
+            # Sanity check: MAE should be reasonable
+            if not np.isfinite(mae_h) or mae_h > 1e10:
+                mae_h = np.nan
+        except Exception:
+            mae_h = np.nan
 
         # RMSE
-        rmse_h = float(np.sqrt(mean_squared_error(actual_v, pred_v)))
+        try:
+            rmse_h = float(np.sqrt(mean_squared_error(actual_v, pred_v)))
+            if not np.isfinite(rmse_h) or rmse_h > 1e10:
+                rmse_h = np.nan
+        except Exception:
+            rmse_h = np.nan
 
-        # MAPE
-        with np.errstate(divide="ignore", invalid="ignore"):
-            mape_h = float(np.nanmean(
-                np.abs((pred_v - actual_v) / np.where(actual_v != 0, actual_v, np.nan))
-            ) * 100)
+        # MAPE - with robust handling of zeros and extreme values
+        try:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                # Use absolute values to avoid issues
+                abs_actual = np.abs(actual_v)
+                # Only compute MAPE where actual is reasonably large
+                mask = abs_actual > 0.01  # Avoid division by near-zero
+                if np.any(mask):
+                    ape = np.abs((pred_v[mask] - actual_v[mask]) / actual_v[mask])
+                    # Clip extreme APE values before averaging
+                    ape = np.clip(ape, 0, 10)  # Cap at 1000% error
+                    mape_h = float(np.nanmean(ape) * 100)
+                else:
+                    mape_h = np.nan
 
-        # Accuracy
-        acc_h = 100.0 * (1 - mape_h / 100.0) if np.isfinite(mape_h) else np.nan
+                # Sanity check
+                if not np.isfinite(mape_h) or mape_h > 1000:
+                    mape_h = 100.0  # Cap at 100% MAPE (0% accuracy)
+        except Exception:
+            mape_h = np.nan
+
+        # Accuracy (100 - MAPE, clamped to [0, 100])
+        if np.isfinite(mape_h):
+            acc_h = max(0.0, min(100.0, 100.0 - mape_h))
+        else:
+            acc_h = np.nan
 
         # R²
         try:
-            r2_h = float(r2_score(actual_v, pred_v))
-        except ValueError:
+            if len(actual_v) > 1 and np.std(actual_v) > 0:
+                r2_h = float(r2_score(actual_v, pred_v))
+                # R² should be between -inf and 1, but we cap negative values
+                r2_h = max(-1.0, min(1.0, r2_h))
+            else:
+                r2_h = np.nan
+        except Exception:
             r2_h = np.nan
 
         # CI Coverage
-        coverage = float(np.mean((actual_v >= l95_v) & (actual_v <= u95_v)) * 100)
+        try:
+            coverage = float(np.mean((actual_v >= l95_v) & (actual_v <= u95_v)) * 100)
+            coverage = max(0.0, min(100.0, coverage))
+        except Exception:
+            coverage = np.nan
 
         # Direction Accuracy
         direction_acc = np.nan
-        if len(actual_v) > 1:
-            da = np.diff(actual_v)
-            dp = np.diff(pred_v)
-            mask = da != 0
-            if np.any(mask):
-                direction_acc = float(np.mean(np.sign(da[mask]) == np.sign(dp[mask])) * 100)
+        try:
+            if len(actual_v) > 1:
+                da = np.diff(actual_v)
+                dp = np.diff(pred_v)
+                mask = da != 0
+                if np.any(mask):
+                    direction_acc = float(np.mean(np.sign(da[mask]) == np.sign(dp[mask])) * 100)
+                    direction_acc = max(0.0, min(100.0, direction_acc))
+        except Exception:
+            direction_acc = np.nan
 
         results.append({
             "Horizon": f"h={h_idx}",
@@ -1439,7 +1498,10 @@ def _calculate_baseline_metrics(
     # Add average row
     if not metrics_df.empty:
         numeric_cols = metrics_df.select_dtypes(include=[np.number]).columns
-        avg_row = {k: metrics_df[k].mean() for k in numeric_cols}
+        avg_row = {}
+        for k in numeric_cols:
+            vals = metrics_df[k].dropna()
+            avg_row[k] = float(vals.mean()) if len(vals) > 0 else np.nan
         avg_row["Horizon"] = "Average"
         metrics_df = pd.concat([metrics_df, pd.Series(avg_row).to_frame().T], ignore_index=True)
 
