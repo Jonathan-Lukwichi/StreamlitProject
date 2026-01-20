@@ -888,7 +888,12 @@ def run_sarimax_multihorizon(
         # For automatic mode: find parameters for h=1, reuse for h>1 (7x speedup)
         if (order is None or seasonal_order is None) and h == 1:
             # Full auto search for first horizon only
-            if search_mode == "rmse_only":
+            if search_mode == "fast":
+                # Ultra-fast mode: only evaluate 3 pre-selected candidates (~10x faster)
+                ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_fast(
+                    y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length
+                )
+            elif search_mode == "rmse_only":
                 # RMSE-only mode: optimize pure CV-RMSE (DEFAULT - seeks lowest RMSE)
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_rmse_only(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
