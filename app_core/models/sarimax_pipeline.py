@@ -596,8 +596,10 @@ def run_sarimax_single(
     if target_col not in df_full.columns:
         raise ValueError(f"'{target_col}' not found in dataframe.")
 
-    y = df_full.set_index(date_col)[target_col].astype(float)
-    y = y.interpolate("linear").ffill().bfill()
+    y = df_full.set_index(date_col)[target_col]
+    if isinstance(y, pd.DataFrame):
+        y = y.iloc[:, 0]
+    y = y.astype(float).interpolate("linear").ffill().bfill()
 
     if len(y) < 24:
         raise ValueError("Not enough data for SARIMAX single-horizon (need >= 24 points).")
@@ -776,8 +778,10 @@ def run_sarimax_multihorizon(
             continue
 
         # y series
-        y = df_full.set_index(date_col)[tc].astype(float)
-        y = y.interpolate("linear").ffill().bfill()
+        y = df_full.set_index(date_col)[tc]
+        if isinstance(y, pd.DataFrame):
+            y = y.iloc[:, 0]
+        y = y.astype(float).interpolate("linear").ffill().bfill()
 
         # require sensible history
         if len(y) < 100:
