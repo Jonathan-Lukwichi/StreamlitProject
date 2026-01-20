@@ -148,6 +148,49 @@ def _exog_all(
 
     return X
 
+
+def _prepare_sarimax_input(y: pd.Series, X: Optional[pd.DataFrame]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """
+    Convert pandas Series/DataFrame to numpy arrays safe for SARIMAX.
+
+    SARIMAX in statsmodels is sensitive to dtypes and requires clean float64 arrays.
+    This function handles all edge cases including NaN values, mixed dtypes, and
+    object columns that cause "Pandas data cast to numpy dtype of object" errors.
+
+    Args:
+        y: Target series (endog)
+        X: Exogenous features DataFrame (can be None)
+
+    Returns:
+        Tuple of (endog_array, exog_array or None)
+    """
+    # Convert target to 1-D float64 array
+    y_arr = np.asarray(y.values, dtype=np.float64).ravel()
+
+    # Handle NaN in target - replace with mean
+    if np.any(np.isnan(y_arr)):
+        mean_val = np.nanmean(y_arr)
+        if np.isnan(mean_val):
+            mean_val = 0.0
+        y_arr = np.nan_to_num(y_arr, nan=mean_val)
+
+    # Convert exog to 2-D float64 array
+    if X is not None and len(X.columns) > 0:
+        X_arr = np.asarray(X.values, dtype=np.float64)
+
+        # Handle NaN in exog - replace with column means
+        if np.any(np.isnan(X_arr)):
+            col_means = np.nanmean(X_arr, axis=0)
+            col_means = np.where(np.isnan(col_means), 0.0, col_means)
+            for j in range(X_arr.shape[1]):
+                mask = np.isnan(X_arr[:, j])
+                X_arr[mask, j] = col_means[j]
+
+        return y_arr, X_arr
+
+    return y_arr, None
+
+
 def _auto_order_rmse_only(
     y_tr: pd.Series,
     X_tr: Optional[pd.DataFrame],
