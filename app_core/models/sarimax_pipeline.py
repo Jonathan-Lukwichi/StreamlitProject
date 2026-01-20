@@ -442,12 +442,16 @@ def _auto_order_hybrid(
     candidates = list(set(candidates))
 
     # Evaluate each candidate with CV-RMSE
+    # Convert to numpy for the full fit (avoid index alignment issues)
+    y_tr_arr = y_tr.values
+    X_tr_arr = X_tr.values if X_tr is not None and X_tr.shape[1] > 0 else None
+
     for order, seasonal_order in candidates:
         try:
             # 1. Full fit for AIC
             model_full = SARIMAX(
-                endog=y_tr,
-                exog=X_tr if X_tr is not None and X_tr.shape[1] > 0 else None,
+                endog=y_tr_arr,
+                exog=X_tr_arr,
                 order=order,
                 seasonal_order=seasonal_order,
                 enforce_stationarity=False,
