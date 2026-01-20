@@ -1074,6 +1074,361 @@ def run_sarimax_multihorizon(
     results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
     return {"results_df": results_df, "per_h": per_h, "successful": ok}
 
+
+# ===========================================
+# SARIMAX Baseline Pipeline (Expanding Window)
+# ===========================================
+def run_sarimax_baseline_pipeline(
+    df: pd.DataFrame,
+    date_col: str = "Date",
+    target_col: str = "Target_1",
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+    train_ratio: float = 0.8,
+    max_horizon: int = 7,
+    season_length: int = 7,
+    # Feature options
+    use_all_features: bool = True,
+    include_dow_ohe: bool = True,
+    selected_features: Optional[List[str]] = None,
+    # Search mode
+    search_mode: str = "rmse_only",
+    n_folds: int = 3,
+    max_p: int = 3, max_q: int = 3, max_d: int = 2,
+    max_P: int = 2, max_Q: int = 2, max_D: int = 1,
+) -> Dict[str, Any]:
+    """
+    SARIMAX Baseline: Single model with expanding-window multi-horizon forecaster.
+
+    This mirrors ARIMA's `run_arima_multi_horizon_pipeline()` approach:
+    - Single model with one set of (p,d,q)(P,D,Q,m) parameters
+    - Expanding window: training data grows at each forecast origin
+    - Forecasts H steps ahead from each origin
+    - Uses exogenous features (calendar, weather) - key difference from ARIMA
+
+    Unlike `run_sarimax_multihorizon()` which trains 7 separate models (one per horizon),
+    this baseline uses ONE model that refits at each step and forecasts all horizons.
+
+    Args:
+        df: DataFrame with date column and target column
+        date_col: Name of date column
+        target_col: Name of target column (e.g., "Target_1" or "ED")
+        order: ARIMA order (p,d,q) - if None, auto-selected
+        seasonal_order: Seasonal order (P,D,Q,m) - if None, auto-selected
+        train_ratio: Fraction of data for initial training
+        max_horizon: Number of steps to forecast (default 7)
+        season_length: Seasonal period (default 7 for weekly)
+        use_all_features: Use all non-target columns as exogenous features
+        include_dow_ohe: Include day-of-week one-hot encoding
+        selected_features: Specific features to use (optional)
+        search_mode: Parameter selection mode ("fast", "aic_only", "rmse_only", "hybrid")
+        n_folds: Number of CV folds for parameter selection
+        max_p, max_q, max_d: Non-seasonal parameter bounds
+        max_P, max_Q, max_D: Seasonal parameter bounds
+
+    Returns:
+        Dict with:
+            'F': np.ndarray - Forecast matrix [n_test_points × H]
+            'L': np.ndarray - Lower 95% CI [n_test_points × H]
+            'U': np.ndarray - Upper 95% CI [n_test_points × H]
+            'test_eval': pd.DataFrame - Actuals for each horizon (Target_1...Target_H)
+            'metrics_df': pd.DataFrame - Per-horizon metrics + average row
+            'order': tuple - Selected ARIMA order
+            'seasonal_order': tuple - Selected seasonal order
+            'eval_dates': DatetimeIndex - Dates for test period
+            'max_horizon': int - Number of horizons
+            'train': pd.DataFrame - Training data
+            'res': SARIMAX results object - For residual diagnostics
+            'exog_columns': List[str] - Names of exogenous features used
+    """
+    # ========== 1. Prepare Data ==========
+    df_full = _clean_daily(df, date_col)
+
+    if target_col not in df_full.columns:
+        raise ValueError(f"Target column '{target_col}' not found in dataframe.")
+
+    # Extract target series
+    y_series = df_full.set_index(date_col)[target_col].astype(float)
+    y_series = y_series.interpolate("linear").ffill().bfill()
+    y = y_series.values
+    dates = y_series.index
+
+    if len(y) < max(24, max_horizon + 10):
+        raise ValueError(f"Not enough data for SARIMAX baseline (need >= {max(24, max_horizon + 10)}, got {len(y)}).")
+
+    # ========== 2. Build Exogenous Features ==========
+    if use_all_features:
+        X_all = _exog_all(
+            df_full=df_full,
+            date_col=date_col,
+            target_cols=[target_col],  # Exclude target from features
+            include_dow_ohe=include_dow_ohe,
+            selected_features=selected_features,
+        )
+    else:
+        X_all = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
+
+    # Ensure proper alignment
+    X_all = X_all.reset_index(drop=True)
+    exog_columns = list(X_all.columns)
+
+    # ========== 3. Train/Test Split Setup ==========
+    train_size = int(len(y) * train_ratio)
+    train_size = max(24, min(len(y) - max_horizon, train_size))
+
+    # Verify we have enough test data
+    if len(y) < train_size + max_horizon:
+        H_eff = max(1, len(y) - train_size)
+        if H_eff < 1:
+            return {"status": "error", "message": "Insufficient data for multi-horizon evaluation."}
+        max_horizon = H_eff
+
+    H = int(max_horizon)
+
+    # ========== 4. Parameter Selection (Once) ==========
+    y_tr_init = pd.Series(y[:train_size], index=dates[:train_size])
+    X_tr_init = X_all.iloc[:train_size].copy().astype(np.float64)
+
+    if order is None or seasonal_order is None:
+        if search_mode == "fast":
+            ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_fast(
+                y_tr_init, X_tr_init if X_tr_init.shape[1] > 0 else None, m=season_length
+            )
+        elif search_mode == "rmse_only":
+            ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_rmse_only(
+                y_tr_init, X_tr_init if X_tr_init.shape[1] > 0 else None, m=season_length,
+                n_folds=n_folds,
+                max_p=max_p, max_q=max_q, max_d=max_d,
+                max_P=max_P, max_Q=max_Q, max_D=max_D
+            )
+        elif search_mode == "hybrid":
+            ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_hybrid(
+                y_tr_init, X_tr_init if X_tr_init.shape[1] > 0 else None, m=season_length,
+                n_folds=n_folds, alpha=0.3, beta=0.7,
+                max_p=max_p, max_q=max_q, max_d=max_d,
+                max_P=max_P, max_Q=max_Q, max_D=max_D
+            )
+        else:  # aic_only
+            ord_auto, sord_auto, aic_auto, bic_auto = _auto_order(
+                y_tr_init, X_tr_init if X_tr_init.shape[1] > 0 else None, m=season_length,
+                max_p=max_p, max_q=max_q, max_d=max_d,
+                max_P=max_P, max_Q=max_Q, max_D=max_D
+            )
+        use_order = order if order is not None else ord_auto
+        use_sorder = seasonal_order if seasonal_order is not None else sord_auto
+    else:
+        use_order, use_sorder = order, seasonal_order
+
+    # ========== 5. Build F, L, U Matrices (Expanding Window) ==========
+    forecast_start_index = train_size
+    forecast_end_index = len(y) - H + 1
+    n_test_points = max(0, forecast_end_index - forecast_start_index)
+
+    if n_test_points <= 0:
+        return {"status": "error", "message": "Not enough test data points for evaluation."}
+
+    F = np.full((n_test_points, H), np.nan)
+    L = np.full((n_test_points, H), np.nan)
+    U = np.full((n_test_points, H), np.nan)
+
+    eval_dates = dates[forecast_start_index:forecast_end_index]
+    final_res = None  # Store last fit for diagnostics
+
+    for t in range(n_test_points):
+        # Expanding training window
+        current_train_end = train_size + t
+        y_train = y[:current_train_end]
+        X_train = X_all.iloc[:current_train_end].copy().astype(np.float64)
+
+        # Future exog for forecasting H steps
+        future_start = current_train_end
+        future_end = current_train_end + H
+        X_future = X_all.iloc[future_start:future_end].copy().astype(np.float64)
+
+        if len(X_future) < H:
+            # Pad with last row if needed (edge case)
+            while len(X_future) < H:
+                X_future = pd.concat([X_future, X_future.iloc[[-1]]], ignore_index=True)
+
+        try:
+            # Prepare inputs
+            y_arr, X_arr = _prepare_sarimax_input(
+                pd.Series(y_train), X_train
+            )
+            _, X_future_arr = _prepare_sarimax_input(
+                pd.Series([0]), X_future  # Dummy y, we just need X
+            )
+
+            # Fit SARIMAX
+            model = SARIMAX(
+                endog=y_arr,
+                exog=X_arr,
+                order=use_order,
+                seasonal_order=use_sorder,
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            ).fit(disp=False, maxiter=100)
+
+            # Forecast H steps
+            fc = model.get_forecast(steps=H, exog=X_future_arr)
+            F[t, :] = fc.predicted_mean
+            ci = fc.conf_int(alpha=0.05)
+            if isinstance(ci, pd.DataFrame):
+                L[t, :] = ci.iloc[:, 0].values
+                U[t, :] = ci.iloc[:, 1].values
+            else:
+                ci = np.asarray(ci)
+                L[t, :] = ci[:, 0]
+                U[t, :] = ci[:, 1]
+
+            # Keep last model for diagnostics
+            if t == n_test_points - 1:
+                final_res = model
+
+        except Exception as e:
+            warnings.warn(f"SARIMAX baseline refit failed at t={t}: {e}")
+            continue
+
+    # ========== 6. Build Actuals Matrix (test_eval) ==========
+    actuals = {}
+    for h in range(1, H + 1):
+        start_idx = forecast_start_index + h - 1
+        end_idx = forecast_end_index + h - 1
+        actuals[f"Target_{h}"] = y[start_idx:end_idx]
+
+    test_eval = pd.DataFrame(actuals, index=eval_dates)
+
+    # ========== 7. Calculate Metrics ==========
+    metrics_df = _calculate_baseline_metrics(F, test_eval, L, U, H)
+
+    # ========== 8. Final fit on original training split for diagnostics ==========
+    if final_res is None:
+        try:
+            y_arr, X_arr = _prepare_sarimax_input(
+                pd.Series(y[:train_size]), X_all.iloc[:train_size].astype(np.float64)
+            )
+            final_res = SARIMAX(
+                endog=y_arr,
+                exog=X_arr,
+                order=use_order,
+                seasonal_order=use_sorder,
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            ).fit(disp=False)
+        except Exception:
+            final_res = None
+
+    return {
+        "F": F,
+        "L": L,
+        "U": U,
+        "test_eval": test_eval,
+        "metrics_df": metrics_df,
+        "train": df_full.iloc[:train_size].copy(),
+        "res": final_res,
+        "eval_dates": eval_dates,
+        "order": tuple(use_order),
+        "seasonal_order": tuple(use_sorder),
+        "max_horizon": H,
+        "exog_columns": exog_columns,
+        "status": "success",
+    }
+
+
+def _calculate_baseline_metrics(
+    F: np.ndarray,
+    test_eval: pd.DataFrame,
+    L: np.ndarray,
+    U: np.ndarray,
+    H: int,
+) -> pd.DataFrame:
+    """
+    Calculate per-horizon metrics for baseline pipeline.
+    Matches the format expected by plotting functions.
+    """
+    if F.ndim == 1:
+        F = F.reshape(-1, 1)
+
+    results = []
+
+    for h in range(H):
+        h_idx = h + 1
+        col_name = f"Target_{h_idx}"
+
+        if col_name not in test_eval.columns:
+            continue
+
+        actual = test_eval[col_name].values
+        pred = F[:, h]
+        l95 = L[:, h]
+        u95 = U[:, h]
+
+        # Filter valid indices
+        valid_idx = np.isfinite(actual) & np.isfinite(pred)
+        if not np.any(valid_idx):
+            continue
+
+        actual_v = actual[valid_idx]
+        pred_v = pred[valid_idx]
+        l95_v = l95[valid_idx]
+        u95_v = u95[valid_idx]
+
+        # MAE
+        mae_h = float(mean_absolute_error(actual_v, pred_v))
+
+        # RMSE
+        rmse_h = float(np.sqrt(mean_squared_error(actual_v, pred_v)))
+
+        # MAPE
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mape_h = float(np.nanmean(
+                np.abs((pred_v - actual_v) / np.where(actual_v != 0, actual_v, np.nan))
+            ) * 100)
+
+        # Accuracy
+        acc_h = 100.0 * (1 - mape_h / 100.0) if np.isfinite(mape_h) else np.nan
+
+        # R²
+        try:
+            r2_h = float(r2_score(actual_v, pred_v))
+        except ValueError:
+            r2_h = np.nan
+
+        # CI Coverage
+        coverage = float(np.mean((actual_v >= l95_v) & (actual_v <= u95_v)) * 100)
+
+        # Direction Accuracy
+        direction_acc = np.nan
+        if len(actual_v) > 1:
+            da = np.diff(actual_v)
+            dp = np.diff(pred_v)
+            mask = da != 0
+            if np.any(mask):
+                direction_acc = float(np.mean(np.sign(da[mask]) == np.sign(dp[mask])) * 100)
+
+        results.append({
+            "Horizon": f"h={h_idx}",
+            "MAE": mae_h,
+            "RMSE": rmse_h,
+            "MAPE_%": mape_h,
+            "Accuracy_%": acc_h,
+            "R2": r2_h,
+            "CI_Coverage_%": coverage,
+            "Direction_Accuracy_%": direction_acc,
+        })
+
+    metrics_df = pd.DataFrame(results)
+
+    # Add average row
+    if not metrics_df.empty:
+        numeric_cols = metrics_df.select_dtypes(include=[np.number]).columns
+        avg_row = {k: metrics_df[k].mean() for k in numeric_cols}
+        avg_row["Horizon"] = "Average"
+        metrics_df = pd.concat([metrics_df, pd.Series(avg_row).to_frame().T], ignore_index=True)
+
+    return metrics_df.reset_index(drop=True)
+
+
 # ---------- helpers to adapt outputs for dashboards ----------
 def calculate_multi_horizon_metrics_from_rows(results_df: pd.DataFrame) -> pd.DataFrame:
     """
