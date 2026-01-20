@@ -334,9 +334,12 @@ def _auto_order_rmse_only(
 
     # Fit full model to get AIC/BIC for reporting
     try:
+        # Convert to numpy arrays for SARIMAX
+        y_full_arr, X_full_arr = _prepare_sarimax_input(y_tr, X_tr)
+
         full_model = SARIMAX(
-            endog=y_tr,
-            exog=X_tr if X_tr is not None and X_tr.shape[1] > 0 else None,
+            endog=y_full_arr,
+            exog=X_full_arr,
             order=tuple(best_row['order']),
             seasonal_order=tuple(best_row['seasonal_order']),
             enforce_stationarity=False,
