@@ -933,7 +933,11 @@ def run_sarimax_multihorizon(
             aic_ref, bic_ref = float("nan"), float("nan")
         else:
             # Fallback for edge cases
-            if search_mode == "rmse_only":
+            if search_mode == "fast":
+                ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_fast(
+                    y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length
+                )
+            elif search_mode == "rmse_only":
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_rmse_only(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
                     n_folds=n_folds,
