@@ -478,10 +478,13 @@ def _auto_order_hybrid(
     # Evaluate each candidate with CV-RMSE
     for order, seasonal_order in candidates:
         try:
+            # Convert to numpy arrays for full model
+            y_full_arr, X_full_arr = _prepare_sarimax_input(y_tr, X_tr)
+
             # 1. Full fit for AIC
             model_full = SARIMAX(
-                endog=y_tr,
-                exog=X_tr if X_tr is not None and X_tr.shape[1] > 0 else None,
+                endog=y_full_arr,
+                exog=X_full_arr,
                 order=order,
                 seasonal_order=seasonal_order,
                 enforce_stationarity=False,
@@ -510,8 +513,11 @@ def _auto_order_hybrid(
                 y_cv_test = y_tr.iloc[test_start:test_end]
 
                 if X_tr is not None and X_tr.shape[1] > 0:
-                    X_cv_train = X_tr.iloc[:train_end]
-                    X_cv_test = X_tr.iloc[test_start:test_end]
+                    X_cv_train = X_tr.iloc[:train_end].copy()
+                    X_cv_test = X_tr.iloc[test_start:test_end].copy()
+                    # Ensure float64
+                    X_cv_train = X_cv_train.astype(np.float64)
+                    X_cv_test = X_cv_test.astype(np.float64)
                 else:
                     X_cv_train = None
                     X_cv_test = None
@@ -519,9 +525,13 @@ def _auto_order_hybrid(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
+                # Convert to numpy arrays for SARIMAX
+                y_cv_arr, X_cv_arr = _prepare_sarimax_input(y_cv_train, X_cv_train)
+                _, X_cv_test_arr = _prepare_sarimax_input(y_cv_test, X_cv_test)
+
                 cv_model = SARIMAX(
-                    endog=y_cv_train,
-                    exog=X_cv_train,
+                    endog=y_cv_arr,
+                    exog=X_cv_arr,
                     order=order,
                     seasonal_order=seasonal_order,
                     enforce_stationarity=False,
