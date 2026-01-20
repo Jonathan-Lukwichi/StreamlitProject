@@ -636,9 +636,10 @@ def run_sarimax_single(
     else:
         use_order, use_sorder = order, seasonal_order
 
-    # Fit - convert to numpy arrays to avoid index alignment issues
-    y_tr_arr = y_tr.values
-    X_tr_arr = X_tr.values if X_tr.shape[1] > 0 else None
+    # Fit - convert to numpy arrays with explicit dtype to avoid index alignment issues
+    # CRITICAL: Use np.asarray with float64 dtype to ensure SARIMAX compatibility
+    y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()  # Ensure 1-d
+    X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr.shape[1] > 0 else None
 
     fit = SARIMAX(
         endog=y_tr_arr,
@@ -652,8 +653,8 @@ def run_sarimax_single(
     # In-sample/fitted
     fitted = pd.Series(fit.fittedvalues, index=y_tr.index)
 
-    # Forecast on test - convert X_te to numpy
-    X_te_arr = X_te.values if X_te.shape[1] > 0 else None
+    # Forecast on test - convert X_te to numpy with explicit dtype
+    X_te_arr = np.asarray(X_te.values, dtype=np.float64) if X_te.shape[1] > 0 else None
     fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
     mean = fc.predicted_mean
     ci = fc.conf_int(alpha=0.05)
