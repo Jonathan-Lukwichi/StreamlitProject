@@ -115,34 +115,37 @@ def _exog_all(
     selected_features: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """
-    Build exogenous feature matrix from ALL non-target, non-date columns (+ optional DOW OHE).
-    If selected_features is provided, we subset to those (when present).
+    Build exogenous feature matrix from ALL non-target, non-date columns.
+    Returns DataFrame with RangeIndex and all float64 columns.
     """
     drop_cols = [date_col] + [c for c in target_cols if c in df_full.columns]
     X = df_full.drop(columns=drop_cols, errors="ignore").copy()
 
-    # Clean numerics
+    # Convert ALL columns to float64, coercing errors to NaN
     for c in X.columns:
-        X[c] = pd.to_numeric(X[c], errors="coerce")
+        X[c] = pd.to_numeric(X[c], errors="coerce").astype(np.float64)
 
-    # Add calendar OHE on DOW if requested
+    # Reset index to RangeIndex
+    X = X.reset_index(drop=True)
+
+    # Add calendar features (already has RangeIndex and float64)
     cal = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
-    # Reset cal index to match X's RangeIndex before concatenation
-    cal = cal.reset_index(drop=True)
 
-    # Combine
+    # Combine - both have RangeIndex so no alignment issues
     X = pd.concat([X, cal], axis=1)
 
-    # If user specified a subset of features, keep intersection only
+    # If user specified features, keep only those
     if selected_features:
         keep = [c for c in selected_features if c in X.columns]
         if include_dow_ohe:
             keep += [c for c in cal.columns if c not in keep]
-        keep = list(dict.fromkeys(keep))  # de-dup
+        keep = list(dict.fromkeys(keep))
         if keep:
             X = X[keep]
 
-    X = X.interpolate("linear").ffill().bfill()
+    # Fill NaN and ensure float64
+    X = X.fillna(0).astype(np.float64)
+
     return X
 
 def _auto_order_rmse_only(
