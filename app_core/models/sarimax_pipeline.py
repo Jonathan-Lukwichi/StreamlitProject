@@ -117,7 +117,6 @@ def _exog_all(
 
     # Add calendar OHE on DOW if requested
     cal = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
-    cal = cal.reset_index(drop=True)  # Align integer index with X
 
     # Combine
     X = pd.concat([X, cal], axis=1)
@@ -132,17 +131,6 @@ def _exog_all(
             X = X[keep]
 
     X = X.interpolate("linear").ffill().bfill()
-
-    # Ensure all columns are numeric float64 (SARIMAX requires numeric data)
-    for c in X.columns:
-        X[c] = pd.to_numeric(X[c], errors="coerce").astype(float)
-
-    # Drop columns that are entirely NaN (can't be used as features)
-    X = X.dropna(axis=1, how="all")
-
-    # Fill any remaining NaN with 0 to avoid dtype issues
-    X = X.fillna(0)
-
     return X
 
 def _auto_order_rmse_only(
@@ -253,14 +241,9 @@ def _auto_order_rmse_only(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
-                # Convert to numpy with explicit dtype to avoid index alignment issues
-                y_cv_arr = np.asarray(y_cv_train.values, dtype=np.float64).ravel()
-                X_cv_arr = np.asarray(X_cv_train.values, dtype=np.float64) if X_cv_train is not None else None
-                X_cv_test_arr = np.asarray(X_cv_test.values, dtype=np.float64) if X_cv_test is not None else None
-
                 cv_model = SARIMAX(
-                    endog=y_cv_arr,
-                    exog=X_cv_arr,
+                    endog=y_cv_train,
+                    exog=X_cv_train,
                     order=order,
                     seasonal_order=seasonal_order,
                     enforce_stationarity=False,
@@ -269,7 +252,7 @@ def _auto_order_rmse_only(
 
                 cv_forecast = cv_model.get_forecast(
                     steps=len(y_cv_test),
-                    exog=X_cv_test_arr
+                    exog=X_cv_test
                 ).predicted_mean
 
                 rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
@@ -299,13 +282,9 @@ def _auto_order_rmse_only(
 
     # Fit full model to get AIC/BIC for reporting
     try:
-        # Convert to numpy with explicit dtype to avoid index alignment issues
-        y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()
-        X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr is not None and X_tr.shape[1] > 0 else None
-
         full_model = SARIMAX(
-            endog=y_tr_arr,
-            exog=X_tr_arr,
+            endog=y_tr,
+            exog=X_tr if X_tr is not None and X_tr.shape[1] > 0 else None,
             order=tuple(best_row['order']),
             seasonal_order=tuple(best_row['seasonal_order']),
             enforce_stationarity=False,
@@ -446,16 +425,12 @@ def _auto_order_hybrid(
     candidates = list(set(candidates))
 
     # Evaluate each candidate with CV-RMSE
-    # Convert to numpy with explicit dtype for the full fit (avoid index alignment issues)
-    y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()
-    X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr is not None and X_tr.shape[1] > 0 else None
-
     for order, seasonal_order in candidates:
         try:
             # 1. Full fit for AIC
             model_full = SARIMAX(
-                endog=y_tr_arr,
-                exog=X_tr_arr,
+                endog=y_tr,
+                exog=X_tr if X_tr is not None and X_tr.shape[1] > 0 else None,
                 order=order,
                 seasonal_order=seasonal_order,
                 enforce_stationarity=False,
@@ -502,14 +477,9 @@ def _auto_order_hybrid(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
-                # Convert to numpy with explicit dtype to avoid index alignment issues
-                y_cv_arr = np.asarray(y_cv_train.values, dtype=np.float64).ravel()
-                X_cv_arr = np.asarray(X_cv_train.values, dtype=np.float64) if X_cv_train is not None else None
-                X_cv_test_arr = np.asarray(X_cv_test.values, dtype=np.float64) if X_cv_test is not None else None
-
                 cv_model = SARIMAX(
-                    endog=y_cv_arr,
-                    exog=X_cv_arr,
+                    endog=y_cv_train,
+                    exog=X_cv_train,
                     order=order,
                     seasonal_order=seasonal_order,
                     enforce_stationarity=False,
@@ -518,7 +488,7 @@ def _auto_order_hybrid(
 
                 cv_forecast = cv_model.get_forecast(
                     steps=len(y_cv_test),
-                    exog=X_cv_test_arr
+                    exog=X_cv_test
                 ).predicted_mean
 
                 rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
@@ -596,10 +566,8 @@ def run_sarimax_single(
     if target_col not in df_full.columns:
         raise ValueError(f"'{target_col}' not found in dataframe.")
 
-    y = df_full.set_index(date_col)[target_col]
-    if isinstance(y, pd.DataFrame):
-        y = y.iloc[:, 0]
-    y = y.astype(float).interpolate("linear").ffill().bfill()
+    y = df_full.set_index(date_col)[target_col].astype(float)
+    y = y.interpolate("linear").ffill().bfill()
 
     if len(y) < 24:
         raise ValueError("Not enough data for SARIMAX single-horizon (need >= 24 points).")
@@ -612,12 +580,7 @@ def run_sarimax_single(
         )
     else:
         X_all = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
-        X_all = X_all.reset_index(drop=True)  # Align integer index
-        # Ensure numeric types for SARIMAX
-        for c in X_all.columns:
-            X_all[c] = pd.to_numeric(X_all[c], errors="coerce").astype(float)
-        X_all = X_all.fillna(0)
-    X_all.index = pd.DatetimeIndex(df_full[date_col])
+    X_all.index = df_full[date_col]
 
     # Split
     n = len(y)
@@ -638,14 +601,10 @@ def run_sarimax_single(
     else:
         use_order, use_sorder = order, seasonal_order
 
-    # Fit - convert to numpy arrays with explicit dtype to avoid index alignment issues
-    # CRITICAL: Use np.asarray with float64 dtype to ensure SARIMAX compatibility
-    y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()  # Ensure 1-d
-    X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr.shape[1] > 0 else None
-
+    # Fit
     fit = SARIMAX(
-        endog=y_tr_arr,
-        exog=X_tr_arr,
+        endog=y_tr,
+        exog=X_tr if X_tr.shape[1] > 0 else None,
         order=use_order,
         seasonal_order=use_sorder,
         enforce_stationarity=False,
@@ -653,11 +612,10 @@ def run_sarimax_single(
     ).fit(disp=False)
 
     # In-sample/fitted
-    fitted = pd.Series(fit.fittedvalues, index=y_tr.index)
+    fitted = fit.fittedvalues.reindex(y_tr.index)
 
-    # Forecast on test - convert X_te to numpy with explicit dtype
-    X_te_arr = np.asarray(X_te.values, dtype=np.float64) if X_te.shape[1] > 0 else None
-    fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
+    # Forecast on test
+    fc = fit.get_forecast(steps=len(y_te), exog=(X_te if X_te.shape[1] > 0 else None))
     mean = fc.predicted_mean
     ci = fc.conf_int(alpha=0.05)
     mean.index = y_te.index
@@ -762,7 +720,7 @@ def run_sarimax_multihorizon(
             include_dow_ohe=include_dow_ohe,
             selected_features=selected_features,
         )
-        X_all_global.index = pd.DatetimeIndex(df_full[date_col])
+        X_all_global.index = df_full[date_col]
 
     rows: List[Dict[str, Any]] = []
     per_h: Dict[int, Dict[str, Any]] = {}
@@ -778,10 +736,8 @@ def run_sarimax_multihorizon(
             continue
 
         # y series
-        y = df_full.set_index(date_col)[tc]
-        if isinstance(y, pd.DataFrame):
-            y = y.iloc[:, 0]
-        y = y.astype(float).interpolate("linear").ffill().bfill()
+        y = df_full.set_index(date_col)[tc].astype(float)
+        y = y.interpolate("linear").ffill().bfill()
 
         # require sensible history
         if len(y) < 100:
@@ -799,16 +755,6 @@ def run_sarimax_multihorizon(
                 X = X[keep] if keep else X
 
         X = X.interpolate("linear").ffill().bfill()
-
-        # Ensure numeric types for SARIMAX (prevents "dtype of object" error)
-        for c in X.columns:
-            X[c] = pd.to_numeric(X[c], errors="coerce").astype(float)
-        X = X.dropna(axis=1, how="all").fillna(0)
-
-        # Ensure X has same index as y for proper alignment
-        if not X.index.equals(y.index):
-            X = X.reindex(y.index)
-            X = X.interpolate("linear").ffill().bfill().fillna(0)
 
         # Train/test split
         n = len(y)
@@ -885,14 +831,10 @@ def run_sarimax_multihorizon(
             use_sorder = sord_auto if seasonal_order is None else seasonal_order
             aic_ref, bic_ref = aic_auto, bic_auto
 
-        # Fit model - convert to numpy arrays with explicit dtype to avoid index alignment issues
-        # CRITICAL: Use np.asarray with float64 dtype to ensure SARIMAX compatibility
-        y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()  # Ensure 1-d
-        X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr.shape[1] > 0 else None
-
+        # Fit model
         fit = SARIMAX(
-            endog=y_tr_arr,
-            exog=X_tr_arr,
+            endog=y_tr,
+            exog=X_tr if X_tr.shape[1] > 0 else None,
             order=use_order,
             seasonal_order=use_sorder,
             enforce_stationarity=False,
@@ -900,11 +842,10 @@ def run_sarimax_multihorizon(
         ).fit(disp=False)
 
         # In-sample fit
-        fitted = pd.Series(fit.fittedvalues, index=y_tr.index)
+        fitted = fit.fittedvalues.reindex(y_tr.index)
 
-        # Out-of-sample forecast - convert X_te to numpy with explicit dtype
-        X_te_arr = np.asarray(X_te.values, dtype=np.float64) if X_te.shape[1] > 0 else None
-        fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
+        # Out-of-sample forecast
+        fc = fit.get_forecast(steps=len(y_te), exog=(X_te if X_te.shape[1] > 0 else None))
         mean = fc.predicted_mean
         ci = fc.conf_int(alpha=0.05)
         mean.index = y_te.index
