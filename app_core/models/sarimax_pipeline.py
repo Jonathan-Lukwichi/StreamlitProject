@@ -253,9 +253,14 @@ def _auto_order_rmse_only(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
+                # Convert to numpy to avoid index alignment issues
+                y_cv_arr = y_cv_train.values
+                X_cv_arr = X_cv_train.values if X_cv_train is not None else None
+                X_cv_test_arr = X_cv_test.values if X_cv_test is not None else None
+
                 cv_model = SARIMAX(
-                    endog=y_cv_train,
-                    exog=X_cv_train,
+                    endog=y_cv_arr,
+                    exog=X_cv_arr,
                     order=order,
                     seasonal_order=seasonal_order,
                     enforce_stationarity=False,
@@ -264,7 +269,7 @@ def _auto_order_rmse_only(
 
                 cv_forecast = cv_model.get_forecast(
                     steps=len(y_cv_test),
-                    exog=X_cv_test
+                    exog=X_cv_test_arr
                 ).predicted_mean
 
                 rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
@@ -489,9 +494,14 @@ def _auto_order_hybrid(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
+                # Convert to numpy to avoid index alignment issues
+                y_cv_arr = y_cv_train.values
+                X_cv_arr = X_cv_train.values if X_cv_train is not None else None
+                X_cv_test_arr = X_cv_test.values if X_cv_test is not None else None
+
                 cv_model = SARIMAX(
-                    endog=y_cv_train,
-                    exog=X_cv_train,
+                    endog=y_cv_arr,
+                    exog=X_cv_arr,
                     order=order,
                     seasonal_order=seasonal_order,
                     enforce_stationarity=False,
@@ -500,7 +510,7 @@ def _auto_order_hybrid(
 
                 cv_forecast = cv_model.get_forecast(
                     steps=len(y_cv_test),
-                    exog=X_cv_test
+                    exog=X_cv_test_arr
                 ).predicted_mean
 
                 rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
