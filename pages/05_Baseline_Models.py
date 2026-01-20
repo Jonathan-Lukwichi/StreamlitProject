@@ -2153,16 +2153,21 @@ def page_benchmarks():
             seasonal_order = st.session_state.get("sarimax_seasonal_order")
 
             if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
+                # Get search mode from session state (set in Configuration tab)
+                search_mode_val = st.session_state.get("sarimax_search_mode", "fast")
+
                 # Progress feedback based on speed mode
                 time_estimates = {
                     "fast": "~30 seconds",
                     "aic_only": "~2 minutes",
                     "rmse_only": "~5 minutes"
                 }
+                speed_labels = {"fast": "Fast", "aic_only": "Balanced", "rmse_only": "Thorough"}
                 expected_time = time_estimates.get(search_mode_val, "a few minutes")
+                speed_label = speed_labels.get(search_mode_val, "Custom")
 
                 progress_placeholder = st.empty()
-                progress_placeholder.info(f"⏳ Training SARIMAX ({speed_mode})... Expected time: {expected_time}")
+                progress_placeholder.info(f"⏳ Training SARIMAX ({speed_label})... Expected time: {expected_time}")
 
                 t0 = time.time()
                 try:
