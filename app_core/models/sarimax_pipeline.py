@@ -277,8 +277,11 @@ def _auto_order_rmse_only(
                 y_cv_test = y_tr.iloc[test_start:test_end]
 
                 if X_tr is not None and X_tr.shape[1] > 0:
-                    X_cv_train = X_tr.iloc[:train_end]
-                    X_cv_test = X_tr.iloc[test_start:test_end]
+                    X_cv_train = X_tr.iloc[:train_end].copy()
+                    X_cv_test = X_tr.iloc[test_start:test_end].copy()
+                    # Ensure float64
+                    X_cv_train = X_cv_train.astype(np.float64)
+                    X_cv_test = X_cv_test.astype(np.float64)
                 else:
                     X_cv_train = None
                     X_cv_test = None
@@ -286,9 +289,13 @@ def _auto_order_rmse_only(
                 if len(y_cv_train) < 20 or len(y_cv_test) == 0:
                     continue
 
+                # Convert to numpy arrays for SARIMAX
+                y_cv_arr, X_cv_arr = _prepare_sarimax_input(y_cv_train, X_cv_train)
+                _, X_cv_test_arr = _prepare_sarimax_input(y_cv_test, X_cv_test)
+
                 cv_model = SARIMAX(
-                    endog=y_cv_train,
-                    exog=X_cv_train,
+                    endog=y_cv_arr,
+                    exog=X_cv_arr,
                     order=order,
                     seasonal_order=seasonal_order,
                     enforce_stationarity=False,
@@ -297,10 +304,10 @@ def _auto_order_rmse_only(
 
                 cv_forecast = cv_model.get_forecast(
                     steps=len(y_cv_test),
-                    exog=X_cv_test
+                    exog=X_cv_test_arr
                 ).predicted_mean
 
-                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
+                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test.values, cv_forecast)))
                 cv_rmses.append(rmse_fold)
 
             # Average CV-RMSE across folds
