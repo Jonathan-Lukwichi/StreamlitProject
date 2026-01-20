@@ -2153,6 +2153,17 @@ def page_benchmarks():
                 search_mode_val = "rmse_only"
 
             if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
+                # Progress feedback based on speed mode
+                time_estimates = {
+                    "fast": "~30 seconds",
+                    "aic_only": "~2 minutes",
+                    "rmse_only": "~5 minutes"
+                }
+                expected_time = time_estimates.get(search_mode_val, "a few minutes")
+
+                progress_placeholder = st.empty()
+                progress_placeholder.info(f"⏳ Training SARIMAX ({speed_mode})... Expected time: {expected_time}")
+
                 t0 = time.time()
                 try:
                     kwargs = dict(
@@ -2176,6 +2187,9 @@ def page_benchmarks():
                         kwargs.pop("seasonal_order", None)
                         kwargs.pop("selected_features", None)
                         sarimax_out = run_sarimax_multihorizon(**kwargs)
+
+                    # Clear progress message
+                    progress_placeholder.empty()
 
                     runtime_s = time.time() - t0
                     st.session_state["sarimax_results"] = sarimax_out
