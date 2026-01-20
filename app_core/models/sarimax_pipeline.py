@@ -540,10 +540,10 @@ def _auto_order_hybrid(
 
                 cv_forecast = cv_model.get_forecast(
                     steps=len(y_cv_test),
-                    exog=X_cv_test
+                    exog=X_cv_test_arr
                 ).predicted_mean
 
-                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test, cv_forecast)))
+                rmse_fold = float(np.sqrt(mean_squared_error(y_cv_test.values, cv_forecast)))
                 cv_rmses.append(rmse_fold)
 
             # Average CV-RMSE across folds
