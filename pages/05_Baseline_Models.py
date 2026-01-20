@@ -1999,39 +1999,48 @@ def page_benchmarks():
             else:
                 st.markdown("##### Non-Seasonal Order (p,d,q)")
                 c1, c2, c3 = st.columns(3)
-                with c1: p = st.number_input("p", 0, 10, 1, key="sx_p")
-                with c2: d = st.number_input("d", 0, 2, 1, key="sx_d")
-                with c3: q = st.number_input("q", 0, 10, 1, key="sx_q")
-                st.markdown("##### Seasonal Order (P,D,Q,s)")
-                c4, c5, c6, c7 = st.columns(4)
-                with c4: P = st.number_input("P", 0, 5, 1, key="sx_P")
-                with c5: D = st.number_input("D", 0, 2, 1, key="sx_D")
-                with c6: Q = st.number_input("Q", 0, 5, 1, key="sx_Q")
-                with c7: s = st.number_input("s (season length)", 2, 365, int(season_length), key="sx_s")
+                with c1: p = st.number_input("p (AR order)", 0, 10, 1, key="sx_p")
+                with c2: d = st.number_input("d (Differencing)", 0, 2, 1, key="sx_d")
+                with c3: q = st.number_input("q (MA order)", 0, 10, 1, key="sx_q")
                 st.session_state["sarimax_order"] = (p, d, q)
-                st.session_state["sarimax_seasonal_order"] = (P, D, Q, s)
-                st.info(f"📊 SARIMAX Orders set to: order=({p},{d},{q})  seasonal=({P},{D},{Q},{s})")
+                st.session_state["sarimax_seasonal_order"] = None # Seasonal order will be auto-selected by the backend
+                st.info(f"📊 SARIMAX Non-Seasonal Order set to: ({p},{d},{q}). Seasonal orders will be auto-detected by the pipeline.")
 
             st.session_state["sarimax_season_length"] = int(season_length)
             st.session_state["sarimax_horizons"] = int(horizons)
 
-            # Search Speed setting
-            st.markdown("#### ⚡ Search Speed")
-            speed_mode = st.radio(
-                "Parameter Search Mode",
-                ["Fast (Recommended)", "Balanced", "Thorough"],
-                horizontal=True,
-                key="sarimax_speed_mode",
-                help="Fast: 3 candidates (~30 sec), Balanced: AIC stepwise (~2 min), Thorough: CV-RMSE (~5 min)"
-            )
-
-            # Store search mode in session state
-            if speed_mode == "Fast (Recommended)":
-                st.session_state["sarimax_search_mode"] = "fast"
-            elif speed_mode == "Balanced":
-                st.session_state["sarimax_search_mode"] = "aic_only"
+            # --- Exogenous Features Selection ---
+            st.markdown("#### 🧬 Exogenous Features")
+            feature_cols = [c for c in data.columns if c not in ["Date"] and not c.startswith("Target_")]
+            
+            if not feature_cols:
+                st.info("No exogenous features found in dataset (Univariate only).")
+                st.session_state["sarimax_use_all_features"] = False
+                st.session_state["sarimax_features"] = []
             else:
-                st.session_state["sarimax_search_mode"] = "rmse_only"
+                exog_mode = st.radio(
+                    "Feature Selection Strategy",
+                    ["Use All Available Features", "Select Specific Features", "None (Univariate)"],
+                    key="sarimax_exog_mode"
+                )
+                
+                if exog_mode == "Select Specific Features":
+                    selected_feats = st.multiselect(
+                        "Choose features:", 
+                        feature_cols, 
+                        default=feature_cols[:min(3, len(feature_cols))],
+                        key="sarimax_feat_multiselect"
+                    )
+                    st.session_state["sarimax_use_all_features"] = False
+                    st.session_state["sarimax_features"] = selected_feats
+                elif exog_mode == "None (Univariate)":
+                    st.session_state["sarimax_use_all_features"] = False
+                    st.session_state["sarimax_features"] = []
+                else: # Use All
+                    st.session_state["sarimax_use_all_features"] = True
+                    st.session_state["sarimax_features"] = [] # List ignored if use_all is True
+
+
 
     # ------------------------------------------------------------
     # 🚀 Train Model
@@ -2146,28 +2155,14 @@ def page_benchmarks():
                         st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
         elif current_model == "SARIMAX":
-            exog_vars      = st.session_state.get("sarimax_features", [])
             season_len     = int(st.session_state.get("sarimax_season_length", 7))
             horizons       = int(st.session_state.get("sarimax_horizons", 7))
-            order          = st.session_state.get("sarimax_order")
-            seasonal_order = st.session_state.get("sarimax_seasonal_order")
+            order          = st.session_state.get("sarimax_order") # This will be None for Automatic, (p,d,q) for Manual
+            seasonal_order = st.session_state.get("sarimax_seasonal_order") # This will always be None (auto-detected)
 
             if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
-                # Get search mode from session state (set in Configuration tab)
-                search_mode_val = st.session_state.get("sarimax_search_mode", "fast")
-
-                # Progress feedback based on speed mode
-                time_estimates = {
-                    "fast": "~30 seconds",
-                    "aic_only": "~2 minutes",
-                    "rmse_only": "~5 minutes"
-                }
-                speed_labels = {"fast": "Fast", "aic_only": "Balanced", "rmse_only": "Thorough"}
-                expected_time = time_estimates.get(search_mode_val, "a few minutes")
-                speed_label = speed_labels.get(search_mode_val, "Custom")
-
                 progress_placeholder = st.empty()
-                progress_placeholder.info(f"⏳ Training SARIMAX ({speed_label})... Expected time: {expected_time}")
+                progress_placeholder.info(f"⏳ Training SARIMAX (Automatic Parameter Search)... Expected time: a few minutes")
 
                 t0 = time.time()
                 try:
@@ -2177,21 +2172,15 @@ def page_benchmarks():
                         train_ratio=train_ratio,
                         season_length=season_len,
                         horizons=horizons,
-                        use_all_features=(len(exog_vars) == 0),
+                        use_all_features=True, # Always use all features as there's no selection UI
                         include_dow_ohe=True,
-                        selected_features=exog_vars if exog_vars else None,
-                        search_mode=search_mode_val,  # User-selected search speed
+                        selected_features=None, # No explicit selection from UI
+                        search_mode="aic_only", # Default to AIC-only for balanced automatic search
+                        order=order, # Pass current order (None or (p,d,q))
+                        seasonal_order=seasonal_order, # Pass current seasonal_order (None)
                     )
-                    if order is not None and seasonal_order is not None:
-                        kwargs.update(dict(order=order, seasonal_order=seasonal_order))
+                    sarimax_out = run_sarimax_multihorizon(**kwargs)
 
-                    try:
-                        sarimax_out = run_sarimax_multihorizon(**kwargs)
-                    except TypeError:
-                        kwargs.pop("order", None)
-                        kwargs.pop("seasonal_order", None)
-                        kwargs.pop("selected_features", None)
-                        sarimax_out = run_sarimax_multihorizon(**kwargs)
 
                     # Clear progress message
                     progress_placeholder.empty()
@@ -3488,5 +3477,3 @@ page_benchmarks()
 # PAGE NAVIGATION
 # =============================================================================
 render_page_navigation(4)  # Baseline Models is page index 4
-
-
