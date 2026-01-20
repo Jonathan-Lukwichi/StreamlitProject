@@ -639,7 +639,11 @@ def run_sarimax_single(
     split = int(n * float(train_ratio))
     split = max(12, min(n - 1, split))
     y_tr, y_te = y.iloc[:split], y.iloc[split:]
-    X_tr, X_te = X_all.loc[y_tr.index], X_all.loc[y_te.index]
+    X_tr, X_te = X_all.loc[y_tr.index].copy(), X_all.loc[y_te.index].copy()
+
+    # Ensure float64
+    X_tr = X_tr.astype(np.float64)
+    X_te = X_te.astype(np.float64)
 
     # Orders
     if (order is None) or (seasonal_order is None):
@@ -653,10 +657,14 @@ def run_sarimax_single(
     else:
         use_order, use_sorder = order, seasonal_order
 
+    # Convert to numpy arrays for SARIMAX
+    y_tr_arr, X_tr_arr = _prepare_sarimax_input(y_tr, X_tr)
+    _, X_te_arr = _prepare_sarimax_input(y_te, X_te)
+
     # Fit
     fit = SARIMAX(
-        endog=y_tr,
-        exog=X_tr if X_tr.shape[1] > 0 else None,
+        endog=y_tr_arr,
+        exog=X_tr_arr,
         order=use_order,
         seasonal_order=use_sorder,
         enforce_stationarity=False,
@@ -664,10 +672,11 @@ def run_sarimax_single(
     ).fit(disp=False)
 
     # In-sample/fitted
-    fitted = fit.fittedvalues.reindex(y_tr.index)
+    fitted = fit.fittedvalues
+    fitted = pd.Series(fitted, index=y_tr.index)
 
     # Forecast on test
-    fc = fit.get_forecast(steps=len(y_te), exog=(X_te if X_te.shape[1] > 0 else None))
+    fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
     mean = fc.predicted_mean
     ci = fc.conf_int(alpha=0.05)
     mean.index = y_te.index
