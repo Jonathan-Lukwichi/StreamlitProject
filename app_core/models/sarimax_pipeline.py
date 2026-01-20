@@ -137,6 +137,24 @@ def _exog_all(
                        'ed', 'ed_1', 'ed_2', 'ed_3', 'ed_4', 'ed_5', 'ed_6', 'ed_7']
     drop_cols.extend([c for c in df_full.columns if c in ed_lag_patterns])
 
+    # CRITICAL DATA LEAKAGE FIX: Drop ALL future target columns
+    # These are columns ending with _1, _2, ..., _7 that are NOT lag features
+    # Examples: RESPIRATORY_1, CARDIAC_1, asthma_1, pneumonia_1 (all contain FUTURE values)
+    # Lag features have "_lag_" in them (e.g., asthma_lag_1) and should be kept
+    import re
+    future_target_pattern = re.compile(r'^(.+)_([1-7])$')
+    for col in df_full.columns:
+        if col in drop_cols:
+            continue
+        match = future_target_pattern.match(col)
+        if match:
+            base_name = match.group(1)
+            # Keep lag features (they have _lag in the name)
+            if '_lag' in base_name.lower():
+                continue
+            # Drop all other _N columns - they are future targets
+            drop_cols.append(col)
+
     X = df_full.drop(columns=drop_cols, errors="ignore").copy()
 
     # Convert ALL columns to float64, coercing errors to NaN
