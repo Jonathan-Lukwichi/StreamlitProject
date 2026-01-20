@@ -1234,6 +1234,12 @@ def run_sarimax_baseline_pipeline(
     eval_dates = dates[forecast_start_index:forecast_end_index]
     final_res = None  # Store last fit for diagnostics
 
+    # Compute reasonable bounds for forecasts based on training data
+    y_mean = np.nanmean(y[:train_size])
+    y_std = np.nanstd(y[:train_size])
+    forecast_min = max(0, y_mean - 10 * y_std)  # Non-negative lower bound
+    forecast_max = y_mean + 10 * y_std  # Upper bound at 10 std devs
+
     for t in range(n_test_points):
         # Expanding training window
         current_train_end = train_size + t
@@ -1271,23 +1277,34 @@ def run_sarimax_baseline_pipeline(
 
             # Forecast H steps
             fc = model.get_forecast(steps=H, exog=X_future_arr)
-            F[t, :] = fc.predicted_mean
+            preds = fc.predicted_mean
+
+            # CRITICAL: Clip forecasts to reasonable bounds to prevent numerical explosion
+            preds = np.clip(preds, forecast_min, forecast_max)
+            # Replace any NaN/Inf with the training mean
+            preds = np.where(np.isfinite(preds), preds, y_mean)
+
+            F[t, :] = preds
+
             ci = fc.conf_int(alpha=0.05)
             if isinstance(ci, pd.DataFrame):
-                L[t, :] = ci.iloc[:, 0].values
-                U[t, :] = ci.iloc[:, 1].values
+                L[t, :] = np.clip(ci.iloc[:, 0].values, forecast_min, forecast_max)
+                U[t, :] = np.clip(ci.iloc[:, 1].values, forecast_min, forecast_max)
             else:
                 ci = np.asarray(ci)
-                L[t, :] = ci[:, 0]
-                U[t, :] = ci[:, 1]
+                L[t, :] = np.clip(ci[:, 0], forecast_min, forecast_max)
+                U[t, :] = np.clip(ci[:, 1], forecast_min, forecast_max)
 
             # Keep last model for diagnostics
             if t == n_test_points - 1:
                 final_res = model
 
         except Exception as e:
+            # On failure, use naive forecast (training mean)
+            F[t, :] = y_mean
+            L[t, :] = y_mean - 2 * y_std
+            U[t, :] = y_mean + 2 * y_std
             warnings.warn(f"SARIMAX baseline refit failed at t={t}: {e}")
-            continue
 
     # ========== 6. Build Actuals Matrix (test_eval) ==========
     actuals = {}
