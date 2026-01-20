@@ -778,6 +778,11 @@ def run_sarimax_multihorizon(
             X[c] = pd.to_numeric(X[c], errors="coerce").astype(float)
         X = X.dropna(axis=1, how="all").fillna(0)
 
+        # Ensure X has same index as y for proper alignment
+        if not X.index.equals(y.index):
+            X = X.reindex(y.index)
+            X = X.interpolate("linear").ffill().bfill().fillna(0)
+
         # Train/test split
         n = len(y)
         split = int(n * float(train_ratio))
