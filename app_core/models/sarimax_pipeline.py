@@ -597,7 +597,7 @@ def run_sarimax_single(
         for c in X_all.columns:
             X_all[c] = pd.to_numeric(X_all[c], errors="coerce").astype(float)
         X_all = X_all.fillna(0)
-    X_all.index = df_full[date_col]
+    X_all.index = pd.DatetimeIndex(df_full[date_col])
 
     # Split
     n = len(y)
