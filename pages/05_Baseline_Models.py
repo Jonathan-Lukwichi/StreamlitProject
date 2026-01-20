@@ -2164,7 +2164,7 @@ def page_benchmarks():
                         use_all_features=(len(exog_vars) == 0),
                         include_dow_ohe=True,
                         selected_features=exog_vars if exog_vars else None,
-                        search_mode="aic_only",  # Fast AIC-only search (4-5x faster than hybrid)
+                        search_mode=search_mode_val,  # User-selected search speed
                     )
                     if order is not None and seasonal_order is not None:
                         kwargs.update(dict(order=order, seasonal_order=seasonal_order))
