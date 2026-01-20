@@ -446,9 +446,9 @@ def _auto_order_hybrid(
     candidates = list(set(candidates))
 
     # Evaluate each candidate with CV-RMSE
-    # Convert to numpy for the full fit (avoid index alignment issues)
-    y_tr_arr = y_tr.values
-    X_tr_arr = X_tr.values if X_tr is not None and X_tr.shape[1] > 0 else None
+    # Convert to numpy with explicit dtype for the full fit (avoid index alignment issues)
+    y_tr_arr = np.asarray(y_tr.values, dtype=np.float64).ravel()
+    X_tr_arr = np.asarray(X_tr.values, dtype=np.float64) if X_tr is not None and X_tr.shape[1] > 0 else None
 
     for order, seasonal_order in candidates:
         try:
