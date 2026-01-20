@@ -117,8 +117,26 @@ def _exog_all(
     """
     Build exogenous feature matrix from ALL non-target, non-date columns.
     Returns DataFrame with RangeIndex and all float64 columns.
+
+    IMPORTANT: ED lag columns (ED, ED_1, ED_2, etc.) are EXCLUDED because they
+    are redundant with SARIMAX's AR component. Including them would cause:
+    1. Multicollinearity (AR terms duplicate ED lags)
+    2. Artificially inflated accuracy (same info provided twice)
+
+    Only truly EXTERNAL features should be used as exogenous variables:
+    - Calendar features (day-of-week, weekend, yearly sin/cos)
+    - Weather features (temperature, humidity, etc.)
+    - Holiday indicators
     """
+    # Columns to exclude from exogenous features
     drop_cols = [date_col] + [c for c in target_cols if c in df_full.columns]
+
+    # CRITICAL: Also drop ED lag columns - they duplicate SARIMAX AR component
+    # This prevents artificially inflated accuracy from redundant features
+    ed_lag_patterns = ['ED', 'ED_1', 'ED_2', 'ED_3', 'ED_4', 'ED_5', 'ED_6', 'ED_7',
+                       'ed', 'ed_1', 'ed_2', 'ed_3', 'ed_4', 'ed_5', 'ed_6', 'ed_7']
+    drop_cols.extend([c for c in df_full.columns if c in ed_lag_patterns])
+
     X = df_full.drop(columns=drop_cols, errors="ignore").copy()
 
     # Convert ALL columns to float64, coercing errors to NaN
