@@ -809,7 +809,7 @@ def run_sarimax_multihorizon(
     # Bounds for auto-order search (only used when order/seasonal_order are None)
     max_p: int = 3, max_q: int = 3, max_d: int = 2,
     max_P: int = 2, max_Q: int = 2, max_D: int = 1,
-    # Search mode: "rmse_only" (default - seeks lowest RMSE), "aic_only", "hybrid"
+    # Search mode: "fast" (3 candidates ~30s), "aic_only" (~2min), "rmse_only" (~5min), "hybrid"
     search_mode: str = "rmse_only",
     n_folds: int = 3,
 ) -> Dict[str, Any]:
