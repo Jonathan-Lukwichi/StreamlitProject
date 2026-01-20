@@ -802,24 +802,32 @@ def run_sarimax_multihorizon(
             continue
 
         # Build exogenous matrix for this horizon
-        if use_all_features:
-            X = X_all_global.reindex(y.index).copy()
+        if use_all_features and X_all_global is not None:
+            # Use positional indexing to avoid index alignment issues
+            X = X_all_global.iloc[:len(y)].copy()
+            X.index = y.index
         else:
             X = _exog_calendar(y.index, include_dow_ohe=include_dow_ohe)
+            X.index = y.index
             if selected_features:
                 keep = [c for c in selected_features if c in X.columns]
                 if include_dow_ohe:
                     keep = list(dict.fromkeys(keep + [c for c in X.columns if c not in keep]))
                 X = X[keep] if keep else X
 
-        X = X.interpolate("linear").ffill().bfill()
+        # Fill NaN and ensure all float64
+        X = X.fillna(0).astype(np.float64)
 
         # Train/test split
         n = len(y)
         split = int(n * float(train_ratio))
         split = max(10, min(n - 1, split))  # guards
         y_tr, y_te = y.iloc[:split], y.iloc[split:]
-        X_tr, X_te = X.iloc[:split, :], X.iloc[split:, :]
+        X_tr, X_te = X.iloc[:split, :].copy(), X.iloc[split:, :].copy()
+
+        # Ensure float64 after slicing
+        X_tr = X_tr.astype(np.float64)
+        X_te = X_te.astype(np.float64)
 
         # Determine orders (manual overrides > auto)
         # For automatic mode: find parameters for h=1, reuse for h>1 (7x speedup)
