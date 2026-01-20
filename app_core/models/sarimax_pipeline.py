@@ -737,7 +737,7 @@ def run_sarimax_multihorizon(
             include_dow_ohe=include_dow_ohe,
             selected_features=selected_features,
         )
-        X_all_global.index = df_full[date_col]
+        X_all_global.index = pd.DatetimeIndex(df_full[date_col])
 
     rows: List[Dict[str, Any]] = []
     per_h: Dict[int, Dict[str, Any]] = {}
