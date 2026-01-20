@@ -142,7 +142,6 @@ def _exog_all(
     # These are columns ending with _1, _2, ..., _7 that are NOT lag features
     # Examples: RESPIRATORY_1, CARDIAC_1, asthma_1, pneumonia_1 (all contain FUTURE values)
     # Lag features have "_lag_" in them (e.g., asthma_lag_1) and should be kept
-    import re
     future_target_pattern = re.compile(r'^(.+)_([1-7])$')
     for col in df_full.columns:
         if col in drop_cols:
