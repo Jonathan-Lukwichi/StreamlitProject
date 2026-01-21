@@ -2565,7 +2565,19 @@ def page_benchmarks():
                 with colA:
                     st.plotly_chart(_build_performance_heatmap(metrics_df, "Performance Heatmap (Test)"), use_container_width=True)
                 with colB:
-                    st.plotly_chart(_build_error_evolution(sar_out.get("per_h", {}), "Error Evolution by Horizon"), use_container_width=True)
+                    # Build per_h for error evolution chart (works with both formats)
+                    per_h_for_chart = sar_out.get("per_h", {})
+                    if not per_h_for_chart and F is not None and test_eval is not None:
+                        # Build from baseline format
+                        per_h_for_chart = {}
+                        for j, h in enumerate(horizons):
+                            col_name = f"Target_{h}"
+                            if col_name in test_eval.columns:
+                                per_h_for_chart[h] = {
+                                    "y_test": test_eval[col_name],
+                                    "forecast": pd.Series(F[:, j], index=test_eval.index) if j < F.shape[1] else None
+                                }
+                    st.plotly_chart(_build_error_evolution(per_h_for_chart, "Error Evolution by Horizon"), use_container_width=True)
 
                 st.markdown("---")
                 st.markdown("#### 🎨 Comprehensive Forecast Analysis")
