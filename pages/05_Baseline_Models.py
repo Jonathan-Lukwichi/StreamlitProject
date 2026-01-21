@@ -2324,7 +2324,7 @@ def page_benchmarks():
                     kwargs = dict(
                         df=data,
                         date_col="Date",
-                        target_col="ED",  # Use raw ED column, not pre-shifted Target_h
+                        target_col="Target_1",  # Use Target_1 (next-day arrivals) from feature-engineered data
                         train_ratio=train_ratio,
                         max_horizon=horizons,
                         season_length=season_len,
