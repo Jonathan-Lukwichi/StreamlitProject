@@ -1032,16 +1032,19 @@ def run_sarimax_multihorizon(
             tr_r2 = float(r2_score(y_tr, fitted))
         except Exception:
             tr_r2 = float("nan")
-        tr_acc = 100.0 - tr_mape if np.isfinite(tr_mape) else 0.0
+        tr_acc = max(0.0, min(100.0, 100.0 - tr_mape)) if np.isfinite(tr_mape) else 0.0
 
         te_mae = float(mean_absolute_error(y_te, mean))
         te_rmse = _rmse(y_te, mean)
         te_mape = float(_mape(y_te, mean))
+        # Cap MAPE at 100% for display purposes
+        te_mape = min(100.0, te_mape) if np.isfinite(te_mape) else 100.0
         try:
             te_r2 = float(r2_score(y_te, mean))
         except Exception:
             te_r2 = float("nan")
-        te_acc = 100.0 - te_mape if np.isfinite(te_mape) else 0.0
+        # Clamp accuracy to [0, 100] range
+        te_acc = max(0.0, min(100.0, 100.0 - te_mape)) if np.isfinite(te_mape) else 0.0
 
         bias = float((mean - y_te).mean())
         dacc = _dir_acc(y_te.values, mean.values)
