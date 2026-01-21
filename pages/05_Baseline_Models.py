@@ -2255,14 +2255,30 @@ def page_benchmarks():
                         st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
         elif current_model == "SARIMAX":
-            season_len     = int(st.session_state.get("sarimax_season_length", 7))
-            horizons       = int(st.session_state.get("sarimax_horizons", 7))
-            order          = st.session_state.get("sarimax_order") # This will be None for Automatic, (p,d,q) for Manual
-            seasonal_order = st.session_state.get("sarimax_seasonal_order") # This will always be None (auto-detected)
+            # Retrieve configuration from session state
+            season_len = int(st.session_state.get("sarimax_season_length", 7))
+            horizons = int(st.session_state.get("sarimax_horizons", 7))
+            order = st.session_state.get("sarimax_order")  # None for auto, (p,d,q) for manual
+            seasonal_order = st.session_state.get("sarimax_seasonal_order")  # None for auto, (P,D,Q,m) for manual
+            search_mode = st.session_state.get("sarimax_search_mode", "fast")
 
-            if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
+            # Get feature selection from session state (FIX: actually use UI selection)
+            use_all_features = st.session_state.get("sarimax_use_all_features", True)
+            selected_features = st.session_state.get("sarimax_features") or None
+
+            # Get search bounds for auto modes
+            bounds = st.session_state.get("sarimax_bounds", {})
+
+            # For manual mode, skip parameter search by passing "aic_only" with fixed orders
+            pipeline_mode = "aic_only" if search_mode == "manual" else search_mode
+
+            # Time estimates for display
+            time_estimates = {"fast": "~30s", "aic_only": "~2min", "rmse_only": "~5min", "manual": "instant"}
+            mode_desc = {"fast": "Fast", "aic_only": "Balanced (AIC)", "rmse_only": "Accuracy (RMSE)", "manual": "Manual"}
+
+            if st.button(f"🚀 Train SARIMAX ({mode_desc.get(search_mode, 'Auto')})", use_container_width=True, type="primary", key="train_sarimax_btn"):
                 progress_placeholder = st.empty()
-                progress_placeholder.info(f"⏳ Training SARIMAX (Automatic Parameter Search)... Expected time: a few minutes")
+                progress_placeholder.info(f"⏳ Training SARIMAX ({mode_desc.get(search_mode)})... Expected: {time_estimates.get(search_mode, '~2min')}")
 
                 t0 = time.time()
                 try:
@@ -2272,15 +2288,25 @@ def page_benchmarks():
                         train_ratio=train_ratio,
                         season_length=season_len,
                         horizons=horizons,
-                        use_all_features=True, # Always use all features as there's no selection UI
+                        # FIX: Use actual UI selections
+                        use_all_features=use_all_features,
                         include_dow_ohe=True,
-                        selected_features=None, # No explicit selection from UI
-                        search_mode="aic_only", # Default to AIC-only for balanced automatic search
-                        order=order, # Pass current order (None or (p,d,q))
-                        seasonal_order=seasonal_order, # Pass current seasonal_order (None)
+                        selected_features=selected_features,
+                        # FIX: Use selected search mode
+                        search_mode=pipeline_mode,
+                        # Pass manual orders (None for auto modes)
+                        order=order,
+                        seasonal_order=seasonal_order,
+                        # Pass search bounds
+                        max_p=bounds.get("max_p", 3),
+                        max_q=bounds.get("max_q", 3),
+                        max_d=bounds.get("max_d", 2),
+                        max_P=bounds.get("max_P", 2),
+                        max_Q=bounds.get("max_Q", 2),
+                        max_D=bounds.get("max_D", 1),
+                        n_folds=bounds.get("n_folds", 3),
                     )
                     sarimax_out = run_sarimax_multihorizon(**kwargs)
-
 
                     # Clear progress message
                     progress_placeholder.empty()
@@ -2305,9 +2331,19 @@ def page_benchmarks():
                             "Accuracy": _safe_float(best_row.get("Test_Acc") if "Test_Acc" in res_df.columns else best_row.get("Accuracy_%")),
                         }
                         order_str = "auto" if order is None else str(order)
-                        seas_str  = "auto" if seasonal_order is None else str(seasonal_order)
-                        feats = exog_vars if exog_vars else ["ALL"]
-                        model_params = f"order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={','.join(map(str, feats))}"
+                        seas_str = "auto" if seasonal_order is None else str(seasonal_order)
+
+                        # FIX: Build feature description from session state (not undefined exog_vars)
+                        if use_all_features:
+                            feats_str = "ALL"
+                        elif selected_features:
+                            feats_str = ",".join(selected_features[:3])
+                            if len(selected_features) > 3:
+                                feats_str += f"...+{len(selected_features)-3}"
+                        else:
+                            feats_str = "NONE"
+
+                        model_params = f"mode={search_mode}; order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={feats_str}"
                         _append_to_comparison(
                             model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
                             train_ratio=train_ratio,
