@@ -69,8 +69,8 @@ def _safe_float(x):
     except Exception:
         return np.nan
 
-def _mean_from_any(df: pd.DataFrame, candidates: list[str]) -> float:
-    """Return mean of first available candidate column (numeric), or NaN."""
+def _mean_from_any(df: pd.DataFrame, candidates: list[str], cap_at: float = None) -> float:
+    """Return mean of first available candidate column (numeric), with optional cap."""
     if df is None or df.empty:
         return np.nan
     for c in candidates:
@@ -78,7 +78,10 @@ def _mean_from_any(df: pd.DataFrame, candidates: list[str]) -> float:
             s = pd.to_numeric(df[c], errors="coerce")
             s = s[np.isfinite(s)]
             if s.notna().any():
-                return float(s.mean())
+                result = float(s.mean())
+                if cap_at is not None:
+                    result = min(cap_at, result)
+                return result
     return np.nan
 
 def _fmt_num(x, fmt="{:.3f}", na="—"):
