@@ -441,8 +441,9 @@ def _auto_order_fast(
     """
     # Pre-defined common weekly seasonal patterns (from ED forecasting literature)
     candidates = [
-        ((1, 1, 1), (1, 1, 0, m)),  # Most common seasonal ARIMA
-        ((1, 0, 1), (1, 0, 1, m)),  # Alternative without differencing
+        ((1, 1, 1), (1, 1, 1, m)),  # Full seasonal - best for strong weekly patterns
+        ((1, 1, 1), (1, 1, 0, m)),  # Seasonal AR only
+        ((1, 0, 1), (1, 0, 1, m)),  # No differencing
         ((0, 1, 1), (0, 1, 1, m)),  # Simple exponential smoothing style
     ]
 
