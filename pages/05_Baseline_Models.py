@@ -2508,11 +2508,18 @@ def page_benchmarks():
                 F, L, U = _sanitize_artifacts(F, L, U)
 
                 st.markdown("#### 🎯 Performance Metrics — Average Across Horizons")
+                mape_val = _mean_from_any(metrics_df, ["Test_MAPE", "MAPE_%", "MAPE"], cap_at=100.0)
+                acc_val = _mean_from_any(metrics_df, ["Test_Acc", "Accuracy_%", "Accuracy"])
+                # Ensure accuracy is in valid range [0, 100]
+                if acc_val is not None and np.isfinite(acc_val):
+                    acc_val = max(0.0, min(100.0, acc_val))
+                elif mape_val is not None and np.isfinite(mape_val):
+                    acc_val = max(0.0, 100.0 - mape_val)
                 kpi_avg = {
                     "MAE": _mean_from_any(metrics_df, ["Test_MAE", "MAE"]),
                     "RMSE": _mean_from_any(metrics_df, ["Test_RMSE", "RMSE"]),
-                    "MAPE": _mean_from_any(metrics_df, ["Test_MAPE", "MAPE_%", "MAPE"]),
-                    "Accuracy": _mean_from_any(metrics_df, ["Test_Acc", "Accuracy_%", "Accuracy"]),
+                    "MAPE": mape_val,
+                    "Accuracy": acc_val,
                 }
                 _render_kpi_row(kpi_avg)
 
