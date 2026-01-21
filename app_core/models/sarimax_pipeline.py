@@ -1448,15 +1448,17 @@ def _calculate_baseline_metrics(
                 mask = abs_actual > 0.01  # Avoid division by near-zero
                 if np.any(mask):
                     ape = np.abs((pred_v[mask] - actual_v[mask]) / actual_v[mask])
-                    # Clip extreme APE values before averaging
-                    ape = np.clip(ape, 0, 10)  # Cap at 1000% error
+                    # Clip extreme APE values before averaging (cap at 100% per sample)
+                    ape = np.clip(ape, 0, 1.0)  # Cap individual errors at 100%
                     mape_h = float(np.nanmean(ape) * 100)
                 else:
                     mape_h = np.nan
 
-                # Sanity check
-                if not np.isfinite(mape_h) or mape_h > 1000:
-                    mape_h = 100.0  # Cap at 100% MAPE (0% accuracy)
+                # Cap final MAPE at 100% (corresponding to 0% accuracy)
+                if np.isfinite(mape_h):
+                    mape_h = min(100.0, mape_h)
+                else:
+                    mape_h = 100.0
         except Exception:
             mape_h = np.nan
 
