@@ -2327,21 +2327,32 @@ def page_benchmarks():
                     if _store_sarimax_residuals(sarimax_out, data, train_ratio):
                         st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
 
-                    res_df = sarimax_out.get("results_df")
+                    # Baseline pipeline returns metrics_df directly (not results_df)
+                    res_df = sarimax_out.get("metrics_df") or sarimax_out.get("results_df")
                     if res_df is not None and not res_df.empty:
                         res_df = _sanitize_metrics_df(res_df)
-                        best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                        # Find best horizon by Accuracy_% (baseline format) or Test_Acc (old format)
+                        acc_col = "Accuracy_%" if "Accuracy_%" in res_df.columns else ("Test_Acc" if "Test_Acc" in res_df.columns else None)
+                        if acc_col and res_df[acc_col].notna().any():
+                            # Exclude "Average" row when finding best
+                            non_avg = res_df[~res_df["Horizon"].astype(str).str.contains("Average", case=False, na=False)]
+                            if not non_avg.empty:
+                                best_idx = non_avg[acc_col].idxmax()
+                            else:
+                                best_idx = res_df.index[0]
+                        else:
+                            best_idx = res_df.index[0]
                         best_row = res_df.loc[best_idx]
                         kpis = {
-                            "MAE": _safe_float(best_row.get("Test_MAE") if "Test_MAE" in res_df.columns else best_row.get("MAE")),
-                            "RMSE": _safe_float(best_row.get("Test_RMSE") if "Test_RMSE" in res_df.columns else best_row.get("RMSE")),
-                            "MAPE": _safe_float(best_row.get("Test_MAPE") if "Test_MAPE" in res_df.columns else best_row.get("MAPE_%")),
-                            "Accuracy": _safe_float(best_row.get("Test_Acc") if "Test_Acc" in res_df.columns else best_row.get("Accuracy_%")),
+                            "MAE": _safe_float(best_row.get("MAE") or best_row.get("Test_MAE")),
+                            "RMSE": _safe_float(best_row.get("RMSE") or best_row.get("Test_RMSE")),
+                            "MAPE": _safe_float(best_row.get("MAPE_%") or best_row.get("Test_MAPE")),
+                            "Accuracy": _safe_float(best_row.get("Accuracy_%") or best_row.get("Test_Acc")),
                         }
-                        order_str = "auto" if order is None else str(order)
-                        seas_str = "auto" if seasonal_order is None else str(seasonal_order)
+                        order_str = str(sarimax_out.get("order", "auto"))
+                        seas_str = str(sarimax_out.get("seasonal_order", "auto"))
 
-                        # FIX: Build feature description from session state (not undefined exog_vars)
+                        # Build feature description from session state
                         if use_all_features:
                             feats_str = "ALL"
                         elif selected_features:
@@ -2351,9 +2362,12 @@ def page_benchmarks():
                         else:
                             feats_str = "NONE"
 
+                        # Extract horizon number from format like "h=1" or just "1"
+                        hor_val = str(best_row.get('Horizon', '1'))
+                        hor_num = ''.join(filter(str.isdigit, hor_val)) or '1'
                         model_params = f"mode={search_mode}; order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={feats_str}"
                         _append_to_comparison(
-                            model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
+                            model_name=f"SARIMAX (best h={hor_num})",
                             train_ratio=train_ratio,
                             kpis=kpis,
                             model_params=model_params,
