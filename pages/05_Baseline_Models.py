@@ -2520,7 +2520,20 @@ def page_benchmarks():
 
             st.markdown("### 🧪 Comprehensive Multi-Horizon Results — SARIMAX")
             try:
-                metrics_df, F, L, U, test_eval, train, res, horizons = to_multihorizon_artifacts(sar_out)
+                # Check if baseline pipeline format (direct metrics_df, F, L, U)
+                if "metrics_df" in sar_out and "F" in sar_out:
+                    # Baseline pipeline output - use directly
+                    metrics_df = sar_out["metrics_df"]
+                    F = sar_out["F"]
+                    L = sar_out["L"]
+                    U = sar_out["U"]
+                    test_eval = sar_out["test_eval"]
+                    train = sar_out.get("train")
+                    res = sar_out.get("res")
+                    horizons = list(range(1, sar_out.get("max_horizon", 7) + 1))
+                else:
+                    # Old per-horizon format - convert via to_multihorizon_artifacts
+                    metrics_df, F, L, U, test_eval, train, res, horizons = to_multihorizon_artifacts(sar_out)
 
                 # Sanitize metrics & arrays
                 metrics_df = _sanitize_metrics_df(metrics_df)
