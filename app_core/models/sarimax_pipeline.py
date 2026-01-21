@@ -1183,6 +1183,10 @@ def run_sarimax_baseline_pipeline(
     X_all = X_all.reset_index(drop=True)
     exog_columns = list(X_all.columns)
 
+    # Validate alignment between features and target
+    if len(X_all) != len(y):
+        raise ValueError(f"Feature/target length mismatch: X_all={len(X_all)}, y={len(y)}")
+
     # ========== 3. Train/Test Split Setup ==========
     train_size = int(len(y) * train_ratio)
     train_size = max(24, min(len(y) - max_horizon, train_size))
