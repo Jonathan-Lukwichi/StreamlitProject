@@ -2286,17 +2286,21 @@ def page_benchmarks():
 
                 t0 = time.time()
                 try:
+                    # Use expanding-window baseline pipeline (like ARIMA)
+                    # This uses a SINGLE model that forecasts H steps ahead,
+                    # rather than training 7 separate models per horizon
                     kwargs = dict(
-                        df_merged=data,
+                        df=data,
                         date_col="Date",
+                        target_col="ED",  # Use raw ED column, not pre-shifted Target_h
                         train_ratio=train_ratio,
+                        max_horizon=horizons,
                         season_length=season_len,
-                        horizons=horizons,
-                        # FIX: Use actual UI selections
+                        # Feature options
                         use_all_features=use_all_features,
                         include_dow_ohe=True,
                         selected_features=selected_features,
-                        # FIX: Use selected search mode
+                        # Search mode
                         search_mode=pipeline_mode,
                         # Pass manual orders (None for auto modes)
                         order=order,
@@ -2310,7 +2314,7 @@ def page_benchmarks():
                         max_D=bounds.get("max_D", 1),
                         n_folds=bounds.get("n_folds", 3),
                     )
-                    sarimax_out = run_sarimax_multihorizon(**kwargs)
+                    sarimax_out = run_sarimax_baseline_pipeline(**kwargs)
 
                     # Clear progress message
                     progress_placeholder.empty()
