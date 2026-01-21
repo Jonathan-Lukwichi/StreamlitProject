@@ -2388,12 +2388,23 @@ def page_benchmarks():
                                     sp_config = st.session_state.get("seasonal_proportions_config")
                                     sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
 
-                                    # Extract forecast from per_h structure
-                                    best_h = int(best_row.get('Horizon', 7))
-                                    if 'per_h' in sarimax_out and best_h in sarimax_out['per_h']:
+                                    # Extract forecast - handle both baseline format (F matrix) and per_h format
+                                    forecast_series = None
+                                    best_h_str = str(best_row.get('Horizon', '1'))
+                                    best_h = int(''.join(filter(str.isdigit, best_h_str)) or '1')
+
+                                    if 'F' in sarimax_out and sarimax_out['F'] is not None:
+                                        # Baseline format - extract from F matrix
+                                        F_mat = sarimax_out['F']
+                                        test_eval_df = sarimax_out.get('test_eval')
+                                        h_idx = min(best_h - 1, F_mat.shape[1] - 1)  # 0-indexed
+                                        if test_eval_df is not None:
+                                            forecast_series = pd.Series(F_mat[:, h_idx], index=test_eval_df.index)
+                                    elif 'per_h' in sarimax_out and best_h in sarimax_out['per_h']:
+                                        # Old per_h format
                                         forecast_series = sarimax_out['per_h'][best_h].get('forecast')
 
-                                        if forecast_series is not None and len(forecast_series) > 0:
+                                    if forecast_series is not None and len(forecast_series) > 0:
                                             # forecast_series should already be a pandas Series with dates
                                             if not isinstance(forecast_series, pd.Series):
                                                 # Convert to Series if needed
