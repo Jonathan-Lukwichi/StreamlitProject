@@ -404,19 +404,13 @@ def _capture_sarimax_residuals(sarimax_out: dict, data: pd.DataFrame, train_rati
     and stores them in a format compatible with the hybrid model pipeline.
 
     Args:
-        sarimax_out: Results from run_sarimax_multihorizon()
+        sarimax_out: Results from run_sarimax_baseline_pipeline() or run_sarimax_multihorizon()
         data: Original training dataframe
         train_ratio: Train/validation split ratio
 
     Returns:
         dict: Structured residuals ready for store_stage1_residuals()
     """
-    per_h = sarimax_out.get("per_h", {})
-    successful = [h for h in per_h.keys() if isinstance(h, int)]
-
-    if not per_h or not successful:
-        return {}
-
     residuals = {
         "val_residuals": {},
         "val_predictions": {},
@@ -426,32 +420,70 @@ def _capture_sarimax_residuals(sarimax_out: dict, data: pd.DataFrame, train_rati
         "trained_at": datetime.now().isoformat(),
     }
 
-    for h in successful:
-        h_data = per_h.get(h, {})
+    # Check if baseline format (has F matrix and test_eval)
+    if "F" in sarimax_out and sarimax_out["F"] is not None:
+        F = sarimax_out["F"]
+        test_eval = sarimax_out.get("test_eval")
+        max_horizon = sarimax_out.get("max_horizon", F.shape[1] if F.ndim > 1 else 1)
 
-        # Get test/validation predictions and actuals
-        y_test = h_data.get("y_test")
-        forecast = h_data.get("forecast")
+        if test_eval is not None:
+            for h in range(1, max_horizon + 1):
+                col_name = f"Target_{h}"
+                h_idx = h - 1  # 0-indexed
 
-        if y_test is not None and forecast is not None:
-            try:
-                y_test_arr = np.array(y_test).flatten()
-                forecast_arr = np.array(forecast).flatten()
+                if col_name in test_eval.columns and h_idx < F.shape[1]:
+                    try:
+                        y_test_arr = np.array(test_eval[col_name]).flatten()
+                        forecast_arr = F[:, h_idx].flatten()
 
-                # Align lengths if needed
-                min_len = min(len(y_test_arr), len(forecast_arr))
-                y_test_arr = y_test_arr[:min_len]
-                forecast_arr = forecast_arr[:min_len]
+                        # Align lengths if needed
+                        min_len = min(len(y_test_arr), len(forecast_arr))
+                        y_test_arr = y_test_arr[:min_len]
+                        forecast_arr = forecast_arr[:min_len]
 
-                # Calculate residuals (actual - predicted)
-                val_resid = y_test_arr - forecast_arr
+                        # Calculate residuals (actual - predicted)
+                        val_resid = y_test_arr - forecast_arr
 
-                residuals["val_residuals"][f"Target_{h}"] = val_resid
-                residuals["val_predictions"][f"Target_{h}"] = forecast_arr
+                        residuals["val_residuals"][col_name] = val_resid
+                        residuals["val_predictions"][col_name] = forecast_arr
 
-            except Exception as e:
-                print(f"SARIMAX residual capture for h={h} failed: {e}")
-                continue
+                    except Exception as e:
+                        print(f"SARIMAX residual capture for h={h} failed: {e}")
+                        continue
+    else:
+        # Old per_h format
+        per_h = sarimax_out.get("per_h", {})
+        successful = [h for h in per_h.keys() if isinstance(h, int)]
+
+        if not per_h or not successful:
+            return {}
+
+        for h in successful:
+            h_data = per_h.get(h, {})
+
+            # Get test/validation predictions and actuals
+            y_test = h_data.get("y_test")
+            forecast = h_data.get("forecast")
+
+            if y_test is not None and forecast is not None:
+                try:
+                    y_test_arr = np.array(y_test).flatten()
+                    forecast_arr = np.array(forecast).flatten()
+
+                    # Align lengths if needed
+                    min_len = min(len(y_test_arr), len(forecast_arr))
+                    y_test_arr = y_test_arr[:min_len]
+                    forecast_arr = forecast_arr[:min_len]
+
+                    # Calculate residuals (actual - predicted)
+                    val_resid = y_test_arr - forecast_arr
+
+                    residuals["val_residuals"][f"Target_{h}"] = val_resid
+                    residuals["val_predictions"][f"Target_{h}"] = forecast_arr
+
+                except Exception as e:
+                    print(f"SARIMAX residual capture for h={h} failed: {e}")
+                    continue
 
     # Store feature data for Stage 2 training
     # Get feature columns (excluding target columns)
