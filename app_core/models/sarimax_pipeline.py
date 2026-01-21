@@ -1034,6 +1034,8 @@ def run_sarimax_multihorizon(
             tr_r2 = float(r2_score(y_tr, fitted))
         except Exception:
             tr_r2 = float("nan")
+        # Cap train MAPE at 100%
+        tr_mape = min(100.0, tr_mape) if np.isfinite(tr_mape) else 100.0
         tr_acc = max(0.0, min(100.0, 100.0 - tr_mape)) if np.isfinite(tr_mape) else 0.0
 
         te_mae = float(mean_absolute_error(y_te, mean))
