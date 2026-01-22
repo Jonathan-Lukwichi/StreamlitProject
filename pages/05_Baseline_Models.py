@@ -2318,16 +2318,16 @@ def page_benchmarks():
 
                 t0 = time.time()
                 try:
-                    # Use expanding-window baseline pipeline (like ARIMA)
-                    # This uses a SINGLE model that forecasts H steps ahead,
-                    # rather than training 7 separate models per horizon
+                    # Use per-horizon approach (trains 7 models, one per horizon)
+                    # This is FAST and matches how ML models (XGBoost, LSTM) are evaluated
+                    # for fair apples-to-apples thesis comparison
                     kwargs = dict(
-                        df=data,
+                        df_merged=data,                    # Note: df_merged not df
                         date_col="Date",
-                        target_col="Target_1",  # Use Target_1 (next-day arrivals) from feature-engineered data
+                        target_cols=None,                  # None = auto-detect Target_1..Target_H
                         train_ratio=train_ratio,
-                        max_horizon=horizons,
                         season_length=season_len,
+                        horizons=horizons,                 # Not max_horizon
                         # Feature options
                         use_all_features=use_all_features,
                         include_dow_ohe=True,
@@ -2346,7 +2346,7 @@ def page_benchmarks():
                         max_D=bounds.get("max_D", 1),
                         n_folds=bounds.get("n_folds", 3),
                     )
-                    sarimax_out = run_sarimax_baseline_pipeline(**kwargs)
+                    sarimax_out = run_sarimax_multihorizon(**kwargs)
 
                     # Clear progress message
                     progress_placeholder.empty()
