@@ -2312,9 +2312,9 @@ def page_benchmarks():
             time_estimates = {"fast": "~30s", "aic_only": "~2min", "rmse_only": "~5min", "manual": "instant"}
             mode_desc = {"fast": "Fast", "aic_only": "Balanced (AIC)", "rmse_only": "Accuracy (RMSE)", "manual": "Manual"}
 
-            if st.button(f"🚀 Train SARIMAX ({mode_desc.get(search_mode, 'Auto')})", use_container_width=True, type="primary", key="train_sarimax_btn"):
+            if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
                 progress_placeholder = st.empty()
-                progress_placeholder.info(f"⏳ Training SARIMAX ({mode_desc.get(search_mode)})... Expected: {time_estimates.get(search_mode, '~2min')}")
+                progress_placeholder.info(f"⏳ Training SARIMAX multi-horizon (h=1..{horizons}) [{mode_desc.get(search_mode, 'Auto')}]... Expected: {time_estimates.get(search_mode, '~2min')}")
 
                 t0 = time.time()
                 try:
