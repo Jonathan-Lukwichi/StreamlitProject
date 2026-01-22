@@ -2360,7 +2360,10 @@ def page_benchmarks():
                         st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
 
                     # Multihorizon returns results_df with Test_* columns
-                    res_df = sarimax_out.get("results_df") or sarimax_out.get("metrics_df")
+                    # Note: Cannot use `or` operator on DataFrames - causes ambiguity error
+                    res_df = sarimax_out.get("results_df")
+                    if res_df is None:
+                        res_df = sarimax_out.get("metrics_df")
                     if res_df is not None and not res_df.empty:
                         res_df = _sanitize_metrics_df(res_df)
                         # Find best horizon by Test_Acc (multihorizon format) or Accuracy_% (legacy)
