@@ -2376,10 +2376,10 @@ def page_benchmarks():
                             best_idx = res_df.index[0]
                         best_row = res_df.loc[best_idx]
                         kpis = {
-                            "MAE": _safe_float(best_row.get("MAE") or best_row.get("Test_MAE")),
-                            "RMSE": _safe_float(best_row.get("RMSE") or best_row.get("Test_RMSE")),
-                            "MAPE": _safe_float(best_row.get("MAPE_%") or best_row.get("Test_MAPE")),
-                            "Accuracy": _safe_float(best_row.get("Accuracy_%") or best_row.get("Test_Acc")),
+                            "MAE": _safe_float(best_row.get("Test_MAE") or best_row.get("MAE")),
+                            "RMSE": _safe_float(best_row.get("Test_RMSE") or best_row.get("RMSE")),
+                            "MAPE": _safe_float(best_row.get("Test_MAPE") or best_row.get("MAPE_%")),
+                            "Accuracy": _safe_float(best_row.get("Test_Acc") or best_row.get("Accuracy_%")),
                         }
                         order_str = str(sarimax_out.get("order", "auto"))
                         seas_str = str(sarimax_out.get("seasonal_order", "auto"))
