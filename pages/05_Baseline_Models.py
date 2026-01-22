@@ -2359,12 +2359,12 @@ def page_benchmarks():
                     if _store_sarimax_residuals(sarimax_out, data, train_ratio):
                         st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
 
-                    # Baseline pipeline returns metrics_df directly (not results_df)
-                    res_df = sarimax_out.get("metrics_df") or sarimax_out.get("results_df")
+                    # Multihorizon returns results_df with Test_* columns
+                    res_df = sarimax_out.get("results_df") or sarimax_out.get("metrics_df")
                     if res_df is not None and not res_df.empty:
                         res_df = _sanitize_metrics_df(res_df)
-                        # Find best horizon by Accuracy_% (baseline format) or Test_Acc (old format)
-                        acc_col = "Accuracy_%" if "Accuracy_%" in res_df.columns else ("Test_Acc" if "Test_Acc" in res_df.columns else None)
+                        # Find best horizon by Test_Acc (multihorizon format) or Accuracy_% (legacy)
+                        acc_col = "Test_Acc" if "Test_Acc" in res_df.columns else ("Accuracy_%" if "Accuracy_%" in res_df.columns else None)
                         if acc_col and res_df[acc_col].notna().any():
                             # Exclude "Average" row when finding best
                             non_avg = res_df[~res_df["Horizon"].astype(str).str.contains("Average", case=False, na=False)]
