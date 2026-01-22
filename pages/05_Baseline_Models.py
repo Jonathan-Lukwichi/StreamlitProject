@@ -2305,8 +2305,8 @@ def page_benchmarks():
             # Get search bounds for auto modes
             bounds = st.session_state.get("sarimax_bounds", {})
 
-            # For manual mode, skip parameter search by passing "aic_only" with fixed orders
-            pipeline_mode = "aic_only" if search_mode == "manual" else search_mode
+            # Pass search_mode directly - "manual" uses fixed orders, others trigger auto-search
+            pipeline_mode = search_mode
 
             # Time estimates for display
             time_estimates = {"fast": "~30s", "aic_only": "~2min", "rmse_only": "~5min", "manual": "instant"}
