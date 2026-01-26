@@ -2394,6 +2394,200 @@ def to_multihorizon_artifacts(sarimax_out: Dict[str, Any]):
 
 
 # ===========================================
+# Scenario-1 SARIMAX Pipeline (Thesis Methodology)
+# ===========================================
+
+def run_sarimax_scenario1(
+    df: pd.DataFrame,
+    date_col: str = "Date",
+    target_col: str = "ED",
+    train_ratio: float = 0.80,
+    max_horizon: int = 7,
+    season_length: int = 7,
+    use_all_features: bool = True,
+    include_dow_ohe: bool = True,
+    selected_features: Optional[List[str]] = None,
+    mode: str = "scenario1",  # "scenario1" or "manual"
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+    max_p: int = 3,
+    max_q: int = 3,
+    max_P: int = 2,
+    max_Q: int = 2,
+    adf_significance: float = 0.05,
+    ljung_box_lags: int = 10,
+) -> Dict[str, Any]:
+    """
+    Scenario-1 SARIMAX Pipeline following thesis methodology.
+
+    This implements the academic Scenario-1 approach:
+    - Step 4.1: Train/Test split (80/20) with exogenous features
+    - Step 4.2: auto_arima() with AIC criterion (searches p, q, P, Q only)
+    - Step 4.3: Statistical tests for d (ADF) and D (Canova-Hansen) BEFORE order search
+    - Step 4.4: Residual diagnostics (Ljung-Box white noise, Jarque-Bera normality)
+    - Step 4.5: Test set evaluation with metrics (MAE, RMSE, MAPE, residual stats)
+    - Step 4.6: Rolling window forecast using .predict(n_periods=H)
+
+    Key differences from standard approaches:
+    - Single SARIMAX model (not per-horizon)
+    - d and D determined by statistical tests FIRST
+    - Comprehensive residual diagnostics
+    - Rolling window (not expanding) forecast
+
+    Args:
+        df: Input DataFrame with date and target columns
+        date_col: Name of date column
+        target_col: Name of target column (e.g., "ED" for total arrivals)
+        train_ratio: Train/test split ratio (default 0.80)
+        max_horizon: Maximum forecast horizon in days (default 7)
+        season_length: Seasonal period (default 7 for weekly)
+        use_all_features: Use all available features as exogenous
+        include_dow_ohe: Include day-of-week one-hot encoding
+        selected_features: Specific features to use (if not use_all_features)
+        mode: "scenario1" (full thesis methodology) or "manual" (user-specified orders)
+        order: Manual (p, d, q) order (required if mode="manual")
+        seasonal_order: Manual (P, D, Q, m) order (required if mode="manual")
+        max_p, max_q, max_P, max_Q: Search bounds for auto_arima
+        adf_significance: Significance level for ADF test
+        ljung_box_lags: Number of lags for Ljung-Box test
+
+    Returns:
+        Dict with keys:
+        - F, L, U: Forecast matrices [n_origins x H]
+        - test_eval: DataFrame with actual values
+        - metrics_df: Per-horizon metrics
+        - order, seasonal_order: Selected model orders
+        - differencing: Scenario1DifferencingResult (Step 4.3)
+        - diagnostics: Scenario1DiagnosticResult (Step 4.4)
+        - train_metrics, test_metrics: Summary metrics
+        - res: Fitted model object
+        - status: "success" or "error"
+    """
+    try:
+        # ==================== STEP 4.1: Data Preparation ====================
+        y_train, y_test, X_train, X_test, train_dates, test_dates = _prepare_scenario1_data(
+            df, date_col, target_col, train_ratio,
+            use_all_features, include_dow_ohe, selected_features
+        )
+
+        if mode == "manual":
+            # Manual mode: use provided orders, skip statistical tests
+            if order is None or seasonal_order is None:
+                raise ValueError("Manual mode requires both 'order' and 'seasonal_order' parameters")
+            use_order = order
+            use_sorder = seasonal_order
+            differencing = None
+            aic_search = float("nan")
+            bic_search = float("nan")
+
+        else:
+            # ==================== STEP 4.3: Differencing Tests FIRST ====================
+            differencing = _compute_differencing_orders(
+                y_train, m=season_length,
+                adf_significance=adf_significance
+            )
+
+            # ==================== STEP 4.2: AIC Order Search with Fixed d/D ====================
+            use_order, use_sorder, aic_search, bic_search = _scenario1_order_search(
+                y_train, X_train,
+                d=differencing.adf_d,
+                D=differencing.ch_D,
+                m=season_length,
+                max_p=max_p, max_q=max_q,
+                max_P=max_P, max_Q=max_Q,
+            )
+
+        # ==================== FIT SINGLE SARIMAX MODEL ====================
+        y_arr, X_arr = _prepare_sarimax_input(y_train, X_train)
+
+        model = SARIMAX(
+            endog=y_arr,
+            exog=X_arr,
+            order=use_order,
+            seasonal_order=use_sorder,
+            enforce_stationarity=False,
+            enforce_invertibility=False,
+        )
+        fitted = model.fit(disp=False, maxiter=100)
+
+        # ==================== STEP 4.4: Residual Diagnostics ====================
+        diagnostics = _run_residual_diagnostics(
+            fitted.resid,
+            lags=ljung_box_lags,
+        )
+
+        # ==================== STEP 4.5 & 4.6: Forecast & Evaluate ====================
+        F, L, U, test_eval, metrics_df = _scenario1_forecast_and_evaluate(
+            fitted, y_train, y_test, X_train, X_test, max_horizon
+        )
+
+        # Compute aggregate metrics for reporting
+        train_metrics = {
+            "AIC": float(fitted.aic),
+            "BIC": float(fitted.bic),
+            "Log-Likelihood": float(fitted.llf),
+        }
+
+        # Filter out "Average" row for test metrics calculation
+        metrics_numeric = metrics_df[metrics_df["Horizon"] != "Average"]
+        test_metrics = {
+            "MAE": float(metrics_numeric["MAE"].mean()) if "MAE" in metrics_numeric else np.nan,
+            "RMSE": float(metrics_numeric["RMSE"].mean()) if "RMSE" in metrics_numeric else np.nan,
+            "MAPE_%": float(metrics_numeric["MAPE_%"].mean()) if "MAPE_%" in metrics_numeric else np.nan,
+            "Accuracy_%": float(metrics_numeric["Accuracy_%"].mean()) if "Accuracy_%" in metrics_numeric else np.nan,
+            "Residual_Mean": diagnostics.residual_mean,
+            "Residual_Std": diagnostics.residual_std,
+        }
+
+        return {
+            # Forecast outputs (compatible with existing plotting)
+            "F": F,
+            "L": L,
+            "U": U,
+            "test_eval": test_eval,
+            "metrics_df": metrics_df,
+            "eval_dates": test_dates[:len(F)],
+            # Model configuration
+            "order": use_order,
+            "seasonal_order": use_sorder,
+            "max_horizon": max_horizon,
+            # Scenario-1 specific outputs
+            "differencing": differencing,
+            "diagnostics": diagnostics,
+            # Metrics
+            "train_metrics": train_metrics,
+            "test_metrics": test_metrics,
+            # Model artifacts
+            "res": fitted,
+            "train": y_train,
+            "exog_columns": list(X_train.columns) if X_train is not None else [],
+            # Status
+            "status": "success",
+            "message": None,
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "F": np.array([]),
+            "L": np.array([]),
+            "U": np.array([]),
+            "test_eval": pd.DataFrame(),
+            "metrics_df": pd.DataFrame(),
+            "order": order,
+            "seasonal_order": seasonal_order,
+            "differencing": None,
+            "diagnostics": None,
+            "train_metrics": {},
+            "test_metrics": {},
+            "res": None,
+            "train": None,
+            "status": "error",
+            "message": f"{str(e)}\n{traceback.format_exc()}",
+        }
+
+
+# ===========================================
 # Multi-Target SARIMAX Pipeline (Matches ARIMA pattern)
 # ===========================================
 def run_sarimax_multi_target_pipeline(
