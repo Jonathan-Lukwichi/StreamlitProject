@@ -942,9 +942,28 @@ def run_sarimax_multihorizon(
                 columns=X_te.columns
             )
 
-        # Determine orders (manual overrides > auto)
-        # For automatic mode: find parameters for h=1, reuse for h>1 (7x speedup)
-        if (order is None or seasonal_order is None) and h == 1:
+        # ================================================================
+        # DETERMINE ORDERS: Manual mode takes priority over auto-search
+        # ================================================================
+
+        # CASE 1: Manual mode - user provided both order and seasonal_order
+        if order is not None and seasonal_order is not None:
+            # Manual mode: use user-specified orders directly (no search needed)
+            use_order, use_sorder = order, seasonal_order
+            aic_ref, bic_ref = float("nan"), float("nan")
+            if h == 1:
+                print(f"[SARIMAX] Manual mode: using order={order}, seasonal_order={seasonal_order}")
+
+        # CASE 2: search_mode="manual" but parameters missing - raise error
+        elif search_mode == "manual":
+            raise ValueError(
+                f"Manual mode selected (search_mode='manual') but order and/or seasonal_order not provided. "
+                f"Got order={order}, seasonal_order={seasonal_order}. "
+                f"Please provide both parameters for manual mode."
+            )
+
+        # CASE 3: Auto mode, first horizon - run parameter search
+        elif (order is None or seasonal_order is None) and h == 1:
             # Full auto search for first horizon only
             if search_mode == "fast":
                 # Ultra-fast mode: only evaluate 3 pre-selected candidates (~10x faster)
@@ -968,29 +987,31 @@ def run_sarimax_multihorizon(
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
             else:
-                # AIC-only mode: standard pmdarima stepwise
+                # AIC-only mode (aic_only): standard pmdarima stepwise
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length,
                     max_p=max_p, max_q=max_q, max_d=max_d,
                     max_P=max_P, max_Q=max_Q, max_D=max_D
                 )
-            # Save the optimal parameters found for reuse
+
+            # Save the optimal parameters found for reuse across horizons
             shared_order = ord_auto if order is None else order
             shared_seasonal_order = sord_auto if seasonal_order is None else seasonal_order
             use_order = shared_order
             use_sorder = shared_seasonal_order
             aic_ref, bic_ref = aic_auto, bic_auto
+            print(f"[SARIMAX] Auto search ({search_mode}): selected order={use_order}, seasonal_order={use_sorder}")
+
+        # CASE 4: Auto mode, subsequent horizons - reuse h=1 parameters
         elif (order is None or seasonal_order is None) and h > 1 and shared_order is not None and shared_seasonal_order is not None:
             # Reuse parameters from h=1 for subsequent horizons (skip expensive auto search)
             use_order = shared_order
             use_sorder = shared_seasonal_order
             aic_ref, bic_ref = float("nan"), float("nan")
-        elif order is not None and seasonal_order is not None:
-            # Manual mode: use user-specified orders (unchanged)
-            use_order, use_sorder = order, seasonal_order
-            aic_ref, bic_ref = float("nan"), float("nan")
+
+        # CASE 5: Fallback for edge cases (shouldn't normally reach here)
         else:
-            # Fallback for edge cases
+            # Fallback: run auto search with current search_mode
             if search_mode == "fast":
                 ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_fast(
                     y_tr, X_tr if X_tr.shape[1] > 0 else None, m=season_length
