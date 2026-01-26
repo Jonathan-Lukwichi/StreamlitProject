@@ -2347,7 +2347,73 @@ def page_benchmarks():
 
                     runtime_s = time.time() - t0
                     st.session_state["sarimax_results"] = sarimax_out
-                    st.success(f"✅ SARIMAX trained in {runtime_s:.2f}s.")
+
+                    # Check for errors
+                    if sarimax_out.get("status") == "error":
+                        st.error(f"❌ SARIMAX training failed: {sarimax_out.get('message', 'Unknown error')}")
+                    else:
+                        st.success(f"✅ SARIMAX Scenario-1 trained in {runtime_s:.2f}s.")
+
+                        # ============================================================
+                        # SCENARIO-1 DIAGNOSTIC DISPLAY
+                        # ============================================================
+                        # Display differencing test results (Step 4.3)
+                        differencing = sarimax_out.get("differencing")
+                        if differencing is not None:
+                            with st.expander("📊 Step 4.3: Differencing Tests (ADF & Canova-Hansen)", expanded=True):
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric(
+                                        "d (Non-seasonal differencing)",
+                                        differencing.adf_d,
+                                        help="Determined by ADF test"
+                                    )
+                                    if np.isfinite(differencing.adf_pvalue):
+                                        adf_status = "✅ Stationary" if differencing.adf_pvalue < 0.05 else "⚠️ Non-stationary"
+                                        st.caption(f"ADF p-value: {differencing.adf_pvalue:.4f} ({adf_status})")
+                                with col2:
+                                    st.metric(
+                                        "D (Seasonal differencing)",
+                                        differencing.ch_D,
+                                        help="Determined by Canova-Hansen test"
+                                    )
+                                    st.caption("CH test: Seasonal stability check")
+
+                        # Display residual diagnostics (Step 4.4)
+                        diagnostics = sarimax_out.get("diagnostics")
+                        if diagnostics is not None:
+                            with st.expander("🔬 Step 4.4: Residual Diagnostics (White Noise & Normality)", expanded=True):
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    lb_color = "normal" if diagnostics.ljung_box_pvalue > 0.05 else "inverse"
+                                    st.metric(
+                                        "Ljung-Box Test",
+                                        f"p = {diagnostics.ljung_box_pvalue:.4f}" if np.isfinite(diagnostics.ljung_box_pvalue) else "N/A"
+                                    )
+                                    st.caption(diagnostics.ljung_box_interpretation)
+                                with col2:
+                                    st.metric(
+                                        "Jarque-Bera Normality",
+                                        f"p = {diagnostics.normality_pvalue:.4f}" if np.isfinite(diagnostics.normality_pvalue) else "N/A"
+                                    )
+                                    st.caption(diagnostics.normality_interpretation)
+
+                                st.markdown("**Residual Statistics**")
+                                res_cols = st.columns(4)
+                                with res_cols[0]:
+                                    st.metric("Mean", f"{diagnostics.residual_mean:.4f}" if np.isfinite(diagnostics.residual_mean) else "N/A")
+                                with res_cols[1]:
+                                    st.metric("Std Dev", f"{diagnostics.residual_std:.4f}" if np.isfinite(diagnostics.residual_std) else "N/A")
+                                with res_cols[2]:
+                                    st.metric("Skewness", f"{diagnostics.residual_skewness:.4f}" if np.isfinite(diagnostics.residual_skewness) else "N/A")
+                                with res_cols[3]:
+                                    st.metric("Kurtosis", f"{diagnostics.residual_kurtosis:.4f}" if np.isfinite(diagnostics.residual_kurtosis) else "N/A")
+
+                        # Display selected model order
+                        order_display = sarimax_out.get("order")
+                        sorder_display = sarimax_out.get("seasonal_order")
+                        if order_display and sorder_display:
+                            st.info(f"📊 **Selected SARIMAX Order**: ({order_display[0]},{order_display[1]},{order_display[2]})({sorder_display[0]},{sorder_display[1]},{sorder_display[2]})[{sorder_display[3]}]")
 
                     # Capture residuals for hybrid model use (Stage 1 → Stage 2)
                     if _store_sarimax_residuals(sarimax_out, data, train_ratio):
