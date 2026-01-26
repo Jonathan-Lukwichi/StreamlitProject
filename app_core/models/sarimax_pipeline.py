@@ -39,6 +39,46 @@ GRID_COLOR = "#e5e7eb"
 SEED = 42
 np.random.seed(SEED)
 
+# ===========================================
+# Scenario-1 Dataclasses (Thesis Methodology)
+# ===========================================
+
+@dataclass
+class Scenario1DifferencingResult:
+    """
+    Step 4.3: Differencing test results from statistical tests.
+
+    - ADF (Augmented Dickey-Fuller) test determines non-seasonal differencing order (d)
+    - Canova-Hansen test determines seasonal differencing order (D)
+    """
+    adf_statistic: float
+    adf_pvalue: float
+    adf_d: int  # Recommended d value from ADF test
+    ch_statistic: float
+    ch_pvalue: float
+    ch_D: int  # Recommended D value from Canova-Hansen test
+
+
+@dataclass
+class Scenario1DiagnosticResult:
+    """
+    Step 4.4: Residual diagnostic results for white noise and normality checks.
+
+    - Ljung-Box test checks for autocorrelation in residuals (white noise)
+    - Jarque-Bera test checks for normality of residuals
+    """
+    ljung_box_statistic: float
+    ljung_box_pvalue: float
+    ljung_box_interpretation: str  # "White noise" or "Autocorrelation present"
+    normality_statistic: float
+    normality_pvalue: float
+    normality_interpretation: str  # "Normal" or "Non-normal"
+    residual_mean: float
+    residual_std: float
+    residual_skewness: float
+    residual_kurtosis: float
+
+
 def _mape(y_true, y_pred) -> float:
     """Mean Absolute Percentage Error in %, robust to zeros (skips near-zero denom)."""
     y_true = np.asarray(y_true, dtype=float)
