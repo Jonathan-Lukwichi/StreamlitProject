@@ -488,15 +488,21 @@ def _capture_sarimax_residuals(sarimax_out: dict, data: pd.DataFrame, train_rati
                     continue
 
     # Store feature data for Stage 2 training
-    # Get feature columns (excluding target columns)
+    # Get feature columns (excluding target columns and datetime columns)
     all_cols = data.columns.tolist()
-    feature_cols = [c for c in all_cols if not c.startswith("Target_") and c != "Date"]
+    # Filter out datetime columns - XGBoost can't handle Timestamps
+    feature_cols = [
+        c for c in all_cols
+        if not c.startswith("Target_")
+        and c.lower() not in ['date', 'datetime', 'timestamp', 'time', 'ds']
+        and not pd.api.types.is_datetime64_any_dtype(data[c])
+    ]
 
     split_idx = int(len(data) * train_ratio)
 
     if feature_cols:
         try:
-            X = data[feature_cols].values
+            X = data[feature_cols].values.astype(np.float64)
             residuals["feature_data"]["X_train"] = X[:split_idx]
             residuals["feature_data"]["X_val"] = X[split_idx:]
             residuals["feature_data"]["feature_cols"] = feature_cols
