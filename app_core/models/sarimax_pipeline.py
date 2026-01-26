@@ -272,6 +272,466 @@ def _prepare_sarimax_input(y: pd.Series, X: Optional[pd.DataFrame]) -> Tuple[np.
     return y_arr, None
 
 
+# ===========================================
+# Scenario-1 Helper Functions (Thesis Methodology)
+# ===========================================
+
+def _compute_differencing_orders(
+    y_train: pd.Series,
+    m: int = 7,
+    adf_significance: float = 0.05,
+) -> Scenario1DifferencingResult:
+    """
+    Step 4.3: Determine d and D using statistical tests.
+
+    Uses:
+    - ADF (Augmented Dickey-Fuller) test for non-seasonal differencing order (d)
+    - Canova-Hansen test for seasonal differencing order (D)
+
+    Args:
+        y_train: Training target series
+        m: Seasonal period (7 for weekly)
+        adf_significance: Significance level for ADF test
+
+    Returns:
+        Scenario1DifferencingResult with recommended d and D values
+    """
+    y_arr = y_train.values.astype(float)
+
+    # === ADF Test for d ===
+    # H0: Series has a unit root (non-stationary)
+    # If p < alpha, reject H0 -> series is stationary (d=0)
+    # If p >= alpha, fail to reject H0 -> differencing needed
+    try:
+        adf_result = adfuller(y_arr, autolag="AIC", regression="c")
+        adf_stat = float(adf_result[0])
+        adf_p = float(adf_result[1])
+    except Exception:
+        adf_stat = np.nan
+        adf_p = np.nan
+
+    # Use pmdarima's ndiffs for robust d estimation
+    if PMDARIMA_AVAILABLE:
+        try:
+            from pmdarima.arima import ndiffs, nsdiffs
+            d = ndiffs(y_arr, test='adf', max_d=2)
+        except Exception:
+            # Fallback: use p-value decision
+            d = 0 if (np.isfinite(adf_p) and adf_p < adf_significance) else 1
+    else:
+        # Fallback without pmdarima
+        d = 0 if (np.isfinite(adf_p) and adf_p < adf_significance) else 1
+
+    # === Canova-Hansen Test for D ===
+    # H0: Seasonal pattern is stable (D=0)
+    # Uses pmdarima's nsdiffs with CH test
+    ch_stat = np.nan
+    ch_p = np.nan
+
+    if PMDARIMA_AVAILABLE:
+        try:
+            from pmdarima.arima import nsdiffs
+            D = nsdiffs(y_arr, m=m, test='ch', max_D=1)
+        except Exception:
+            D = 1  # Default to seasonal differencing for weekly data
+    else:
+        D = 1  # Default to seasonal differencing
+
+    return Scenario1DifferencingResult(
+        adf_statistic=adf_stat,
+        adf_pvalue=adf_p,
+        adf_d=int(d),
+        ch_statistic=ch_stat,
+        ch_pvalue=ch_p,
+        ch_D=int(D),
+    )
+
+
+def _run_residual_diagnostics(
+    residuals: np.ndarray,
+    lags: int = 10,
+) -> Scenario1DiagnosticResult:
+    """
+    Step 4.4: Residual diagnostics for white noise and normality.
+
+    Tests:
+    1. Ljung-Box test for autocorrelation (white noise check)
+       - H0: Residuals are independently distributed (white noise)
+       - If p > 0.05: residuals are white noise (GOOD)
+       - If p < 0.05: autocorrelation present (model may be underfitting)
+
+    2. Jarque-Bera normality test
+       - H0: Residuals are normally distributed
+       - If p > 0.05: residuals are normal (GOOD for CI validity)
+
+    Args:
+        residuals: Model residuals array
+        lags: Number of lags for Ljung-Box test
+
+    Returns:
+        Scenario1DiagnosticResult with test results and interpretations
+    """
+    resid = np.asarray(residuals).flatten()
+    resid = resid[~np.isnan(resid)]
+
+    if len(resid) == 0:
+        return Scenario1DiagnosticResult(
+            ljung_box_statistic=np.nan,
+            ljung_box_pvalue=np.nan,
+            ljung_box_interpretation="Insufficient data",
+            normality_statistic=np.nan,
+            normality_pvalue=np.nan,
+            normality_interpretation="Insufficient data",
+            residual_mean=np.nan,
+            residual_std=np.nan,
+            residual_skewness=np.nan,
+            residual_kurtosis=np.nan,
+        )
+
+    # === Ljung-Box Test ===
+    try:
+        lb_result = acorr_ljungbox(resid, lags=[lags], return_df=True)
+        lb_stat = float(lb_result['lb_stat'].values[0])
+        lb_pval = float(lb_result['lb_pvalue'].values[0])
+        lb_interp = "White noise (residuals uncorrelated)" if lb_pval > 0.05 else "Autocorrelation present (model may underfit)"
+    except Exception:
+        lb_stat, lb_pval = np.nan, np.nan
+        lb_interp = "Test unavailable"
+
+    # === Jarque-Bera Normality Test ===
+    try:
+        norm_stat, norm_pval = scipy_stats.jarque_bera(resid)
+        norm_stat = float(norm_stat)
+        norm_pval = float(norm_pval)
+        norm_interp = "Normal distribution (CIs valid)" if norm_pval > 0.05 else "Non-normal distribution (CIs approximate)"
+    except Exception:
+        norm_stat, norm_pval = np.nan, np.nan
+        norm_interp = "Test unavailable"
+
+    # === Residual Statistics ===
+    resid_mean = float(np.mean(resid))
+    resid_std = float(np.std(resid))
+    try:
+        resid_skew = float(scipy_stats.skew(resid))
+        resid_kurt = float(scipy_stats.kurtosis(resid))
+    except Exception:
+        resid_skew = np.nan
+        resid_kurt = np.nan
+
+    return Scenario1DiagnosticResult(
+        ljung_box_statistic=lb_stat,
+        ljung_box_pvalue=lb_pval,
+        ljung_box_interpretation=lb_interp,
+        normality_statistic=norm_stat,
+        normality_pvalue=norm_pval,
+        normality_interpretation=norm_interp,
+        residual_mean=resid_mean,
+        residual_std=resid_std,
+        residual_skewness=resid_skew,
+        residual_kurtosis=resid_kurt,
+    )
+
+
+def _scenario1_order_search(
+    y_train: pd.Series,
+    X_train: Optional[pd.DataFrame],
+    d: int,
+    D: int,
+    m: int,
+    max_p: int = 3,
+    max_q: int = 3,
+    max_P: int = 2,
+    max_Q: int = 2,
+) -> Tuple[Tuple[int, int, int], Tuple[int, int, int, int], float, float]:
+    """
+    Step 4.2: AIC-based order search with FIXED d and D from statistical tests.
+
+    Key difference from standard auto_arima:
+    - d and D are PRE-COMPUTED from statistical tests (Step 4.3)
+    - auto_arima only searches p, q, P, Q
+
+    Args:
+        y_train: Training target series
+        X_train: Training exogenous features
+        d: Non-seasonal differencing order (from ADF test)
+        D: Seasonal differencing order (from Canova-Hansen test)
+        m: Seasonal period
+        max_p, max_q: Non-seasonal AR/MA bounds
+        max_P, max_Q: Seasonal AR/MA bounds
+
+    Returns:
+        Tuple (order, seasonal_order, aic, bic)
+    """
+    if not PMDARIMA_AVAILABLE:
+        # Fallback if pmdarima not available
+        return (1, d, 1), (1, D, 0, m), float("nan"), float("nan")
+
+    X_arr = X_train.values.astype(np.float64) if X_train is not None and len(X_train.columns) > 0 else None
+
+    try:
+        model = pm.auto_arima(
+            y_train.values.astype(float),
+            X=X_arr,
+            # Fix differencing orders from Step 4.3
+            d=d,
+            D=D,
+            # Search p, q, P, Q
+            start_p=0, max_p=max_p,
+            start_q=0, max_q=max_q,
+            start_P=0, max_P=max_P,
+            start_Q=0, max_Q=max_Q,
+            # Seasonal settings
+            seasonal=True,
+            m=m,
+            # AIC-based selection (thesis requirement)
+            information_criterion="aic",
+            stepwise=True,
+            suppress_warnings=True,
+            error_action="ignore",
+            random_state=SEED,
+            maxiter=100,
+        )
+        return model.order, model.seasonal_order, float(model.aic()), float(model.bic())
+    except Exception:
+        # Fallback to safe default with fixed d, D
+        return (1, d, 1), (1, D, 0, m), float("nan"), float("nan")
+
+
+def _prepare_scenario1_data(
+    df: pd.DataFrame,
+    date_col: str,
+    target_col: str,
+    train_ratio: float,
+    use_all_features: bool,
+    include_dow_ohe: bool,
+    selected_features: Optional[List[str]],
+) -> Tuple[pd.Series, pd.Series, pd.DataFrame, pd.DataFrame, pd.DatetimeIndex, pd.DatetimeIndex]:
+    """
+    Step 4.1: Prepare train/test split with exogenous features.
+
+    Returns:
+        y_train, y_test: Target series for train/test
+        X_train, X_test: Exogenous features for train/test
+        train_dates, test_dates: DatetimeIndex for each split
+    """
+    # Clean and regularize data
+    df_full = _clean_daily(df, date_col)
+
+    # Extract target series
+    y_series = df_full.set_index(date_col)[target_col].astype(float)
+    y_series = y_series.interpolate("linear").ffill().bfill()
+
+    # Build exogenous features
+    if use_all_features:
+        X_all = _exog_all(
+            df_full=df_full,
+            date_col=date_col,
+            target_cols=[target_col],
+            include_dow_ohe=include_dow_ohe,
+            selected_features=selected_features,
+        )
+    else:
+        X_all = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
+
+    # 80/20 split (thesis requirement)
+    n = len(y_series)
+    split_idx = int(n * train_ratio)
+
+    y_train = y_series.iloc[:split_idx]
+    y_test = y_series.iloc[split_idx:]
+    X_train = X_all.iloc[:split_idx].copy()
+    X_test = X_all.iloc[split_idx:].copy()
+
+    return y_train, y_test, X_train, X_test, y_train.index, y_test.index
+
+
+def _scenario1_forecast_and_evaluate(
+    fitted_model,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    max_horizon: int = 7,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame, pd.DataFrame]:
+    """
+    Step 4.5 & 4.6: Rolling window forecast with .predict(n_periods=H).
+
+    Unlike expanding window (which refits), this uses a SINGLE fitted model
+    and rolls the forecast origin forward through the test set.
+
+    Args:
+        fitted_model: Fitted SARIMAX model
+        y_train: Training target series
+        y_test: Test target series
+        X_train: Training exogenous features
+        X_test: Test exogenous features
+        max_horizon: Maximum forecast horizon (default 7)
+
+    Returns:
+        F: Forecast matrix [n_origins x H]
+        L: Lower CI matrix [n_origins x H]
+        U: Upper CI matrix [n_origins x H]
+        test_eval: DataFrame with actual values for each horizon
+        metrics_df: Per-horizon metrics DataFrame
+    """
+    n_test = len(y_test)
+    H = max_horizon
+
+    # Number of forecast origins (need H points after each origin)
+    n_origins = n_test - H + 1
+    if n_origins <= 0:
+        raise ValueError(f"Not enough test data ({n_test}) for {H}-step horizon forecast")
+
+    # Initialize matrices
+    F = np.full((n_origins, H), np.nan)  # Forecasts
+    L = np.full((n_origins, H), np.nan)  # Lower CI
+    U = np.full((n_origins, H), np.nan)  # Upper CI
+
+    # Training mean/std for fallback
+    y_mean = float(y_train.mean())
+    y_std = float(y_train.std())
+
+    # Rolling window forecast
+    for t in range(n_origins):
+        # Get exogenous features for forecast period
+        future_start = t
+        future_end = t + H
+
+        if future_end > len(X_test):
+            continue
+
+        X_future = X_test.iloc[future_start:future_end].values.astype(np.float64)
+
+        try:
+            # Use .get_forecast() for H steps
+            fc = fitted_model.get_forecast(steps=H, exog=X_future)
+            F[t, :] = fc.predicted_mean
+
+            # Get confidence intervals
+            ci = fc.conf_int(alpha=0.05)
+            if isinstance(ci, pd.DataFrame):
+                L[t, :] = ci.iloc[:, 0].values
+                U[t, :] = ci.iloc[:, 1].values
+            else:
+                L[t, :] = ci[:, 0]
+                U[t, :] = ci[:, 1]
+
+        except Exception:
+            # Fallback to training mean
+            F[t, :] = y_mean
+            L[t, :] = y_mean - 2 * y_std
+            U[t, :] = y_mean + 2 * y_std
+
+    # Build test_eval DataFrame with actual values for each horizon
+    eval_dates = y_test.index[:n_origins]
+    actuals = {}
+    for h in range(1, H + 1):
+        # Target_h = actual value h days ahead from each origin
+        actuals[f"Target_{h}"] = y_test.values[h - 1:n_origins + h - 1]
+    test_eval = pd.DataFrame(actuals, index=eval_dates)
+
+    # Calculate per-horizon metrics
+    metrics_df = _calculate_scenario1_metrics(F, test_eval, L, U, H)
+
+    return F, L, U, test_eval, metrics_df
+
+
+def _calculate_scenario1_metrics(
+    F: np.ndarray,
+    test_eval: pd.DataFrame,
+    L: np.ndarray,
+    U: np.ndarray,
+    H: int,
+) -> pd.DataFrame:
+    """
+    Step 4.5: Calculate comprehensive metrics for Scenario-1.
+
+    Metrics per horizon (thesis requirements):
+    - MAE (Mean Absolute Error)
+    - RMSE (Root Mean Squared Error)
+    - MAPE (Mean Absolute Percentage Error)
+    - Accuracy (100 - MAPE)
+    - Residual mean and std
+    - CI Coverage
+
+    Args:
+        F: Forecast matrix [n_origins x H]
+        test_eval: DataFrame with Target_1...Target_H columns
+        L, U: Lower/Upper CI matrices
+        H: Maximum horizon
+
+    Returns:
+        DataFrame with per-horizon metrics + average row
+    """
+    results = []
+
+    for h in range(1, H + 1):
+        col_name = f"Target_{h}"
+        if col_name not in test_eval.columns:
+            continue
+
+        actual = test_eval[col_name].values
+        pred = F[:, h - 1]
+        lower = L[:, h - 1]
+        upper = U[:, h - 1]
+
+        # Filter valid data
+        valid = np.isfinite(actual) & np.isfinite(pred)
+        if not np.any(valid):
+            continue
+
+        actual_v = actual[valid]
+        pred_v = pred[valid]
+
+        # Core metrics
+        mae = float(mean_absolute_error(actual_v, pred_v))
+        rmse = float(np.sqrt(mean_squared_error(actual_v, pred_v)))
+
+        # MAPE with zero handling
+        with np.errstate(divide='ignore', invalid='ignore'):
+            denom = np.where(np.abs(actual_v) < 1e-8, np.nan, np.abs(actual_v))
+            ape = np.abs((actual_v - pred_v) / denom)
+            mape = float(np.nanmean(ape) * 100)
+            mape = min(100.0, mape) if np.isfinite(mape) else 100.0
+
+        accuracy = max(0.0, 100.0 - mape)
+
+        # Residuals for this horizon
+        residuals = actual_v - pred_v
+        resid_mean = float(np.mean(residuals))
+        resid_std = float(np.std(residuals))
+
+        # CI Coverage
+        lower_v = lower[valid]
+        upper_v = upper[valid]
+        if np.any(np.isfinite(lower_v)) and np.any(np.isfinite(upper_v)):
+            coverage = float(np.mean((actual_v >= lower_v) & (actual_v <= upper_v)) * 100)
+        else:
+            coverage = np.nan
+
+        results.append({
+            "Horizon": h,
+            "MAE": mae,
+            "RMSE": rmse,
+            "MAPE_%": mape,
+            "Accuracy_%": accuracy,
+            "Residual_Mean": resid_mean,
+            "Residual_Std": resid_std,
+            "CI_Coverage_%": coverage,
+        })
+
+    metrics_df = pd.DataFrame(results)
+
+    # Add average row
+    if not metrics_df.empty:
+        numeric_cols = metrics_df.select_dtypes(include=[np.number]).columns.tolist()
+        avg = {col: metrics_df[col].mean() for col in numeric_cols}
+        avg["Horizon"] = "Average"
+        metrics_df = pd.concat([metrics_df, pd.DataFrame([avg])], ignore_index=True)
+
+    return metrics_df
+
+
 def _auto_order_rmse_only(
     y_tr: pd.Series,
     X_tr: Optional[pd.DataFrame],
