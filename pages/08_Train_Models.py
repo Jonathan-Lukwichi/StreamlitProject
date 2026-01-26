@@ -1264,19 +1264,26 @@ def capture_residuals_from_results(results: dict, df: pd.DataFrame, feature_cols
             # For now, we'll compute them during hybrid training if needed
 
     # Store feature data for Stage 2 training
+    # IMPORTANT: Filter out datetime columns - XGBoost can't handle Timestamps
+    numeric_feature_cols = [
+        col for col in feature_cols
+        if col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[col])
+        and col.lower() not in ['date', 'datetime', 'timestamp', 'time', 'ds']
+    ]
+
     if use_fe_split:
-        X = df[feature_cols].values
+        X = df[numeric_feature_cols].values.astype(np.float64)
         residuals["feature_data"]["X_train"] = X[train_idx]
         residuals["feature_data"]["X_val"] = X[test_idx]
         residuals["feature_data"]["train_idx"] = train_idx
         residuals["feature_data"]["test_idx"] = test_idx
     else:
         split_idx = int(len(df) * split_ratio)
-        X = df[feature_cols].values
+        X = df[numeric_feature_cols].values.astype(np.float64)
         residuals["feature_data"]["X_train"] = X[:split_idx]
         residuals["feature_data"]["X_val"] = X[split_idx:]
 
-    residuals["feature_data"]["feature_cols"] = feature_cols
+    residuals["feature_data"]["feature_cols"] = numeric_feature_cols
     residuals["trained_at"] = datetime.now().isoformat()
 
     return residuals
