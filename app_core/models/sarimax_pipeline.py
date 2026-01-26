@@ -2842,3 +2842,390 @@ def get_reason_target_columns(df: pd.DataFrame, horizon: Optional[int] = None) -
         return (100, 0)
 
     return sorted(target_cols, key=sort_key)
+
+
+# ===========================================
+# NEW: Clean SARIMAX Pipeline (Matching ARIMA Pattern)
+# ===========================================
+
+def run_sarimax_pipeline(
+    df: pd.DataFrame,
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+    train_ratio: float = 0.8,
+    auto_select: bool = True,
+    target_col: str = "Target_1",
+    season_length: int = 7,
+    use_exog: bool = True,
+    date_col: str = "Date",
+) -> Dict[str, Any]:
+    """
+    Single-horizon SARIMAX pipeline matching ARIMA's run_arima_pipeline() structure.
+
+    This is a clean, fast implementation for baseline comparison with ML models.
+
+    Args:
+        df: DataFrame with Date and target column
+        order: ARIMA order (p,d,q). If None and auto_select=True, will search.
+        seasonal_order: Seasonal order (P,D,Q,m). If None and auto_select=True, will search.
+        train_ratio: Fraction of data for training (default 0.8)
+        auto_select: If True and order is None, use pmdarima to find optimal parameters
+        target_col: Name of target column (default "Target_1")
+        season_length: Seasonal period (default 7 for weekly)
+        use_exog: Whether to use calendar features as exogenous variables
+        date_col: Name of date column
+
+    Returns:
+        Dict matching ARIMA's return structure:
+        - y_train, y_test: pd.Series with DatetimeIndex
+        - forecasts: pd.Series with forecast values
+        - forecast_lower, forecast_upper: 95% confidence interval bounds
+        - train_metrics: dict with AIC, BIC, etc.
+        - test_metrics: dict with MAE, RMSE, MAPE, Accuracy, etc.
+        - model_info: dict with order, seasonal_order, etc.
+        - residuals: pd.Series
+        - fit_results: statsmodels results object
+    """
+    # Clean and prepare data
+    df_full = _clean_daily(df, date_col)
+    if target_col not in df_full.columns:
+        raise ValueError(f"'{target_col}' not found in dataframe.")
+
+    y = df_full.set_index(date_col)[target_col].astype(float)
+    y = y.interpolate("linear").ffill().bfill()
+
+    if len(y) < 24:
+        raise ValueError("Not enough data for SARIMAX (need >= 24 points).")
+
+    # Build exogenous features if requested
+    if use_exog:
+        X = _exog_calendar(y.index, include_dow_ohe=True)
+        X.index = y.index  # Align index
+    else:
+        X = None
+
+    # Train/test split
+    train_size = int(len(y) * train_ratio)
+    y_train, y_test = y[:train_size], y[train_size:]
+    if X is not None:
+        X_train, X_test = X[:train_size], X[train_size:]
+    else:
+        X_train, X_test = None, None
+
+    # Prepare numpy arrays for SARIMAX
+    y_train_arr, X_train_arr = _prepare_sarimax_input(y_train, X_train)
+    y_test_arr, X_test_arr = _prepare_sarimax_input(y_test, X_test)
+
+    # Order selection
+    use_order = order
+    use_sorder = seasonal_order
+
+    if auto_select and (order is None or seasonal_order is None):
+        # Use pmdarima for auto-selection
+        if PMDARIMA_AVAILABLE:
+            try:
+                auto_model = pm.auto_arima(
+                    y_train_arr,
+                    X=X_train_arr,
+                    seasonal=True,
+                    m=season_length,
+                    start_p=0, max_p=3,
+                    start_q=0, max_q=3,
+                    start_P=0, max_P=2,
+                    start_Q=0, max_Q=2,
+                    d=None,  # Let it determine
+                    D=None,  # Let it determine
+                    max_d=2, max_D=1,
+                    information_criterion='aic',
+                    stepwise=True,
+                    suppress_warnings=True,
+                    error_action='ignore',
+                    random_state=SEED,
+                    maxiter=50,  # Fast
+                )
+                use_order = auto_model.order
+                use_sorder = auto_model.seasonal_order
+            except Exception:
+                # Fallback to safe defaults
+                use_order = (1, 1, 1)
+                use_sorder = (1, 1, 0, season_length)
+        else:
+            # No pmdarima - use defaults
+            use_order = (1, 1, 1)
+            use_sorder = (1, 1, 0, season_length)
+
+    # Ensure we have orders
+    if use_order is None:
+        use_order = (1, 1, 1)
+    if use_sorder is None:
+        use_sorder = (1, 1, 0, season_length)
+
+    # Fit SARIMAX model
+    try:
+        model = SARIMAX(
+            endog=y_train_arr,
+            exog=X_train_arr,
+            order=use_order,
+            seasonal_order=use_sorder,
+            enforce_stationarity=False,
+            enforce_invertibility=False,
+        )
+        results = model.fit(disp=False, maxiter=50, method='lbfgs')
+    except Exception as e:
+        # Return error structure
+        return {
+            "status": "error",
+            "message": str(e),
+            "y_train": y_train,
+            "y_test": y_test,
+        }
+
+    # Forecast on test set
+    try:
+        fc_obj = results.get_forecast(steps=len(y_test), exog=X_test_arr)
+        forecast = fc_obj.predicted_mean
+        ci = fc_obj.conf_int(alpha=0.05)
+
+        if isinstance(ci, pd.DataFrame):
+            ci_lower = ci.iloc[:, 0].values
+            ci_upper = ci.iloc[:, 1].values
+        else:
+            ci = np.asarray(ci)
+            ci_lower = ci[:, 0]
+            ci_upper = ci[:, 1]
+    except Exception:
+        # Fallback forecasts
+        forecast = np.full(len(y_test), y_train.mean())
+        ci_lower = forecast - 2 * y_train.std()
+        ci_upper = forecast + 2 * y_train.std()
+
+    # Convert to Series with proper index
+    forecast_series = pd.Series(forecast, index=y_test.index, name="forecast")
+    ci_lower_series = pd.Series(ci_lower, index=y_test.index, name="ci_lower")
+    ci_upper_series = pd.Series(ci_upper, index=y_test.index, name="ci_upper")
+
+    # Calculate metrics
+    mae = float(mean_absolute_error(y_test, forecast))
+    rmse = float(np.sqrt(mean_squared_error(y_test, forecast)))
+    mape = _mape(y_test.values, forecast)
+    accuracy = 100.0 - mape if np.isfinite(mape) else np.nan
+
+    # Additional metrics
+    try:
+        r2 = float(r2_score(y_test, forecast))
+    except Exception:
+        r2 = np.nan
+
+    # CI coverage
+    try:
+        in_ci = (y_test.values >= ci_lower) & (y_test.values <= ci_upper)
+        ci_coverage = float(np.mean(in_ci) * 100)
+    except Exception:
+        ci_coverage = np.nan
+
+    # Direction accuracy
+    dir_acc = _dir_acc(y_test.values, forecast)
+
+    # Residuals
+    try:
+        residuals = pd.Series(results.resid, index=y_train.index, name="residuals")
+    except Exception:
+        residuals = pd.Series([], name="residuals")
+
+    return {
+        "status": "success",
+        "y_train": y_train,
+        "y_test": y_test,
+        "forecasts": forecast_series,
+        "forecast_lower": ci_lower_series,
+        "forecast_upper": ci_upper_series,
+        "train_metrics": {
+            "AIC": float(results.aic) if hasattr(results, 'aic') else np.nan,
+            "BIC": float(results.bic) if hasattr(results, 'bic') else np.nan,
+            "Log-Likelihood": float(results.llf) if hasattr(results, 'llf') else np.nan,
+        },
+        "test_metrics": {
+            "MAE": mae,
+            "RMSE": rmse,
+            "MAPE": mape,
+            "Accuracy": accuracy,
+            "R2": r2,
+            "CI_Coverage_%": ci_coverage,
+            "Direction_Accuracy_%": dir_acc,
+        },
+        "model_info": {
+            "order": use_order,
+            "seasonal_order": use_sorder,
+            "aic": float(results.aic) if hasattr(results, 'aic') else np.nan,
+            "bic": float(results.bic) if hasattr(results, 'bic') else np.nan,
+        },
+        "residuals": residuals,
+        "fit_results": results,
+    }
+
+
+def run_sarimax_multihorizon_v2(
+    df: pd.DataFrame,
+    date_col: str = "Date",
+    horizons: int = 7,
+    train_ratio: float = 0.8,
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+    auto_select: bool = True,
+    season_length: int = 7,
+    use_exog: bool = True,
+) -> Dict[str, Any]:
+    """
+    Multi-horizon SARIMAX pipeline matching ARIMA's run_arima_multihorizon() pattern.
+
+    KEY OPTIMIZATION: When auto_select=True, parameters are found ONCE for h=1
+    and REUSED for h=2...h=7. This makes auto mode ~7x faster.
+
+    Args:
+        df: DataFrame with Date and Target_1...Target_H columns
+        date_col: Name of date column
+        horizons: Maximum forecast horizon (default 7)
+        train_ratio: Fraction of data for training (default 0.8)
+        order: ARIMA order (p,d,q). If None and auto_select=True, will search.
+        seasonal_order: Seasonal order (P,D,Q,m). If None and auto_select=True, will search.
+        auto_select: If True and order is None, use pmdarima for h=1, reuse for h>1
+        season_length: Seasonal period (default 7 for weekly)
+        use_exog: Whether to use calendar features as exogenous variables
+
+    Returns:
+        Dict with:
+        - results_df: DataFrame with per-horizon metrics (Horizon, Test_MAE, Test_RMSE, etc.)
+        - per_h: Dict mapping horizon to full results from run_sarimax_pipeline()
+        - successful: List of successfully trained horizons
+    """
+    rows = []
+    per_h = {}
+    successful = []
+
+    # Shared parameters (found for h=1, reused for h>1)
+    shared_order = None
+    shared_sorder = None
+
+    for h in range(1, horizons + 1):
+        target_col = f"Target_{h}"
+
+        # Skip if target column doesn't exist
+        if target_col not in df.columns:
+            continue
+
+        try:
+            if auto_select and h == 1:
+                # FIRST HORIZON: Full auto search
+                out = run_sarimax_pipeline(
+                    df=df,
+                    order=order,  # Will be None for auto
+                    seasonal_order=seasonal_order,  # Will be None for auto
+                    train_ratio=train_ratio,
+                    auto_select=True,
+                    target_col=target_col,
+                    season_length=season_length,
+                    use_exog=use_exog,
+                    date_col=date_col,
+                )
+
+                # Save optimal parameters for reuse
+                if out.get("status") == "success":
+                    shared_order = out["model_info"]["order"]
+                    shared_sorder = out["model_info"]["seasonal_order"]
+
+            elif auto_select and h > 1 and shared_order is not None:
+                # SUBSEQUENT HORIZONS: Reuse parameters from h=1 (FAST!)
+                out = run_sarimax_pipeline(
+                    df=df,
+                    order=shared_order,
+                    seasonal_order=shared_sorder,
+                    train_ratio=train_ratio,
+                    auto_select=False,  # No search - use shared params
+                    target_col=target_col,
+                    season_length=season_length,
+                    use_exog=use_exog,
+                    date_col=date_col,
+                )
+
+            else:
+                # MANUAL MODE: Use user-provided parameters directly
+                out = run_sarimax_pipeline(
+                    df=df,
+                    order=order,
+                    seasonal_order=seasonal_order,
+                    train_ratio=train_ratio,
+                    auto_select=False,
+                    target_col=target_col,
+                    season_length=season_length,
+                    use_exog=use_exog,
+                    date_col=date_col,
+                )
+
+        except Exception as e:
+            print(f"SARIMAX horizon {h} failed: {e}")
+            continue
+
+        # Check for errors
+        if out.get("status") == "error":
+            continue
+
+        # Extract metrics
+        tm = out.get("test_metrics", {})
+        mi = out.get("model_info", {})
+
+        rows.append({
+            "Horizon": h,
+            "Order": str(mi.get("order", "N/A")),
+            "Seasonal_Order": str(mi.get("seasonal_order", "N/A")),
+            "Train_MAE": np.nan,  # Not computed in single-horizon
+            "Train_RMSE": np.nan,
+            "Train_MAPE": np.nan,
+            "Train_Acc": np.nan,
+            "Test_MAE": _safe_float(tm.get("MAE")),
+            "Test_RMSE": _safe_float(tm.get("RMSE")),
+            "Test_MAPE": _safe_float(tm.get("MAPE")),
+            "Test_Acc": _safe_float(tm.get("Accuracy")),
+            "Test_R2": _safe_float(tm.get("R2")),
+            "CIcov%": _safe_float(tm.get("CI_Coverage_%")),
+            "DirAcc": _safe_float(tm.get("Direction_Accuracy_%")),
+            "AIC": _safe_float(mi.get("aic")),
+            "BIC": _safe_float(mi.get("bic")),
+            "Train_N": len(out["y_train"]) if out.get("y_train") is not None else 0,
+            "Test_N": len(out["y_test"]) if out.get("y_test") is not None else 0,
+        })
+
+        # Store per-horizon results in format expected by to_multihorizon_artifacts()
+        per_h[h] = {
+            "y_train": out["y_train"],
+            "y_test": out["y_test"],
+            "forecast": out["forecasts"],
+            "ci_lo": out["forecast_lower"],
+            "ci_hi": out["forecast_upper"],
+            "order": mi.get("order"),
+            "sorder": mi.get("seasonal_order"),
+            "res": out.get("fit_results"),
+        }
+        successful.append(h)
+
+    # Build results DataFrame
+    results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
+
+    return {
+        "results_df": results_df,
+        "per_h": per_h,
+        "successful": successful,
+        # Include shared order for display
+        "order": shared_order or order,
+        "seasonal_order": shared_sorder or seasonal_order,
+    }
+
+
+def _safe_float(x) -> float:
+    """Convert to float, return NaN for invalid values."""
+    try:
+        f = float(x)
+        if np.isfinite(f):
+            return f
+        return np.nan
+    except Exception:
+        return np.nan
