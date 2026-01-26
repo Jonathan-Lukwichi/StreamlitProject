@@ -38,6 +38,7 @@ from app_core.plots import build_multihorizon_results_dashboard
 # === SARIMAX multi-horizon (canonical artifact producer) ===
 from app_core.models.sarimax_pipeline import (
     run_sarimax_multihorizon,
+    run_sarimax_multihorizon_fast,  # Fast manual mode (fit once, forecast all)
     run_sarimax_baseline_pipeline,  # Expanding window approach (like ARIMA)
     to_multihorizon_artifacts,
 )
