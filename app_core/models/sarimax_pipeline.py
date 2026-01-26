@@ -554,10 +554,16 @@ def _scenario1_forecast_and_evaluate(
     max_horizon: int = 7,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame, pd.DataFrame]:
     """
-    Step 4.5 & 4.6: Rolling window forecast with .predict(n_periods=H).
+    Step 4.5 & 4.6: Rolling window forecast with proper model state extension.
 
-    Unlike expanding window (which refits), this uses a SINGLE fitted model
-    and rolls the forecast origin forward through the test set.
+    This implements TRUE rolling window forecasting:
+    - Single model (fitted once on training data)
+    - For each origin t, EXTEND the model's history to include test[0:t]
+    - Then forecast H steps ahead from that extended state
+
+    CRITICAL: Unlike the buggy version that called get_forecast() repeatedly
+    without extending the model, this properly advances the forecast origin
+    by using .append() to incorporate new observations.
 
     Args:
         fitted_model: Fitted SARIMAX model
@@ -591,20 +597,27 @@ def _scenario1_forecast_and_evaluate(
     y_mean = float(y_train.mean())
     y_std = float(y_train.std())
 
-    # Rolling window forecast
+    # Convert test data to arrays for efficient slicing
+    y_test_arr = y_test.values.astype(np.float64)
+    X_test_arr = X_test.values.astype(np.float64) if X_test is not None and len(X_test.columns) > 0 else None
+
+    # Current model state (will be extended as we roll forward)
+    current_model = fitted_model
+
+    # Rolling window forecast with proper state extension
     for t in range(n_origins):
-        # Get exogenous features for forecast period
+        # Get exogenous features for forecast period [t : t+H]
         future_start = t
         future_end = t + H
 
-        if future_end > len(X_test):
+        if future_end > n_test:
             continue
 
-        X_future = X_test.iloc[future_start:future_end].values.astype(np.float64)
+        X_future = X_test_arr[future_start:future_end] if X_test_arr is not None else None
 
         try:
-            # Use .get_forecast() for H steps
-            fc = fitted_model.get_forecast(steps=H, exog=X_future)
+            # Forecast H steps ahead from CURRENT model state
+            fc = current_model.get_forecast(steps=H, exog=X_future)
             F[t, :] = fc.predicted_mean
 
             # Get confidence intervals
@@ -621,6 +634,17 @@ def _scenario1_forecast_and_evaluate(
             F[t, :] = y_mean
             L[t, :] = y_mean - 2 * y_std
             U[t, :] = y_mean + 2 * y_std
+
+        # CRITICAL: Extend model state by appending the ACTUAL observation at time t
+        # This advances the forecast origin for the next iteration
+        if t < n_origins - 1:  # Don't need to extend after last forecast
+            try:
+                new_obs = y_test_arr[t:t+1]  # Single observation
+                new_exog = X_test_arr[t:t+1] if X_test_arr is not None else None
+                current_model = current_model.append(endog=new_obs, exog=new_exog, refit=False)
+            except Exception:
+                # If append fails, continue with current model (degraded but functional)
+                pass
 
     # Build test_eval DataFrame with actual values for each horizon
     eval_dates = y_test.index[:n_origins]
