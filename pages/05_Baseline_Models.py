@@ -2319,35 +2319,52 @@ def page_benchmarks():
 
                 t0 = time.time()
                 try:
-                    # Use per-horizon approach (trains 7 models, one per horizon)
-                    # This is FAST and matches how ML models (XGBoost, LSTM) are evaluated
-                    # for fair apples-to-apples thesis comparison
-                    kwargs = dict(
-                        df_merged=data,                    # Note: df_merged not df
-                        date_col="Date",
-                        target_cols=None,                  # None = auto-detect Target_1..Target_H
-                        train_ratio=train_ratio,
-                        season_length=season_len,
-                        horizons=horizons,                 # Not max_horizon
-                        # Feature options
-                        use_all_features=use_all_features,
-                        include_dow_ohe=True,
-                        selected_features=selected_features,
-                        # Search mode
-                        search_mode=pipeline_mode,
-                        # Pass manual orders (None for auto modes)
-                        order=order,
-                        seasonal_order=seasonal_order,
-                        # Pass search bounds
-                        max_p=bounds.get("max_p", 3),
-                        max_q=bounds.get("max_q", 3),
-                        max_d=bounds.get("max_d", 2),
-                        max_P=bounds.get("max_P", 2),
-                        max_Q=bounds.get("max_Q", 2),
-                        max_D=bounds.get("max_D", 1),
-                        n_folds=bounds.get("n_folds", 3),
-                    )
-                    sarimax_out = run_sarimax_multihorizon(**kwargs)
+                    # Check if Manual mode with both parameters provided
+                    # Use fast single-model approach (~7-10x faster)
+                    if search_mode == "manual" and order is not None and seasonal_order is not None:
+                        # FAST: Fit ONE model, forecast all horizons at once
+                        sarimax_out = run_sarimax_multihorizon_fast(
+                            df_merged=data,
+                            date_col="Date",
+                            train_ratio=train_ratio,
+                            season_length=season_len,
+                            horizons=horizons,
+                            order=order,
+                            seasonal_order=seasonal_order,
+                            use_all_features=use_all_features,
+                            include_dow_ohe=True,
+                            selected_features=selected_features,
+                        )
+                    else:
+                        # STANDARD: Fit separate model per horizon (for auto parameter search)
+                        # This matches how ML models (XGBoost, LSTM) are evaluated
+                        # for fair apples-to-apples thesis comparison
+                        kwargs = dict(
+                            df_merged=data,
+                            date_col="Date",
+                            target_cols=None,                  # None = auto-detect Target_1..Target_H
+                            train_ratio=train_ratio,
+                            season_length=season_len,
+                            horizons=horizons,
+                            # Feature options
+                            use_all_features=use_all_features,
+                            include_dow_ohe=True,
+                            selected_features=selected_features,
+                            # Search mode
+                            search_mode=pipeline_mode,
+                            # Pass manual orders (None for auto modes)
+                            order=order,
+                            seasonal_order=seasonal_order,
+                            # Pass search bounds
+                            max_p=bounds.get("max_p", 3),
+                            max_q=bounds.get("max_q", 3),
+                            max_d=bounds.get("max_d", 2),
+                            max_P=bounds.get("max_P", 2),
+                            max_Q=bounds.get("max_Q", 2),
+                            max_D=bounds.get("max_D", 1),
+                            n_folds=bounds.get("n_folds", 3),
+                        )
+                        sarimax_out = run_sarimax_multihorizon(**kwargs)
 
                     # Clear progress message
                     progress_placeholder.empty()
