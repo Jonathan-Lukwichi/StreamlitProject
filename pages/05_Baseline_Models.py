@@ -2168,8 +2168,8 @@ def page_benchmarks():
                     st.session_state["sarimax_features"] = []
 
             # Show estimated training time
-            time_estimates = {"fast": "~30s", "aic_only": "~2min", "rmse_only": "~5min", "manual": "instant"}
-            st.info(f"Estimated training time: **{time_estimates.get(search_mode, '~2min')}**")
+            time_estimates = {"scenario1": "~1-2min", "manual": "~30s"}
+            st.info(f"Estimated training time: **{time_estimates.get(search_mode, '~1-2min')}**")
 
 
 
