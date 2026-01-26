@@ -2018,159 +2018,72 @@ def page_benchmarks():
                 st.info(f"📊 ARIMA Order set to: ({p}, {d}, {q})")
 
         elif current_model == "SARIMAX":
-            # ============ TRAINING MODE SELECTOR ============
-            st.markdown("#### Training Mode")
-
-            training_mode = st.radio(
-                "Select Training Mode",
-                [
-                    "Scenario-1 (Thesis) - Single Model + Statistical Tests",
-                    "Manual - Specify all parameters"
-                ],
-                index=0,  # Default to Scenario-1
-                horizontal=False,
-                key="sarimax_training_mode",
-                help="""
-                **Scenario-1 (Thesis)**: Academic methodology following Box-Jenkins approach:
-                - Step 4.3: ADF test for d, Canova-Hansen test for D
-                - Step 4.2: AIC-based p/q/P/Q search with fixed d/D
-                - Step 4.4: Ljung-Box white noise check, Jarque-Bera normality test
-                - Step 4.5: Comprehensive metrics (MAE, RMSE, MAPE, residual stats)
-                - Step 4.6: Single model with rolling window forecast
-
-                **Manual**: You specify exact (p,d,q)(P,D,Q,m) parameters.
-                """
+            # ============ SIMPLE MODE SELECTOR (matching ARIMA) ============
+            mode = st.radio(
+                "Parameter Mode",
+                ["Automatic (recommended)", "Manual (enter all parameters)"],
+                horizontal=True,
+                key="sarimax_mode"
             )
 
-            mode_mapping = {
-                "Scenario-1 (Thesis) - Single Model + Statistical Tests": "scenario1",
-                "Manual - Specify all parameters": "manual"
-            }
-            search_mode = mode_mapping.get(training_mode, "scenario1")
-            st.session_state["sarimax_search_mode"] = search_mode
-            is_manual_mode = (search_mode == "manual")
-
-            st.markdown("---")
-
-            # ============ BASIC PARAMETERS ============
-            st.markdown("#### Basic Parameters")
+            # Basic parameters in columns
+            max_h_present = max([int(c.split("_")[1]) for c in data.columns if c.startswith("Target_")] or [1])
             cA, cB = st.columns(2)
             with cA:
-                season_length = st.number_input(
-                    "Seasonal Period (m)", min_value=2, max_value=365, value=7, step=1,
-                    key="sarimax_season_input",
-                    help="7 for weekly seasonality (daily data), 12 for monthly data"
+                sarimax_h = st.number_input(
+                    "Max Forecast Horizon (days)",
+                    min_value=1, max_value=max(30, max_h_present),
+                    value=min(7, max_h_present), step=1,
+                    key="sarimax_h"
                 )
             with cB:
-                max_h_present = max([int(c.split("_")[1]) for c in data.columns if c.startswith("Target_")] or [1])
-                horizons = st.number_input(
-                    "Max Forecast Horizon", min_value=1, max_value=max(30, max_h_present),
-                    value=min(7, max_h_present), step=1, key="sarimax_horizons_input"
+                season_length = st.number_input(
+                    "Seasonal Period (m)",
+                    min_value=2, max_value=365, value=7, step=1,
+                    key="sarimax_season",
+                    help="7 for weekly seasonality (daily data), 12 for monthly data"
                 )
 
-            st.session_state["sarimax_season_length"] = int(season_length)
-            st.session_state["sarimax_horizons"] = int(horizons)
-
-            st.markdown("---")
-
-            # ============ MANUAL PARAMETERS (only if Manual mode) ============
-            if is_manual_mode:
-                st.markdown("#### Manual SARIMAX Parameters")
-
+            if mode.startswith("Automatic"):
+                st.markdown("SARIMAX parameters will be found automatically using pmdarima (AIC-driven).")
+                st.session_state["sarimax_order"] = None
+                st.session_state["sarimax_seasonal_order"] = None
+            else:
+                # Manual mode - show parameter inputs
                 st.markdown("##### Non-Seasonal Order (p, d, q)")
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    p = st.number_input("p (AR)", min_value=0, max_value=10, value=1, key="sarimax_manual_p")
+                    p = st.number_input("p (AR order)", 0, 10, 1, key="sarimax_p")
                 with c2:
-                    d = st.number_input("d (Diff)", min_value=0, max_value=3, value=1, key="sarimax_manual_d")
+                    d = st.number_input("d (Differencing)", 0, 3, 1, key="sarimax_d")
                 with c3:
-                    q = st.number_input("q (MA)", min_value=0, max_value=10, value=1, key="sarimax_manual_q")
+                    q = st.number_input("q (MA order)", 0, 10, 1, key="sarimax_q")
 
                 st.markdown("##### Seasonal Order (P, D, Q)")
                 c4, c5, c6 = st.columns(3)
                 with c4:
-                    P = st.number_input("P (Seas AR)", min_value=0, max_value=5, value=1, key="sarimax_manual_P")
+                    P = st.number_input("P (Seasonal AR)", 0, 5, 1, key="sarimax_P")
                 with c5:
-                    D = st.number_input("D (Seas Diff)", min_value=0, max_value=2, value=1, key="sarimax_manual_D")
+                    D = st.number_input("D (Seasonal Diff)", 0, 2, 1, key="sarimax_D")
                 with c6:
-                    Q = st.number_input("Q (Seas MA)", min_value=0, max_value=5, value=0, key="sarimax_manual_Q")
+                    Q = st.number_input("Q (Seasonal MA)", 0, 5, 0, key="sarimax_Q")
 
                 st.session_state["sarimax_order"] = (p, d, q)
                 st.session_state["sarimax_seasonal_order"] = (P, D, Q, int(season_length))
+                st.info(f"📊 SARIMAX Order: ({p},{d},{q})({P},{D},{Q})[{int(season_length)}]")
 
-                st.info(f"SARIMAX Order: ({p},{d},{q})({P},{D},{Q})[{int(season_length)}]")
-            else:
-                st.session_state["sarimax_order"] = None
-                st.session_state["sarimax_seasonal_order"] = None
+            # Simple exogenous features toggle
+            use_exog = st.checkbox(
+                "Use Calendar Features (Day-of-Week, Weekend, Yearly Cycles)",
+                value=True,
+                key="sarimax_use_exog",
+                help="Include day-of-week dummies, weekend flag, and yearly sin/cos cycles as exogenous variables"
+            )
+            st.session_state["sarimax_use_exog"] = use_exog
 
-                # ============ SEARCH BOUNDS (for auto modes) ============
-                with st.expander("Advanced: Search Bounds", expanded=False):
-                    st.caption("Limit the parameter search space for faster training")
-
-                    st.markdown("##### Non-Seasonal Bounds")
-                    bc1, bc2, bc3 = st.columns(3)
-                    with bc1:
-                        max_p = st.slider("max_p", 1, 5, 3, key="sarimax_max_p")
-                    with bc2:
-                        max_d = st.slider("max_d", 1, 3, 2, key="sarimax_max_d")
-                    with bc3:
-                        max_q = st.slider("max_q", 1, 5, 3, key="sarimax_max_q")
-
-                    st.markdown("##### Seasonal Bounds")
-                    bc4, bc5, bc6 = st.columns(3)
-                    with bc4:
-                        max_P = st.slider("max_P", 1, 3, 2, key="sarimax_max_P")
-                    with bc5:
-                        max_D = st.slider("max_D", 1, 2, 1, key="sarimax_max_D")
-                    with bc6:
-                        max_Q = st.slider("max_Q", 1, 3, 2, key="sarimax_max_Q")
-
-                    st.session_state["sarimax_bounds"] = {
-                        "max_p": max_p, "max_d": max_d, "max_q": max_q,
-                        "max_P": max_P, "max_D": max_D, "max_Q": max_Q,
-                    }
-
-                if "sarimax_bounds" not in st.session_state:
-                    st.session_state["sarimax_bounds"] = {
-                        "max_p": 3, "max_d": 2, "max_q": 3,
-                        "max_P": 2, "max_D": 1, "max_Q": 2,
-                    }
-
-            st.markdown("---")
-
-            # ============ FEATURE SELECTION ============
-            st.markdown("#### Exogenous Features")
-            feature_cols = [c for c in data.columns if c not in ["Date"] and not c.startswith("Target_")]
-
-            if not feature_cols:
-                st.info("No exogenous features found (Univariate mode).")
-                st.session_state["sarimax_use_all_features"] = False
-                st.session_state["sarimax_features"] = []
-            else:
-                exog_mode = st.radio(
-                    "Feature Selection",
-                    ["Use All Features", "Select Specific", "None (Univariate)"],
-                    key="sarimax_exog_mode"
-                )
-
-                if exog_mode == "Select Specific":
-                    selected_feats = st.multiselect(
-                        "Choose features:", feature_cols,
-                        default=feature_cols[:min(3, len(feature_cols))],
-                        key="sarimax_feat_select"
-                    )
-                    st.session_state["sarimax_use_all_features"] = False
-                    st.session_state["sarimax_features"] = selected_feats
-                elif exog_mode == "None (Univariate)":
-                    st.session_state["sarimax_use_all_features"] = False
-                    st.session_state["sarimax_features"] = []
-                else:  # Use All Features
-                    st.session_state["sarimax_use_all_features"] = True
-                    st.session_state["sarimax_features"] = []
-
-            # Show estimated training time
-            time_estimates = {"scenario1": "~1-2min", "manual": "~30s"}
-            st.info(f"Estimated training time: **{time_estimates.get(search_mode, '~1-2min')}**")
+            # Time estimate
+            time_est = "~30-60s" if mode.startswith("Automatic") else "~15-30s"
+            st.info(f"Estimated training time: **{time_est}**")
 
 
 
