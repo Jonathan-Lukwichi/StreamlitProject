@@ -5484,6 +5484,12 @@ def _train_hybrid_sarimax_xgboost(df: pd.DataFrame) -> dict:
     if X_val is None:
         return {"success": False, "error": "Validation features not found"}
 
+    # Ensure X_val is numeric (handle legacy data with timestamps)
+    try:
+        X_val = np.asarray(X_val, dtype=np.float64)
+    except (ValueError, TypeError) as e:
+        return {"success": False, "error": f"Features contain non-numeric data: {e}. Re-train the SARIMAX model."}
+
     results = {"per_h": {}, "success": True, "model_name": "SARIMAX → XGBoost"}
 
     # Train XGBoost on residuals for each horizon
