@@ -2200,187 +2200,71 @@ def page_benchmarks():
                         st.error(f"❌ ARIMA multi-horizon training failed: {e}")
 
         elif current_model == "SARIMAX":
-            # Retrieve configuration from session state
-            season_len = int(st.session_state.get("sarimax_season_length", 7))
-            horizons = int(st.session_state.get("sarimax_horizons", 7))
+            # Retrieve configuration from session state (NEW simplified version)
             order = st.session_state.get("sarimax_order")  # None for auto, (p,d,q) for manual
             seasonal_order = st.session_state.get("sarimax_seasonal_order")  # None for auto, (P,D,Q,m) for manual
-            search_mode = st.session_state.get("sarimax_search_mode", "fast")
+            use_auto = order is None
+            sarimax_h = int(st.session_state.get("sarimax_h", 7))
+            season_len = int(st.session_state.get("sarimax_season", 7))
+            use_exog = st.session_state.get("sarimax_use_exog", True)
 
-            # Get feature selection from session state (FIX: actually use UI selection)
-            use_all_features = st.session_state.get("sarimax_use_all_features", True)
-            selected_features = st.session_state.get("sarimax_features") or None
-
-            # Get search bounds for auto modes
-            bounds = st.session_state.get("sarimax_bounds", {})
-
-            # Pass search_mode directly - "manual" uses fixed orders, others trigger auto-search
-            pipeline_mode = search_mode
-
-            # Time estimates for display
-            time_estimates = {"scenario1": "~1-2min", "manual": "~30s"}
-            mode_desc = {"scenario1": "Scenario-1 (Thesis)", "manual": "Manual"}
-
-            if st.button("🚀 Train SARIMAX (Scenario-1)", use_container_width=True, type="primary", key="train_sarimax_btn"):
-                progress_placeholder = st.empty()
-                progress_placeholder.info(f"⏳ Training SARIMAX Scenario-1 (h=1..{horizons}) [{mode_desc.get(search_mode, 'Auto')}]... Expected: {time_estimates.get(search_mode, '~1-2min')}")
-
-                t0 = time.time()
-                try:
-                    # Determine target column (ED or Target_1)
-                    target_col = "ED" if "ED" in data.columns else "Target_1"
-
-                    # Call Scenario-1 pipeline (single model + rolling window)
-                    sarimax_out = run_sarimax_scenario1(
-                        df=data,
-                        date_col="Date",
-                        target_col=target_col,
-                        train_ratio=train_ratio,
-                        max_horizon=horizons,
-                        season_length=season_len,
-                        use_all_features=use_all_features,
-                        include_dow_ohe=True,
-                        selected_features=selected_features,
-                        mode=pipeline_mode,  # "scenario1" or "manual"
-                        order=order,
-                        seasonal_order=seasonal_order,
-                        max_p=bounds.get("max_p", 3),
-                        max_q=bounds.get("max_q", 3),
-                        max_P=bounds.get("max_P", 2),
-                        max_Q=bounds.get("max_Q", 2),
-                    )
-
-                    # Clear progress message
-                    progress_placeholder.empty()
-
-                    runtime_s = time.time() - t0
-                    st.session_state["sarimax_results"] = sarimax_out
-
-                    # Check for errors
-                    if sarimax_out.get("status") == "error":
-                        st.error(f"❌ SARIMAX training failed: {sarimax_out.get('message', 'Unknown error')}")
-                    else:
-                        st.success(f"✅ SARIMAX Scenario-1 trained in {runtime_s:.2f}s.")
-
-                        # ============================================================
-                        # SCENARIO-1 DIAGNOSTIC DISPLAY
-                        # ============================================================
-                        # Display differencing test results (Step 4.3)
-                        differencing = sarimax_out.get("differencing")
-                        if differencing is not None:
-                            with st.expander("📊 Step 4.3: Differencing Tests (ADF & Canova-Hansen)", expanded=True):
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.metric(
-                                        "d (Non-seasonal differencing)",
-                                        differencing.adf_d,
-                                        help="Determined by ADF test"
-                                    )
-                                    if np.isfinite(differencing.adf_pvalue):
-                                        adf_status = "✅ Stationary" if differencing.adf_pvalue < 0.05 else "⚠️ Non-stationary"
-                                        st.caption(f"ADF p-value: {differencing.adf_pvalue:.4f} ({adf_status})")
-                                with col2:
-                                    st.metric(
-                                        "D (Seasonal differencing)",
-                                        differencing.ch_D,
-                                        help="Determined by Canova-Hansen test"
-                                    )
-                                    st.caption("CH test: Seasonal stability check")
-
-                        # Display residual diagnostics (Step 4.4)
-                        diagnostics = sarimax_out.get("diagnostics")
-                        if diagnostics is not None:
-                            with st.expander("🔬 Step 4.4: Residual Diagnostics (White Noise & Normality)", expanded=True):
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    lb_color = "normal" if diagnostics.ljung_box_pvalue > 0.05 else "inverse"
-                                    st.metric(
-                                        "Ljung-Box Test",
-                                        f"p = {diagnostics.ljung_box_pvalue:.4f}" if np.isfinite(diagnostics.ljung_box_pvalue) else "N/A"
-                                    )
-                                    st.caption(diagnostics.ljung_box_interpretation)
-                                with col2:
-                                    st.metric(
-                                        "Jarque-Bera Normality",
-                                        f"p = {diagnostics.normality_pvalue:.4f}" if np.isfinite(diagnostics.normality_pvalue) else "N/A"
-                                    )
-                                    st.caption(diagnostics.normality_interpretation)
-
-                                st.markdown("**Residual Statistics**")
-                                res_cols = st.columns(4)
-                                with res_cols[0]:
-                                    st.metric("Mean", f"{diagnostics.residual_mean:.4f}" if np.isfinite(diagnostics.residual_mean) else "N/A")
-                                with res_cols[1]:
-                                    st.metric("Std Dev", f"{diagnostics.residual_std:.4f}" if np.isfinite(diagnostics.residual_std) else "N/A")
-                                with res_cols[2]:
-                                    st.metric("Skewness", f"{diagnostics.residual_skewness:.4f}" if np.isfinite(diagnostics.residual_skewness) else "N/A")
-                                with res_cols[3]:
-                                    st.metric("Kurtosis", f"{diagnostics.residual_kurtosis:.4f}" if np.isfinite(diagnostics.residual_kurtosis) else "N/A")
+            if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
+                with st.spinner(f"Training SARIMAX multi-horizon (h=1..{sarimax_h})..."):
+                    t0 = time.time()
+                    try:
+                        # Call NEW fast multi-horizon pipeline (matches ARIMA pattern)
+                        sarimax_mh_out = run_sarimax_multihorizon_v2(
+                            df=data,
+                            date_col="Date",
+                            horizons=int(sarimax_h),
+                            train_ratio=train_ratio,
+                            order=order,
+                            seasonal_order=seasonal_order,
+                            auto_select=use_auto,
+                            season_length=season_len,
+                            use_exog=use_exog,
+                        )
+                        runtime_s = time.time() - t0
+                        st.session_state["sarimax_results"] = sarimax_mh_out
+                        st.success(f"✅ SARIMAX multi-horizon training completed in {runtime_s:.2f}s!")
 
                         # Display selected model order
-                        order_display = sarimax_out.get("order")
-                        sorder_display = sarimax_out.get("seasonal_order")
+                        order_display = sarimax_mh_out.get("order")
+                        sorder_display = sarimax_mh_out.get("seasonal_order")
                         if order_display and sorder_display:
                             st.info(f"📊 **Selected SARIMAX Order**: ({order_display[0]},{order_display[1]},{order_display[2]})({sorder_display[0]},{sorder_display[1]},{sorder_display[2]})[{sorder_display[3]}]")
 
-                    # Capture residuals for hybrid model use (Stage 1 → Stage 2)
-                    if _store_sarimax_residuals(sarimax_out, data, train_ratio):
-                        st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
+                        # Get results DataFrame
+                        res_df = sarimax_mh_out.get("results_df")
+                        if res_df is not None and not res_df.empty:
+                            res_df = _sanitize_metrics_df(res_df)
+                            best_idx = res_df["Test_Acc"].idxmax() if "Test_Acc" in res_df.columns else res_df.index[0]
+                            best_row = res_df.loc[best_idx]
+                            kpis = {
+                                "MAE": _safe_float(best_row.get("Test_MAE")),
+                                "RMSE": _safe_float(best_row.get("Test_RMSE")),
+                                "MAPE": _safe_float(best_row.get("Test_MAPE")),
+                                "Accuracy": _safe_float(best_row.get("Test_Acc")),
+                            }
+                            order_str = str(sarimax_mh_out.get("order", "auto"))
+                            seas_str = str(sarimax_mh_out.get("seasonal_order", "auto"))
+                            model_params = f"order={order_str}; seasonal={seas_str}; s={season_len}; H={sarimax_h}; exog={'YES' if use_exog else 'NO'}"
+                            _append_to_comparison(
+                                model_name=f"SARIMAX (best h={int(best_row.get('Horizon', 1))})",
+                                train_ratio=train_ratio,
+                                kpis=kpis,
+                                model_params=model_params,
+                                runtime_s=runtime_s
+                            )
 
-                    # Multihorizon returns results_df with Test_* columns
-                    # Note: Cannot use `or` operator on DataFrames - causes ambiguity error
-                    res_df = sarimax_out.get("results_df")
-                    if res_df is None:
-                        res_df = sarimax_out.get("metrics_df")
-                    if res_df is not None and not res_df.empty:
-                        res_df = _sanitize_metrics_df(res_df)
-                        # Find best horizon by Test_Acc (multihorizon format) or Accuracy_% (legacy)
-                        acc_col = "Test_Acc" if "Test_Acc" in res_df.columns else ("Accuracy_%" if "Accuracy_%" in res_df.columns else None)
-                        if acc_col and res_df[acc_col].notna().any():
-                            # Exclude "Average" row when finding best
-                            non_avg = res_df[~res_df["Horizon"].astype(str).str.contains("Average", case=False, na=False)]
-                            if not non_avg.empty:
-                                best_idx = non_avg[acc_col].idxmax()
-                            else:
-                                best_idx = res_df.index[0]
-                        else:
-                            best_idx = res_df.index[0]
-                        best_row = res_df.loc[best_idx]
-                        kpis = {
-                            "MAE": _safe_float(best_row.get("Test_MAE") or best_row.get("MAE")),
-                            "RMSE": _safe_float(best_row.get("Test_RMSE") or best_row.get("RMSE")),
-                            "MAPE": _safe_float(best_row.get("Test_MAPE") or best_row.get("MAPE_%")),
-                            "Accuracy": _safe_float(best_row.get("Test_Acc") or best_row.get("Accuracy_%")),
-                        }
-                        order_str = str(sarimax_out.get("order", "auto"))
-                        seas_str = str(sarimax_out.get("seasonal_order", "auto"))
-
-                        # Build feature description from session state
-                        if use_all_features:
-                            feats_str = "ALL"
-                        elif selected_features:
-                            feats_str = ",".join(selected_features[:3])
-                            if len(selected_features) > 3:
-                                feats_str += f"...+{len(selected_features)-3}"
-                        else:
-                            feats_str = "NONE"
-
-                        # Extract horizon number from format like "h=1" or just "1"
-                        hor_val = str(best_row.get('Horizon', '1'))
-                        hor_num = ''.join(filter(str.isdigit, hor_val)) or '1'
-                        model_params = f"mode={search_mode}; order={order_str}; seasonal={seas_str}; s={season_len}; H={horizons}; X={feats_str}"
-                        _append_to_comparison(
-                            model_name=f"SARIMAX (best h={hor_num})",
-                            train_ratio=train_ratio,
-                            kpis=kpis,
-                            model_params=model_params,
-                            runtime_s=runtime_s
-                        )
+                        # Capture residuals for hybrid model use (Stage 1 → Stage 2)
+                        if _store_sarimax_residuals(sarimax_mh_out, data, train_ratio):
+                            st.info("📊 SARIMAX residuals captured (ready for hybrid models)")
 
                         # ============================================================
                         # APPLY SEASONAL PROPORTIONS
                         # ============================================================
-                        if st.session_state.get("enable_seasonal_proportions", True):  # Default=True matches UI
+                        if st.session_state.get("enable_seasonal_proportions", True):
                             try:
                                 from app_core.analytics.seasonal_proportions import (
                                     calculate_seasonal_proportions,
@@ -2391,48 +2275,32 @@ def page_benchmarks():
                                     sp_config = st.session_state.get("seasonal_proportions_config")
                                     sp_result = calculate_seasonal_proportions(data, sp_config, date_col="Date")
 
-                                    # Extract forecast - handle both baseline format (F matrix) and per_h format
-                                    forecast_series = None
-                                    best_h_str = str(best_row.get('Horizon', '1'))
-                                    best_h = int(''.join(filter(str.isdigit, best_h_str)) or '1')
+                                    # Extract forecast from per_h structure
+                                    best_h = int(best_row.get('Horizon', 7))
+                                    if 'per_h' in sarimax_mh_out and best_h in sarimax_mh_out['per_h']:
+                                        forecast_series = sarimax_mh_out['per_h'][best_h].get('forecast')
 
-                                    if 'F' in sarimax_out and sarimax_out['F'] is not None:
-                                        # Baseline format - extract from F matrix
-                                        F_mat = sarimax_out['F']
-                                        test_eval_df = sarimax_out.get('test_eval')
-                                        h_idx = min(best_h - 1, F_mat.shape[1] - 1)  # 0-indexed
-                                        if test_eval_df is not None:
-                                            forecast_series = pd.Series(F_mat[:, h_idx], index=test_eval_df.index)
-                                    elif 'per_h' in sarimax_out and best_h in sarimax_out['per_h']:
-                                        # Old per_h format
-                                        forecast_series = sarimax_out['per_h'][best_h].get('forecast')
-
-                                    if forecast_series is not None and len(forecast_series) > 0:
-                                            # forecast_series should already be a pandas Series with dates
+                                        if forecast_series is not None and len(forecast_series) > 0:
                                             if not isinstance(forecast_series, pd.Series):
-                                                # Convert to Series if needed
                                                 last_date = pd.to_datetime(data['Date'].max())
                                                 forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(forecast_series), freq='D')
                                                 forecast_series = pd.Series(forecast_series, index=forecast_dates)
 
-                                            # Distribute forecast to categories
                                             category_forecasts = distribute_forecast_to_categories(
                                                 forecast_series,
                                                 sp_result.dow_proportions,
                                                 sp_result.monthly_proportions
                                             )
-
                                             sp_result.category_forecasts = category_forecasts
 
-                                    # Store results
                                     st.session_state["seasonal_proportions_result"] = sp_result
                                     st.success(f"✅ Seasonal proportions calculated and applied!")
 
                             except Exception as e:
                                 st.warning(f"⚠️ Seasonal proportions calculation failed: {e}")
 
-                except Exception as e:
-                    st.error(f"❌ SARIMAX training failed: {e}")
+                    except Exception as e:
+                        st.error(f"❌ SARIMAX multi-horizon training failed: {e}")
 
     # ------------------------------------------------------------
     # 📊 Results — Unified Template (SARIMAX-style artifacts for both)
