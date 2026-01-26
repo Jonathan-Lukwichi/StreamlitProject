@@ -641,9 +641,22 @@ def _scenario1_forecast_and_evaluate(
             try:
                 new_obs = y_test_arr[t:t+1]  # Single observation
                 new_exog = X_test_arr[t:t+1] if X_test_arr is not None else None
+                # Try append() first (statsmodels >= 0.12)
                 current_model = current_model.append(endog=new_obs, exog=new_exog, refit=False)
+            except AttributeError:
+                # Fallback for older statsmodels: use apply() with extended data
+                try:
+                    extended_y = np.concatenate([y_train.values, y_test_arr[:t+1]])
+                    extended_X = None
+                    if X_test_arr is not None:
+                        X_train_arr = X_train.values.astype(np.float64)
+                        extended_X = np.concatenate([X_train_arr, X_test_arr[:t+1]])
+                    current_model = fitted_model.apply(endog=extended_y, exog=extended_X, refit=False)
+                except Exception:
+                    # Last resort: continue without advancing (will produce degraded results)
+                    pass
             except Exception:
-                # If append fails, continue with current model (degraded but functional)
+                # Other errors: continue without advancing
                 pass
 
     # Build test_eval DataFrame with actual values for each horizon
