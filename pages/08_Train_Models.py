@@ -5296,7 +5296,9 @@ def _build_all_hybrids(build_lstm_xgb: bool, build_sarimax_xgb: bool, build_lstm
 
     # Get feature data
     fe = st.session_state.get("feature_engineering", {})
-    df = fe.get("A") or fe.get("B")
+    # Note: Cannot use `or` with DataFrames - pandas raises ValueError
+    df_a = fe.get("A")
+    df = df_a if df_a is not None else fe.get("B")
 
     if df is None or df.empty:
         st.error("❌ No feature-engineered data found. Run Feature Studio first.")
