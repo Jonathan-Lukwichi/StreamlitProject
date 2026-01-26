@@ -2023,29 +2023,29 @@ def page_benchmarks():
             training_mode = st.radio(
                 "Select Training Mode",
                 [
-                    "Fast (~30s) - Quick parameter search",
-                    "Balanced (~2min) - AIC-based stepwise",
-                    "Accuracy (~5min) - RMSE-optimized CV",
+                    "Scenario-1 (Thesis) - Single Model + Statistical Tests",
                     "Manual - Specify all parameters"
                 ],
-                index=0,  # Default to Fast
+                index=0,  # Default to Scenario-1
                 horizontal=False,
                 key="sarimax_training_mode",
                 help="""
-                - **Fast**: Tests 3 pre-selected parameter sets. Best for quick prototyping.
-                - **Balanced**: Uses pmdarima stepwise search (AIC criterion). Good balance.
-                - **Accuracy**: Cross-validation optimized for lowest RMSE. Best accuracy but slower.
-                - **Manual**: You specify exact (p,d,q)(P,D,Q,m) parameters. Instant training.
+                **Scenario-1 (Thesis)**: Academic methodology following Box-Jenkins approach:
+                - Step 4.3: ADF test for d, Canova-Hansen test for D
+                - Step 4.2: AIC-based p/q/P/Q search with fixed d/D
+                - Step 4.4: Ljung-Box white noise check, Jarque-Bera normality test
+                - Step 4.5: Comprehensive metrics (MAE, RMSE, MAPE, residual stats)
+                - Step 4.6: Single model with rolling window forecast
+
+                **Manual**: You specify exact (p,d,q)(P,D,Q,m) parameters.
                 """
             )
 
             mode_mapping = {
-                "Fast (~30s) - Quick parameter search": "fast",
-                "Balanced (~2min) - AIC-based stepwise": "aic_only",
-                "Accuracy (~5min) - RMSE-optimized CV": "rmse_only",
+                "Scenario-1 (Thesis) - Single Model + Statistical Tests": "scenario1",
                 "Manual - Specify all parameters": "manual"
             }
-            search_mode = mode_mapping.get(training_mode, "fast")
+            search_mode = mode_mapping.get(training_mode, "scenario1")
             st.session_state["sarimax_search_mode"] = search_mode
             is_manual_mode = (search_mode == "manual")
 
