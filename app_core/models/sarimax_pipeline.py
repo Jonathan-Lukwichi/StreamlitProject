@@ -1128,6 +1128,240 @@ def run_sarimax_multihorizon(
 
 
 # ===========================================
+# SARIMAX Fast Manual Mode (Fit Once, Forecast All)
+# ===========================================
+def run_sarimax_multihorizon_fast(
+    df_merged: pd.DataFrame,
+    date_col: str = "Date",
+    train_ratio: float = 0.80,
+    season_length: int = 7,
+    horizons: int = 7,
+    order: Tuple[int, int, int] = (1, 1, 1),
+    seasonal_order: Tuple[int, int, int, int] = (1, 1, 0, 7),
+    use_all_features: bool = False,
+    include_dow_ohe: bool = True,
+    selected_features: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    FAST Manual SARIMAX: Fits ONE model, forecasts H steps ahead.
+
+    Instead of fitting 7 separate models (one per horizon), this fits a single
+    model on Target_1 and uses multi-step forecasting to predict all horizons.
+
+    ~7-10x faster than run_sarimax_multihorizon() for manual mode.
+
+    Args:
+        df_merged: DataFrame with Date and Target_1 columns
+        date_col: Name of date column
+        train_ratio: Fraction of data for training
+        season_length: Seasonal period (default 7 for weekly)
+        horizons: Number of forecast horizons (default 7)
+        order: ARIMA order (p,d,q) - REQUIRED for fast mode
+        seasonal_order: Seasonal order (P,D,Q,m) - REQUIRED for fast mode
+        use_all_features: Use all available features as exogenous (default False for speed)
+        include_dow_ohe: Include day-of-week one-hot encoding
+        selected_features: Specific features to use
+
+    Returns:
+        Dict with same structure as run_sarimax_multihorizon():
+        - results_df: DataFrame with per-horizon metrics
+        - per_h: Dict mapping h -> {y_train, y_test, forecast, ci_lo, ci_hi, ...}
+        - successful: List of successful horizons
+        - order: Tuple of ARIMA order used
+        - seasonal_order: Tuple of seasonal order used
+    """
+    print(f"[SARIMAX Fast] Manual mode: Fit once, forecast all horizons")
+    print(f"[SARIMAX Fast] Parameters: order={order}, seasonal_order={seasonal_order}")
+
+    # ========== 1. Data Preparation ==========
+    df_full = _clean_daily(df_merged, date_col)
+
+    # Use Target_1 as base target (today's arrivals / 1-day ahead)
+    target_col = "Target_1"
+    if target_col not in df_full.columns:
+        raise ValueError(f"Target column '{target_col}' not found. Fast mode requires Target_1.")
+
+    y = df_full.set_index(date_col)[target_col].astype(float)
+    y = y.interpolate("linear").ffill().bfill()
+
+    if len(y) < 50:
+        raise ValueError(f"Insufficient data for SARIMAX fast mode (need >= 50, got {len(y)})")
+
+    # ========== 2. Build Exogenous Features ==========
+    if use_all_features:
+        X_all = _exog_all(
+            df_full=df_full,
+            date_col=date_col,
+            target_cols=[target_col],
+            include_dow_ohe=include_dow_ohe,
+            selected_features=selected_features,
+        )
+    else:
+        X_all = _exog_calendar(df_full[date_col], include_dow_ohe=include_dow_ohe)
+    X_all.index = y.index
+    X_all = X_all.fillna(0).astype(np.float64)
+
+    # ========== 3. Train/Test Split ==========
+    n = len(y)
+    split = int(n * train_ratio)
+    split = max(24, min(n - horizons, split))
+
+    y_tr, y_te = y.iloc[:split], y.iloc[split:]
+    X_tr, X_te = X_all.iloc[:split].copy(), X_all.iloc[split:].copy()
+
+    # Scale features for numerical stability
+    if X_tr.shape[1] > 0:
+        scaler = StandardScaler()
+        X_tr = pd.DataFrame(
+            scaler.fit_transform(X_tr),
+            index=X_tr.index,
+            columns=X_tr.columns
+        )
+        X_te = pd.DataFrame(
+            scaler.transform(X_te),
+            index=X_te.index,
+            columns=X_te.columns
+        )
+
+    # Convert to numpy arrays
+    y_tr_arr, X_tr_arr = _prepare_sarimax_input(y_tr, X_tr)
+    _, X_te_arr = _prepare_sarimax_input(y_te, X_te)
+
+    # ========== 4. FIT ONCE ==========
+    model = SARIMAX(
+        endog=y_tr_arr,
+        exog=X_tr_arr,
+        order=order,
+        seasonal_order=seasonal_order,
+        enforce_stationarity=False,
+        enforce_invertibility=False,
+    )
+
+    # Fast fit settings for manual mode
+    fit = model.fit(
+        disp=False,
+        method='lbfgs',
+        maxiter=50,
+        low_memory=True
+    )
+
+    # In-sample fitted values for training metrics
+    fitted_train = pd.Series(fit.fittedvalues, index=y_tr.index)
+
+    # ========== 5. FORECAST ALL HORIZONS AT ONCE ==========
+    fc = fit.get_forecast(steps=len(y_te), exog=X_te_arr)
+    forecast_mean = fc.predicted_mean
+    ci = fc.conf_int(alpha=0.05)
+
+    # Convert to pandas for easier handling
+    forecast_mean = pd.Series(forecast_mean, index=y_te.index)
+    ci = pd.DataFrame(ci, index=y_te.index)
+
+    # ========== 6. Build Results for Each Horizon ==========
+    rows = []
+    per_h = {}
+    ok = []
+
+    # Training metrics (same for all horizons since single model)
+    tr_mae = float(mean_absolute_error(y_tr, fitted_train))
+    tr_rmse = _rmse(y_tr, fitted_train)
+    tr_mape = float(_mape(y_tr, fitted_train))
+    tr_mape = min(100.0, tr_mape) if np.isfinite(tr_mape) else 100.0
+    tr_acc = max(0.0, min(100.0, 100.0 - tr_mape))
+    try:
+        tr_r2 = float(r2_score(y_tr, fitted_train))
+    except Exception:
+        tr_r2 = float("nan")
+
+    for h in range(1, min(horizons + 1, len(y_te) + 1)):
+        # For horizon h, compare forecast starting at position (h-1) with actuals
+        # This simulates "h days ahead" prediction
+        h_offset = h - 1
+
+        if h_offset >= len(forecast_mean):
+            continue
+
+        # Get forecast and actuals for this horizon
+        # Shift both to align: forecast[h-1:] vs actual[h-1:]
+        fc_h = forecast_mean.iloc[h_offset:].values
+        actual_h = y_te.iloc[h_offset:].values
+        ci_lo_h = ci.iloc[h_offset:, 0].values
+        ci_hi_h = ci.iloc[h_offset:, 1].values
+        dates_h = y_te.index[h_offset:]
+
+        # Ensure same length
+        min_len = min(len(fc_h), len(actual_h))
+        if min_len == 0:
+            continue
+
+        fc_h = fc_h[:min_len]
+        actual_h = actual_h[:min_len]
+        ci_lo_h = ci_lo_h[:min_len]
+        ci_hi_h = ci_hi_h[:min_len]
+        dates_h = dates_h[:min_len]
+
+        # Calculate test metrics for this horizon
+        te_mae = float(np.mean(np.abs(actual_h - fc_h)))
+        te_rmse = float(np.sqrt(np.mean((actual_h - fc_h) ** 2)))
+        te_mape = float(_mape(actual_h, fc_h))
+        te_mape = min(100.0, te_mape) if np.isfinite(te_mape) else 100.0
+        te_acc = max(0.0, min(100.0, 100.0 - te_mape))
+
+        try:
+            te_r2 = float(r2_score(actual_h, fc_h))
+        except Exception:
+            te_r2 = float("nan")
+
+        # Additional metrics
+        bias = float(np.mean(fc_h - actual_h))
+        dacc = _dir_acc(actual_h, fc_h)
+        abs_err = np.abs(fc_h - actual_h)
+        within2 = float(np.mean(abs_err <= 2) * 100.0)
+        within5 = float(np.mean(abs_err <= 5) * 100.0)
+        cicov = float(np.mean((actual_h >= ci_lo_h) & (actual_h <= ci_hi_h)) * 100.0)
+
+        rows.append({
+            "Horizon": h,
+            "Order": f"{order}x{seasonal_order}",
+            "AIC": float(fit.aic),
+            "BIC": float(fit.bic),
+            "Train_MAE": tr_mae, "Train_RMSE": tr_rmse, "Train_MAPE": tr_mape, "Train_Acc": tr_acc, "Train_R2": tr_r2,
+            "Test_MAE": te_mae, "Test_RMSE": te_rmse, "Test_MAPE": te_mape, "Test_Acc": te_acc, "Test_R2": te_r2,
+            "Bias": bias, "DirAcc": dacc, "Within+/-2": within2, "Within+/-5": within5, "CIcov%": cicov,
+            "Train_N": int(len(y_tr)), "Test_N": int(min_len),
+        })
+
+        per_h[h] = {
+            "fit": fit,
+            "res": fit,
+            "y_train": y_tr,
+            "y_test": pd.Series(actual_h, index=dates_h),
+            "fitted": fitted_train,
+            "forecast": pd.Series(fc_h, index=dates_h),
+            "ci_lo": pd.Series(ci_lo_h, index=dates_h),
+            "ci_hi": pd.Series(ci_hi_h, index=dates_h),
+            "order": order,
+            "sorder": seasonal_order,
+        }
+        ok.append(h)
+
+    if not ok:
+        raise RuntimeError("SARIMAX fast: could not compute any horizon results")
+
+    results_df = pd.DataFrame(rows).sort_values("Horizon").reset_index(drop=True)
+
+    print(f"[SARIMAX Fast] Completed: {len(ok)} horizons, Train={len(y_tr)}, Test={len(y_te)}")
+
+    return {
+        "results_df": results_df,
+        "per_h": per_h,
+        "successful": ok,
+        "order": order,
+        "seasonal_order": seasonal_order,
+    }
+
+
+# ===========================================
 # SARIMAX Baseline Pipeline (Expanding Window)
 # ===========================================
 def run_sarimax_baseline_pipeline(
