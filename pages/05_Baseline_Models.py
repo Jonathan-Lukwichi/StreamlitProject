@@ -2310,61 +2310,37 @@ def page_benchmarks():
             pipeline_mode = search_mode
 
             # Time estimates for display
-            time_estimates = {"fast": "~30s", "aic_only": "~2min", "rmse_only": "~5min", "manual": "instant"}
-            mode_desc = {"fast": "Fast", "aic_only": "Balanced (AIC)", "rmse_only": "Accuracy (RMSE)", "manual": "Manual"}
+            time_estimates = {"scenario1": "~1-2min", "manual": "~30s"}
+            mode_desc = {"scenario1": "Scenario-1 (Thesis)", "manual": "Manual"}
 
-            if st.button("🚀 Train SARIMAX (multi-horizon)", use_container_width=True, type="primary", key="train_sarimax_btn"):
+            if st.button("🚀 Train SARIMAX (Scenario-1)", use_container_width=True, type="primary", key="train_sarimax_btn"):
                 progress_placeholder = st.empty()
-                progress_placeholder.info(f"⏳ Training SARIMAX multi-horizon (h=1..{horizons}) [{mode_desc.get(search_mode, 'Auto')}]... Expected: {time_estimates.get(search_mode, '~2min')}")
+                progress_placeholder.info(f"⏳ Training SARIMAX Scenario-1 (h=1..{horizons}) [{mode_desc.get(search_mode, 'Auto')}]... Expected: {time_estimates.get(search_mode, '~1-2min')}")
 
                 t0 = time.time()
                 try:
-                    # Check if Manual mode with both parameters provided
-                    # Use fast single-model approach (~7-10x faster)
-                    if search_mode == "manual" and order is not None and seasonal_order is not None:
-                        # FAST: Fit ONE model, forecast all horizons at once
-                        sarimax_out = run_sarimax_multihorizon_fast(
-                            df_merged=data,
-                            date_col="Date",
-                            train_ratio=train_ratio,
-                            season_length=season_len,
-                            horizons=horizons,
-                            order=order,
-                            seasonal_order=seasonal_order,
-                            use_all_features=use_all_features,
-                            include_dow_ohe=True,
-                            selected_features=selected_features,
-                        )
-                    else:
-                        # STANDARD: Fit separate model per horizon (for auto parameter search)
-                        # This matches how ML models (XGBoost, LSTM) are evaluated
-                        # for fair apples-to-apples thesis comparison
-                        kwargs = dict(
-                            df_merged=data,
-                            date_col="Date",
-                            target_cols=None,                  # None = auto-detect Target_1..Target_H
-                            train_ratio=train_ratio,
-                            season_length=season_len,
-                            horizons=horizons,
-                            # Feature options
-                            use_all_features=use_all_features,
-                            include_dow_ohe=True,
-                            selected_features=selected_features,
-                            # Search mode
-                            search_mode=pipeline_mode,
-                            # Pass manual orders (None for auto modes)
-                            order=order,
-                            seasonal_order=seasonal_order,
-                            # Pass search bounds
-                            max_p=bounds.get("max_p", 3),
-                            max_q=bounds.get("max_q", 3),
-                            max_d=bounds.get("max_d", 2),
-                            max_P=bounds.get("max_P", 2),
-                            max_Q=bounds.get("max_Q", 2),
-                            max_D=bounds.get("max_D", 1),
-                            n_folds=bounds.get("n_folds", 3),
-                        )
-                        sarimax_out = run_sarimax_multihorizon(**kwargs)
+                    # Determine target column (ED or Target_1)
+                    target_col = "ED" if "ED" in data.columns else "Target_1"
+
+                    # Call Scenario-1 pipeline (single model + rolling window)
+                    sarimax_out = run_sarimax_scenario1(
+                        df=data,
+                        date_col="Date",
+                        target_col=target_col,
+                        train_ratio=train_ratio,
+                        max_horizon=horizons,
+                        season_length=season_len,
+                        use_all_features=use_all_features,
+                        include_dow_ohe=True,
+                        selected_features=selected_features,
+                        mode=pipeline_mode,  # "scenario1" or "manual"
+                        order=order,
+                        seasonal_order=seasonal_order,
+                        max_p=bounds.get("max_p", 3),
+                        max_q=bounds.get("max_q", 3),
+                        max_P=bounds.get("max_P", 2),
+                        max_Q=bounds.get("max_Q", 2),
+                    )
 
                     # Clear progress message
                     progress_placeholder.empty()
