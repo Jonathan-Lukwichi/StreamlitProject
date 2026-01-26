@@ -2124,15 +2124,9 @@ def page_benchmarks():
                     with bc6:
                         max_Q = st.slider("max_Q", 1, 3, 2, key="sarimax_max_Q")
 
-                    n_folds = 3
-                    if search_mode in ["rmse_only", "hybrid"]:
-                        n_folds = st.slider("CV Folds", 2, 5, 3, key="sarimax_n_folds",
-                                           help="More folds = more robust but slower")
-
                     st.session_state["sarimax_bounds"] = {
                         "max_p": max_p, "max_d": max_d, "max_q": max_q,
                         "max_P": max_P, "max_D": max_D, "max_Q": max_Q,
-                        "n_folds": n_folds
                     }
 
                 if "sarimax_bounds" not in st.session_state:
