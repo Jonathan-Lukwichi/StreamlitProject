@@ -2132,7 +2132,7 @@ def page_benchmarks():
                 if "sarimax_bounds" not in st.session_state:
                     st.session_state["sarimax_bounds"] = {
                         "max_p": 3, "max_d": 2, "max_q": 3,
-                        "max_P": 2, "max_D": 1, "max_Q": 2, "n_folds": 3
+                        "max_P": 2, "max_D": 1, "max_Q": 2,
                     }
 
             st.markdown("---")
