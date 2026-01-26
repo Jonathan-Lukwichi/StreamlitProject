@@ -2544,7 +2544,8 @@ def run_sarimax_scenario1(
 
         # ==================== STEP 4.5 & 4.6: Forecast & Evaluate ====================
         F, L, U, test_eval, metrics_df = _scenario1_forecast_and_evaluate(
-            fitted, y_train, y_test, X_train, X_test, max_horizon
+            fitted, y_train, y_test, X_train, X_test, max_horizon,
+            order=use_order, seasonal_order=use_sorder
         )
 
         # Compute aggregate metrics for reporting
