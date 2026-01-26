@@ -1245,7 +1245,20 @@ def run_sarimax_baseline_pipeline(
     y_tr_init = pd.Series(y[:train_size], index=dates[:train_size])
     X_tr_init = X_all.iloc[:train_size].copy().astype(np.float64)
 
-    if order is None or seasonal_order is None:
+    # CASE 1: Manual mode - user provided both order and seasonal_order
+    if order is not None and seasonal_order is not None:
+        use_order, use_sorder = order, seasonal_order
+        print(f"[SARIMAX Baseline] Manual mode: using order={order}, seasonal_order={seasonal_order}")
+
+    # CASE 2: search_mode="manual" but parameters missing - raise error
+    elif search_mode == "manual":
+        raise ValueError(
+            f"Manual mode selected but order and/or seasonal_order not provided. "
+            f"Got order={order}, seasonal_order={seasonal_order}."
+        )
+
+    # CASE 3: Auto search
+    else:
         if search_mode == "fast":
             ord_auto, sord_auto, aic_auto, bic_auto = _auto_order_fast(
                 y_tr_init, X_tr_init if X_tr_init.shape[1] > 0 else None, m=season_length
@@ -1272,8 +1285,7 @@ def run_sarimax_baseline_pipeline(
             )
         use_order = order if order is not None else ord_auto
         use_sorder = seasonal_order if seasonal_order is not None else sord_auto
-    else:
-        use_order, use_sorder = order, seasonal_order
+        print(f"[SARIMAX Baseline] Auto search ({search_mode}): selected order={use_order}, seasonal_order={use_sorder}")
 
     # ========== 5. Build F, L, U Matrices (Expanding Window) ==========
     forecast_start_index = train_size
