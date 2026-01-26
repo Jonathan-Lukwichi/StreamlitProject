@@ -2073,13 +2073,12 @@ def page_benchmarks():
                 st.info(f"📊 SARIMAX Order: ({p},{d},{q})({P},{D},{Q})[{int(season_length)}]")
 
             # Simple exogenous features toggle
-            use_exog = st.checkbox(
+            st.checkbox(
                 "Use Calendar Features (Day-of-Week, Weekend, Yearly Cycles)",
                 value=True,
                 key="sarimax_use_exog",
                 help="Include day-of-week dummies, weekend flag, and yearly sin/cos cycles as exogenous variables"
             )
-            st.session_state["sarimax_use_exog"] = use_exog
 
             # Time estimate
             time_est = "~30-60s" if mode.startswith("Automatic") else "~15-30s"
