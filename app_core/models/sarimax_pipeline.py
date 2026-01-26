@@ -1023,15 +1023,19 @@ def run_sarimax_multihorizon(
         y_tr_arr, X_tr_arr = _prepare_sarimax_input(y_tr, X_tr)
         _, X_te_arr = _prepare_sarimax_input(y_te, X_te)
 
-        # Fit model
-        fit = SARIMAX(
+        # Fit model with optimized solver settings for speed
+        # - method='powell': Often faster than default 'lbfgs' for SARIMAX
+        # - maxiter=50: Sufficient for convergence, prevents over-iteration
+        # - low_memory=True: Reduces memory footprint for large datasets
+        model = SARIMAX(
             endog=y_tr_arr,
             exog=X_tr_arr,
             order=use_order,
             seasonal_order=use_sorder,
             enforce_stationarity=False,
             enforce_invertibility=False,
-        ).fit(disp=False)
+        )
+        fit = model.fit(disp=False, method='powell', maxiter=50, low_memory=True)
 
         # In-sample fit
         fitted = pd.Series(fit.fittedvalues, index=y_tr.index)
