@@ -12,6 +12,7 @@ import pandas as pd
 
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
 
 # Optional auto-order (pmdarima). If absent, we fall back to safe defaults.
 try:
