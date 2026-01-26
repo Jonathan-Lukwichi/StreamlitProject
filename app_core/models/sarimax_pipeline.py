@@ -2534,7 +2534,7 @@ def run_sarimax_scenario1(
             enforce_stationarity=False,
             enforce_invertibility=False,
         )
-        fitted = model.fit(disp=False, maxiter=100)
+        fitted = model.fit(disp=False, maxiter=50)  # Reduced for faster baseline
 
         # ==================== STEP 4.4: Residual Diagnostics ====================
         diagnostics = _run_residual_diagnostics(
