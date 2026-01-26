@@ -552,26 +552,29 @@ def _scenario1_forecast_and_evaluate(
     X_train: pd.DataFrame,
     X_test: pd.DataFrame,
     max_horizon: int = 7,
+    order: Optional[Tuple[int, int, int]] = None,
+    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, pd.DataFrame, pd.DataFrame]:
     """
-    Step 4.5 & 4.6: Rolling window forecast with proper model state extension.
+    Simple expanding window forecast (like ARIMA baseline).
 
-    This implements TRUE rolling window forecasting:
-    - Single model (fitted once on training data)
-    - For each origin t, EXTEND the model's history to include test[0:t]
-    - Then forecast H steps ahead from that extended state
+    This is a FAST baseline approach matching run_arima_multi_horizon_pipeline():
+    - For each test point t, refit model on train + test[0:t]
+    - Forecast H steps ahead
+    - Store in F matrix
 
-    CRITICAL: Unlike the buggy version that called get_forecast() repeatedly
-    without extending the model, this properly advances the forecast origin
-    by using .append() to incorporate new observations.
+    This is much faster than rolling window with .append() and provides
+    fair comparison with ML models.
 
     Args:
-        fitted_model: Fitted SARIMAX model
+        fitted_model: Initially fitted SARIMAX model (used for fallback params)
         y_train: Training target series
         y_test: Test target series
         X_train: Training exogenous features
         X_test: Test exogenous features
         max_horizon: Maximum forecast horizon (default 7)
+        order: SARIMAX order (p, d, q) for refitting
+        seasonal_order: SARIMAX seasonal order (P, D, Q, m) for refitting
 
     Returns:
         F: Forecast matrix [n_origins x H]
@@ -597,27 +600,37 @@ def _scenario1_forecast_and_evaluate(
     y_mean = float(y_train.mean())
     y_std = float(y_train.std())
 
-    # Convert test data to arrays for efficient slicing
-    y_test_arr = y_test.values.astype(np.float64)
-    X_test_arr = X_test.values.astype(np.float64) if X_test is not None and len(X_test.columns) > 0 else None
+    # Combine train + test for expanding window
+    y_all = pd.concat([y_train, y_test])
+    X_all = pd.concat([X_train, X_test]) if X_train is not None and len(X_train.columns) > 0 else None
 
-    # Current model state (will be extended as we roll forward)
-    current_model = fitted_model
+    train_size = len(y_train)
 
-    # Rolling window forecast with proper state extension
+    # Expanding window forecast (like ARIMA baseline)
     for t in range(n_origins):
-        # Get exogenous features for forecast period [t : t+H]
-        future_start = t
-        future_end = t + H
+        # Expanding window: train on data up to current point
+        current_end = train_size + t
+        y_current = y_all.iloc[:current_end].values.astype(np.float64)
+        X_current = X_all.iloc[:current_end].values.astype(np.float64) if X_all is not None else None
 
-        if future_end > n_test:
-            continue
-
-        X_future = X_test_arr[future_start:future_end] if X_test_arr is not None else None
+        # Exog for forecast period
+        future_end = current_end + H
+        X_future = X_all.iloc[current_end:future_end].values.astype(np.float64) if X_all is not None else None
 
         try:
-            # Forecast H steps ahead from CURRENT model state
-            fc = current_model.get_forecast(steps=H, exog=X_future)
+            # Refit model with expanded data (fast with fixed order)
+            model = SARIMAX(
+                endog=y_current,
+                exog=X_current,
+                order=order,
+                seasonal_order=seasonal_order,
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            )
+            fit = model.fit(disp=False, maxiter=50)
+
+            # Forecast H steps
+            fc = fit.get_forecast(steps=H, exog=X_future)
             F[t, :] = fc.predicted_mean
 
             # Get confidence intervals
@@ -634,30 +647,6 @@ def _scenario1_forecast_and_evaluate(
             F[t, :] = y_mean
             L[t, :] = y_mean - 2 * y_std
             U[t, :] = y_mean + 2 * y_std
-
-        # CRITICAL: Extend model state by appending the ACTUAL observation at time t
-        # This advances the forecast origin for the next iteration
-        if t < n_origins - 1:  # Don't need to extend after last forecast
-            try:
-                new_obs = y_test_arr[t:t+1]  # Single observation
-                new_exog = X_test_arr[t:t+1] if X_test_arr is not None else None
-                # Try append() first (statsmodels >= 0.12)
-                current_model = current_model.append(endog=new_obs, exog=new_exog, refit=False)
-            except AttributeError:
-                # Fallback for older statsmodels: use apply() with extended data
-                try:
-                    extended_y = np.concatenate([y_train.values, y_test_arr[:t+1]])
-                    extended_X = None
-                    if X_test_arr is not None:
-                        X_train_arr = X_train.values.astype(np.float64)
-                        extended_X = np.concatenate([X_train_arr, X_test_arr[:t+1]])
-                    current_model = fitted_model.apply(endog=extended_y, exog=extended_X, refit=False)
-                except Exception:
-                    # Last resort: continue without advancing (will produce degraded results)
-                    pass
-            except Exception:
-                # Other errors: continue without advancing
-                pass
 
     # Build test_eval DataFrame with actual values for each horizon
     eval_dates = y_test.index[:n_origins]
