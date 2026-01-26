@@ -927,6 +927,21 @@ def run_sarimax_multihorizon(
         X_tr = X_tr.astype(np.float64)
         X_te = X_te.astype(np.float64)
 
+        # Scale features to prevent numerical instability
+        # SARIMAX can explode with unscaled exogenous variables of different magnitudes
+        if X_tr.shape[1] > 0:
+            scaler = StandardScaler()
+            X_tr = pd.DataFrame(
+                scaler.fit_transform(X_tr),
+                index=X_tr.index,
+                columns=X_tr.columns
+            )
+            X_te = pd.DataFrame(
+                scaler.transform(X_te),
+                index=X_te.index,
+                columns=X_te.columns
+            )
+
         # Determine orders (manual overrides > auto)
         # For automatic mode: find parameters for h=1, reuse for h>1 (7x speedup)
         if (order is None or seasonal_order is None) and h == 1:
