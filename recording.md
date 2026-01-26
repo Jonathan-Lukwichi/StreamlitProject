@@ -1,5 +1,98 @@
 # HealthForecast AI - Video Recording Script
 
+---
+
+# SHORT VERSION (3-5 Minutes)
+
+## Intro (15 seconds)
+
+> "Welcome to HealthForecast AI - a hospital resource planning tool that predicts Emergency Department patient arrivals and optimizes staffing and inventory using machine learning."
+
+---
+
+## Login & Dashboard (30 seconds)
+
+> "After logging in, we land on the Executive Dashboard showing key metrics - today's predicted patients, staffing levels, and inventory status. Everything at a glance for quick decisions."
+
+---
+
+## Data Workflow (45 seconds)
+
+> "The workflow starts with **Upload Data** - we support CSV, Excel, and Parquet files.
+>
+> In **Prepare Data**, we clean the dataset and fuse it with weather and calendar information.
+>
+> **Explore Data** shows us patterns - weekly cycles, seasonal trends, and correlations that drive patient arrivals."
+
+---
+
+## Feature Engineering (30 seconds)
+
+> "**Feature Studio** creates lag features - yesterday's patients, last week's average - and target variables for multi-day forecasting.
+>
+> **Feature Selection** identifies which features matter most, reducing noise and improving accuracy."
+
+---
+
+## Model Training (45 seconds)
+
+> "Now the core of our system. **Baseline Models** trains ARIMA and SARIMAX - classical statistical methods.
+>
+> **Train Models** offers machine learning: XGBoost, LSTM neural networks, and hybrid models that combine multiple approaches.
+>
+> **Model Results** compares all models side-by-side - MAE, RMSE, accuracy - so we pick the best performer."
+
+---
+
+## Forecasting & Optimization (45 seconds)
+
+> "**Patient Forecast** generates 7-day predictions broken down by clinical category - respiratory, cardiac, trauma, and more.
+>
+> **Staff Planner** uses these forecasts to optimize shift schedules - minimizing costs while ensuring adequate coverage.
+>
+> **Supply Planner** optimizes inventory - right supplies, right time, no waste."
+
+---
+
+## Action Center (30 seconds)
+
+> "Finally, the **Action Center** uses AI to analyze everything and provide plain-language recommendations - what to do this week, risks to watch, and cost-saving opportunities."
+
+---
+
+## Closing (15 seconds)
+
+> "HealthForecast AI: Upload, Prepare, Train, Forecast, Optimize, Act. Data-driven hospital planning made simple. Thank you."
+
+---
+
+## SHORT VERSION TIMING
+
+| Section | Duration |
+|---------|----------|
+| Intro | 15 sec |
+| Login & Dashboard | 30 sec |
+| Data Workflow | 45 sec |
+| Feature Engineering | 30 sec |
+| Model Training | 45 sec |
+| Forecasting & Optimization | 45 sec |
+| Action Center | 30 sec |
+| Closing | 15 sec |
+| **TOTAL** | **~4 minutes** |
+
+### Tips for Short Version:
+- Move quickly between pages
+- Don't wait for loading screens - cut in editing
+- Show, don't explain every detail
+- Use smooth transitions
+
+---
+---
+
+# FULL VERSION (15-20 Minutes)
+
+---
+
 ## Introduction (Before Opening the App)
 
 > "Hello and welcome to HealthForecast AI - an enterprise-grade hospital resource planning and forecasting application. This tool helps hospitals predict Emergency Department patient arrivals and optimize staffing and inventory management using machine learning and operations research. Let me walk you through each feature of the application."
