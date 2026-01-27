@@ -318,13 +318,13 @@ class LSTMPipeline:
         callbacks = [
             keras.callbacks.EarlyStopping(
                 monitor='val_loss',
-                patience=10,
+                patience=5,  # Reduced from 10 for faster training
                 restore_best_weights=True
             ),
             keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
                 factor=0.5,
-                patience=5,
+                patience=3,  # Reduced from 5 for faster learning rate adjustment
                 min_lr=1e-6
             )
         ]
