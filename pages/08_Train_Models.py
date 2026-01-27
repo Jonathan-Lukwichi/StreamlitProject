@@ -1655,12 +1655,13 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             from app_core.models.ml.ann_pipeline import ANNPipeline
 
             # Extract ANN params from config
+            # NOTE: Default epochs reduced from 30 to 20 for faster training on cloud
             model_config = {
                 "ann_hidden_layers": config.get("ann_hidden_layers", 2),
                 "ann_neurons": config.get("ann_neurons", 64),
                 "ann_activation": config.get("ann_activation", "relu"),
                 "dropout": config.get("dropout", 0.2),
-                "ann_epochs": config.get("ann_epochs", 30),
+                "ann_epochs": config.get("ann_epochs", 20),  # Reduced for speed
             }
             pipeline = ANNPipeline(model_config)
         else:
