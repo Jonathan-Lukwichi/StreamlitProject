@@ -2657,6 +2657,24 @@ def page_ml():
                 all_models = ["XGBoost", "LSTM", "ANN"]
                 all_results = {}
 
+                # Pre-populate config with optimized defaults for cloud training
+                # These are used since manual config UI is not shown in "All Models" mode
+                cfg.setdefault("xgb_n_estimators", 200)  # Fast XGBoost
+                cfg.setdefault("xgb_max_depth", 5)
+                cfg.setdefault("xgb_eta", 0.1)
+                cfg.setdefault("xgb_min_child_weight", 1)
+                cfg.setdefault("lstm_epochs", 30)  # Reduced for speed
+                cfg.setdefault("lstm_hidden_units", 64)
+                cfg.setdefault("lstm_layers", 2)
+                cfg.setdefault("lookback_window", 14)
+                cfg.setdefault("lstm_lr", 0.001)
+                cfg.setdefault("batch_size", 32)
+                cfg.setdefault("ann_epochs", 20)  # Reduced for speed
+                cfg.setdefault("ann_hidden_layers", 2)
+                cfg.setdefault("ann_neurons", 64)
+                cfg.setdefault("ann_activation", "relu")
+                cfg.setdefault("dropout", 0.2)
+
                 # Progress tracking
                 progress_bar = st.progress(0)
                 status_text = st.empty()
