@@ -5556,8 +5556,20 @@ def _train_hybrid_sarimax_xgboost(df: pd.DataFrame) -> dict:
 
         # Align data lengths
         n_samples = min(len(X_val), len(resid))
-        X_train_resid = X_val[:n_samples]
-        y_train_resid = resid[:n_samples]
+        X_train_resid = X_val[:n_samples].copy()
+        y_train_resid = np.asarray(resid[:n_samples], dtype=np.float64)
+        stage1_pred_aligned = np.asarray(stage1_pred[:n_samples], dtype=np.float64)
+
+        # Clean NaN/inf values - XGBoost cannot handle them
+        valid_mask = np.isfinite(y_train_resid) & np.isfinite(stage1_pred_aligned)
+        if not valid_mask.all():
+            X_train_resid = X_train_resid[valid_mask]
+            y_train_resid = y_train_resid[valid_mask]
+            stage1_pred_aligned = stage1_pred_aligned[valid_mask]
+
+        # Skip if not enough valid samples
+        if len(y_train_resid) < 10:
+            continue
 
         # Train XGBoost on residuals
         xgb_model = XGBRegressor(
@@ -5573,17 +5585,17 @@ def _train_hybrid_sarimax_xgboost(df: pd.DataFrame) -> dict:
         stage2_correction = xgb_model.predict(X_train_resid)
 
         # Final prediction = Stage1 + Stage2
-        final_pred = stage1_pred[:n_samples] + stage2_correction
+        final_pred = stage1_pred_aligned + stage2_correction
 
         # Compute actual from residuals
-        y_actual = stage1_pred[:n_samples] + resid[:n_samples]
+        y_actual = stage1_pred_aligned + y_train_resid
 
         # Calculate metrics
         mae = mean_absolute_error(y_actual, final_pred)
         rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
 
         results["per_h"][h] = {
-            "stage1_pred": stage1_pred[:n_samples],
+            "stage1_pred": stage1_pred_aligned,
             "stage2_correction": stage2_correction,
             "final_pred": final_pred,
             "actual": y_actual,
