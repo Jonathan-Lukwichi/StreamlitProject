@@ -705,17 +705,17 @@ class AttentionLSTM:
             print("🏗️  Building Attention LSTM...")
             self.build_model(n_features=X_train.shape[1])
 
-        # Callbacks
+        # Callbacks - reduced patience for faster training
         callbacks = [
             keras.callbacks.EarlyStopping(
                 monitor='val_loss' if validation_data else 'loss',
-                patience=15,
+                patience=5,  # Reduced from 15 for faster training
                 restore_best_weights=True
             ),
             keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss' if validation_data else 'loss',
                 factor=0.5,
-                patience=7,
+                patience=3,  # Reduced from 7 for faster training
                 min_lr=1e-6
             )
         ]
