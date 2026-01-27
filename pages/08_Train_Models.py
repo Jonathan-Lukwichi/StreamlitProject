@@ -1639,12 +1639,13 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
             from app_core.models.ml.lstm_pipeline import LSTMPipeline
 
             # Extract LSTM params from config
+            # NOTE: Default epochs reduced from 100 to 30 for faster training on cloud
             model_config = {
                 "lookback_window": config.get("lookback_window", 14),
                 "lstm_hidden_units": config.get("lstm_hidden_units", 64),
                 "lstm_layers": config.get("lstm_layers", 2),
                 "dropout": config.get("dropout", 0.2),
-                "lstm_epochs": config.get("lstm_epochs", 100),
+                "lstm_epochs": config.get("lstm_epochs", 30),  # Reduced for speed
                 "lstm_lr": config.get("lstm_lr", 0.001),
                 "batch_size": config.get("batch_size", 32),
             }
