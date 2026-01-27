@@ -2345,7 +2345,7 @@ def page_ml():
         selected_model = MLUIComponents.render_model_selector(cfg.get("ml_choice", "XGBoost"))
         cfg["ml_choice"] = selected_model
     else:
-        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially using the current configurations from the UI.")
+        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially using optimized defaults (XGBoost: 200 trees, LSTM: 30 epochs, ANN: 20 epochs with early stopping).")
         selected_model = None  # Not needed for all models mode
 
     # 2. Dataset Selection (from Feature Selection results)
