@@ -2663,6 +2663,17 @@ def page_ml():
                 )
 
             if run_all_button:
+                # Clear previous single model results to avoid confusion
+                if "ml_mh_results" in st.session_state:
+                    del st.session_state["ml_mh_results"]
+                # Clear old "All Models" flag and results
+                if "ml_all_models_trained" in st.session_state:
+                    del st.session_state["ml_all_models_trained"]
+                for old_model in ["XGBoost", "LSTM", "ANN"]:
+                    old_key = f"ml_mh_results_{old_model}"
+                    if old_key in st.session_state:
+                        del st.session_state[old_key]
+
                 all_models = ["XGBoost", "LSTM", "ANN"]
                 all_results = {}
 
