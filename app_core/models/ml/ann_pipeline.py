@@ -291,16 +291,36 @@ class ANNPipeline:
             print(f"  ... and {detection['total_features'] - 5} more features")
         print("=" * 70)
 
-        # Simple training - no callbacks, fixed epochs
-        print(f"\n🚀 Training ANN for {self.epochs} epochs...")
+        # Training with EarlyStopping for faster convergence
+        print(f"\n🚀 Training ANN for {self.epochs} epochs (with early stopping)...")
         print("=" * 70)
+
+        # Add EarlyStopping to prevent unnecessary training
+        from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+
+        callbacks = [
+            EarlyStopping(
+                monitor='val_loss',
+                patience=5,  # Stop if no improvement for 5 epochs
+                restore_best_weights=True,
+                verbose=1
+            ),
+            ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.5,
+                patience=3,
+                min_lr=1e-6,
+                verbose=0
+            )
+        ]
 
         history = self.model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
             epochs=self.epochs,
             batch_size=32,
-            verbose=1  # Show epoch progress
+            callbacks=callbacks,
+            verbose=0  # Quiet mode for faster execution
         )
 
         self.history = history
