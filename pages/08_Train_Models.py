@@ -2549,6 +2549,15 @@ def page_ml():
                 )
 
             if run_button:
+                # Clear previous "All Models" results to avoid confusion
+                if "ml_all_models_trained" in st.session_state:
+                    del st.session_state["ml_all_models_trained"]
+                # Clear old individual model results from "All Models" mode
+                for old_model in ["XGBoost", "LSTM", "ANN"]:
+                    old_key = f"ml_mh_results_{old_model}"
+                    if old_key in st.session_state:
+                        del st.session_state[old_key]
+
                 # Pass a copy of the config to prevent any potential state pollution between runs
                 current_run_config = cfg.copy()
                 model_name = current_run_config['ml_choice']
