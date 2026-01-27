@@ -5641,8 +5641,14 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
         if target_key not in val_residuals or target_key not in val_predictions:
             continue
 
-        resid = val_residuals[target_key]
-        stage1_pred = val_predictions[target_key]
+        resid = np.asarray(val_residuals[target_key], dtype=np.float64)
+        stage1_pred = np.asarray(val_predictions[target_key], dtype=np.float64)
+
+        # Clean NaN/inf values - SARIMAX cannot handle them
+        valid_mask = np.isfinite(resid) & np.isfinite(stage1_pred)
+        if not valid_mask.all():
+            resid = resid[valid_mask]
+            stage1_pred = stage1_pred[valid_mask]
 
         n_samples = len(resid)
         if n_samples < 10:
@@ -5661,7 +5667,7 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
             sarimax_fit = sarimax_model.fit(disp=False, maxiter=100)
 
             # Get fitted values as Stage 2 correction
-            stage2_correction = sarimax_fit.fittedvalues
+            stage2_correction = np.asarray(sarimax_fit.fittedvalues, dtype=np.float64)
 
             # Final prediction = Stage1 + Stage2
             final_pred = stage1_pred + stage2_correction
