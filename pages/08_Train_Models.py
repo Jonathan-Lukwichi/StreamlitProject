@@ -5731,7 +5731,7 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
 
 
 def _display_hybrid_results():
-    """Display hybrid model results with comparison."""
+    """Display hybrid model results with professional KPI cards and comparison table."""
 
     if "hybrid_pipeline_results" not in st.session_state:
         st.info("ℹ️ No hybrid models built yet. Train Stage 1 models in the **Machine Learning** tab, then click **Build Hybrid Models** above.")
@@ -5743,61 +5743,132 @@ def _display_hybrid_results():
         st.warning("⚠️ Hybrid results are empty.")
         return
 
+    # Count successful models
+    successful_models = [r for r in results.values() if r and r.get("success")]
+    num_successful = len(successful_models)
+
+    if num_successful == 0:
+        st.warning("⚠️ No successful hybrid models to display.")
+        return
+
+    # =========================================================================
+    # SUCCESS BANNER
+    # =========================================================================
     st.markdown(
         f"""
-        <div style='background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(139, 92, 246, 0.1));
-                    border-left: 4px solid #A855F7;
+        <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.15));
+                    border-left: 4px solid #22C55E;
                     padding: 1.5rem;
                     border-radius: 12px;
-                    margin: 1.5rem 0;
-                    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);'>
-            <h3 style='color: #A855F7; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
-                       text-shadow: 0 0 15px rgba(168, 85, 247, 0.5);'>
-                📊 Hybrid Model Results
+                    margin: 1rem 0 1.5rem 0;
+                    box-shadow: 0 0 25px rgba(34, 197, 94, 0.2);'>
+            <h3 style='color: #22C55E; margin: 0 0 0.5rem 0; font-size: 1.4rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(34, 197, 94, 0.5);'>
+                ✅ Hybrid Models Trained Successfully!
             </h3>
+            <p style='margin: 0; color: #E5E7EB; font-size: 1rem;'>
+                {num_successful} hybrid model(s) built using two-stage residual correction
+            </p>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    # Create comparison table
+    # =========================================================================
+    # AGGREGATE KPI CARDS (Best Model's Metrics)
+    # =========================================================================
+    # Find best model by lowest MAE
+    best_model = min(successful_models, key=lambda x: x.get("avg_mae", float('inf')))
+    best_name = best_model.get("model_name", "Hybrid")
+
+    st.markdown(f"#### 🏆 Best Hybrid Model: **{best_name}**")
+
+    # KPI Cards Row
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.plotly_chart(
+            _create_kpi_indicator("MAE", best_model.get("avg_mae", 0), "", PRIMARY_COLOR),
+            use_container_width=True,
+            key="hybrid_kpi_mae"
+        )
+    with col2:
+        st.plotly_chart(
+            _create_kpi_indicator("RMSE", best_model.get("avg_rmse", 0), "", SECONDARY_COLOR),
+            use_container_width=True,
+            key="hybrid_kpi_rmse"
+        )
+    with col3:
+        st.plotly_chart(
+            _create_kpi_indicator("MAPE", best_model.get("avg_mape", 0), "%", WARNING_COLOR),
+            use_container_width=True,
+            key="hybrid_kpi_mape"
+        )
+    with col4:
+        st.plotly_chart(
+            _create_kpi_indicator("Accuracy", best_model.get("avg_accuracy", 0), "%", SUCCESS_COLOR),
+            use_container_width=True,
+            key="hybrid_kpi_acc"
+        )
+
+    # =========================================================================
+    # MODEL COMPARISON TABLE (Styled)
+    # =========================================================================
+    st.markdown("---")
+    st.markdown("#### 📊 Model Comparison")
+
     comparison_data = []
     for hybrid_name, hybrid_results in results.items():
         if hybrid_results and hybrid_results.get("success"):
             comparison_data.append({
-                "Hybrid Model": hybrid_results.get("model_name", hybrid_name),
-                "Avg MAE": hybrid_results.get("avg_mae", 0),
-                "Avg RMSE": hybrid_results.get("avg_rmse", 0),
-                "Horizons Trained": len(hybrid_results.get("per_h", {})),
+                "Model": hybrid_results.get("model_name", hybrid_name),
+                "MAE": hybrid_results.get("avg_mae", 0),
+                "RMSE": hybrid_results.get("avg_rmse", 0),
+                "MAPE (%)": hybrid_results.get("avg_mape", 0),
+                "Accuracy (%)": hybrid_results.get("avg_accuracy", 0),
+                "Horizons": len(hybrid_results.get("per_h", {})),
             })
 
     if comparison_data:
         comparison_df = pd.DataFrame(comparison_data)
 
-        # Highlight best model
-        if len(comparison_df) > 1:
-            best_idx = comparison_df["Avg MAE"].idxmin()
-            st.markdown(f"🏆 **Best Model**: {comparison_df.loc[best_idx, 'Hybrid Model']} (Lowest MAE)")
-
-        st.dataframe(
-            comparison_df.style.format({
-                "Avg MAE": "{:.2f}",
-                "Avg RMSE": "{:.2f}",
-            }).highlight_min(subset=["Avg MAE", "Avg RMSE"], color="rgba(34, 197, 94, 0.3)"),
-            use_container_width=True,
-            hide_index=True
+        # Apply styling with color gradients
+        styled_df = comparison_df.style.format({
+            "MAE": "{:.2f}",
+            "RMSE": "{:.2f}",
+            "MAPE (%)": "{:.2f}",
+            "Accuracy (%)": "{:.2f}",
+        }).background_gradient(
+            subset=["MAE", "RMSE", "MAPE (%)"],
+            cmap="RdYlGn_r",  # Red for high (bad), Green for low (good)
+            vmin=0
+        ).background_gradient(
+            subset=["Accuracy (%)"],
+            cmap="RdYlGn",  # Green for high (good), Red for low (bad)
+            vmin=0,
+            vmax=100
+        ).highlight_min(
+            subset=["MAE", "RMSE", "MAPE (%)"],
+            props="font-weight: bold; border: 2px solid #22C55E;"
+        ).highlight_max(
+            subset=["Accuracy (%)"],
+            props="font-weight: bold; border: 2px solid #22C55E;"
         )
 
-        # Detailed tabs for each hybrid
-        if results:
-            tabs = st.tabs([res.get("model_name", name) for name, res in results.items() if res and res.get("success")])
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-            for tab, (name, res) in zip(tabs, [(n, r) for n, r in results.items() if r and r.get("success")]):
-                with tab:
-                    _plot_hybrid_results(res.get("model_name", name), res)
+    # =========================================================================
+    # DETAILED TABS FOR EACH HYBRID MODEL
+    # =========================================================================
+    st.markdown("---")
+    st.markdown("#### 📈 Detailed Model Analysis")
 
-    else:
-        st.warning("⚠️ No successful hybrid models to display.")
+    tab_names = [res.get("model_name", name) for name, res in results.items() if res and res.get("success")]
+    tabs = st.tabs(tab_names)
+
+    for tab, (name, res) in zip(tabs, [(n, r) for n, r in results.items() if r and r.get("success")]):
+        with tab:
+            _plot_hybrid_results(res.get("model_name", name), res)
 
 
 def _plot_hybrid_results(name: str, res: dict):
