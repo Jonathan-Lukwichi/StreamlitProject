@@ -5488,6 +5488,14 @@ def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
         mae = mean_absolute_error(y_actual, final_pred)
         rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
 
+        # Calculate MAPE and Accuracy (avoid division by zero)
+        non_zero_mask = y_actual != 0
+        if non_zero_mask.any():
+            mape = np.mean(np.abs((y_actual[non_zero_mask] - final_pred[non_zero_mask]) / y_actual[non_zero_mask])) * 100
+        else:
+            mape = 0.0
+        accuracy = max(0, 100 - mape)
+
         results["per_h"][h] = {
             "stage1_pred": stage1_pred_aligned,
             "stage2_correction": stage2_correction,
@@ -5495,12 +5503,16 @@ def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
             "actual": y_actual,
             "mae": mae,
             "rmse": rmse,
+            "mape": mape,
+            "accuracy": accuracy,
         }
 
     # Calculate average metrics
     if results["per_h"]:
         results["avg_mae"] = np.mean([r["mae"] for r in results["per_h"].values()])
         results["avg_rmse"] = np.mean([r["rmse"] for r in results["per_h"].values()])
+        results["avg_mape"] = np.mean([r["mape"] for r in results["per_h"].values()])
+        results["avg_accuracy"] = np.mean([r["accuracy"] for r in results["per_h"].values()])
 
     return results
 
