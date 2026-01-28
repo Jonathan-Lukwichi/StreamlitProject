@@ -372,7 +372,21 @@ def aggregate_all_model_results() -> pd.DataFrame:
         if metrics:
             all_results.append(metrics)
 
-    # 9. Optimized model results
+    # 9. Hybrid LSTM-XGBoost results
+    lstm_xgb_results = st.session_state.get("lstm_xgb_results")
+    if lstm_xgb_results:
+        metrics = _extract_lstm_xgb_metrics(lstm_xgb_results)
+        if metrics:
+            all_results.append(metrics)
+
+    # 10. Hybrid LSTM-ANN results
+    lstm_ann_results = st.session_state.get("lstm_ann_results")
+    if lstm_ann_results:
+        metrics = _extract_lstm_ann_metrics(lstm_ann_results)
+        if metrics:
+            all_results.append(metrics)
+
+    # 11. Optimized model results
     for model_type in ["XGBoost", "LSTM", "ANN"]:
         opt_results = st.session_state.get(f"opt_results_{model_type}")
         if opt_results:
