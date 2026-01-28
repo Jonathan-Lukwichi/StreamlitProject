@@ -5722,15 +5722,28 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
             resid = resid[valid_mask]
             stage1_pred = stage1_pred[valid_mask]
 
-        n_samples = len(resid)
-        if n_samples < 10:
+        # =====================================================
+        # SPLIT RESIDUALS INTO STAGE2_TRAIN / STAGE2_TEST
+        # This prevents data leakage (using fittedvalues on same data)
+        # =====================================================
+        n_total = len(resid)
+        split_idx = int(n_total * 0.7)  # 70% for Stage 2 training
+
+        resid_train = resid[:split_idx]
+        resid_test = resid[split_idx:]
+        stage1_pred_train = stage1_pred[:split_idx]
+        stage1_pred_test = stage1_pred[split_idx:]
+
+        # Skip if not enough samples for train/test
+        if len(resid_train) < 10 or len(resid_test) < 5:
             continue
 
         try:
-            # Train SARIMAX on residual series
-            # Use simple ARIMA order since residuals should be near-stationary
+            # =====================================================
+            # TRAIN SARIMAX ON RESIDUAL TRAIN SET ONLY
+            # =====================================================
             sarimax_model = SARIMAX(
-                resid,
+                resid_train,
                 order=(1, 0, 1),  # Simple ARMA on residuals
                 seasonal_order=(0, 0, 0, 0),  # No seasonality on residuals
                 enforce_stationarity=False,
@@ -5738,36 +5751,48 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
             )
             sarimax_fit = sarimax_model.fit(disp=False, maxiter=100)
 
-            # Get fitted values as Stage 2 correction
-            stage2_correction = np.asarray(sarimax_fit.fittedvalues, dtype=np.float64)
+            # =====================================================
+            # FORECAST ON TEST SET (NOT fittedvalues!)
+            # =====================================================
+            n_test = len(resid_test)
+            stage2_correction_test = sarimax_fit.forecast(steps=n_test)
+            stage2_correction_test = np.asarray(stage2_correction_test, dtype=np.float64)
 
-            # Final prediction = Stage1 + Stage2
-            final_pred = stage1_pred + stage2_correction
+            # Final prediction on test set
+            final_pred_test = stage1_pred_test + stage2_correction_test
+            y_actual_test = stage1_pred_test + resid_test
 
-            # Compute actual from residuals
-            y_actual = stage1_pred + resid
+            # =====================================================
+            # CALCULATE METRICS ON TEST SET ONLY
+            # =====================================================
+            mae = mean_absolute_error(y_actual_test, final_pred_test)
+            rmse = np.sqrt(mean_squared_error(y_actual_test, final_pred_test))
 
-            # Calculate metrics
-            mae = mean_absolute_error(y_actual, final_pred)
-            rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
-
-            # Calculate MAPE and Accuracy (avoid division by zero)
-            non_zero_mask = y_actual != 0
-            if non_zero_mask.any():
-                mape = np.mean(np.abs((y_actual[non_zero_mask] - final_pred[non_zero_mask]) / y_actual[non_zero_mask])) * 100
+            # MAPE with safe division (avoid near-zero values)
+            non_zero_mask = np.abs(y_actual_test) > 1e-8
+            if non_zero_mask.sum() > 0:
+                mape = np.mean(np.abs(
+                    (y_actual_test[non_zero_mask] - final_pred_test[non_zero_mask])
+                    / y_actual_test[non_zero_mask]
+                )) * 100
             else:
                 mape = 0.0
-            accuracy = max(0, 100 - mape)
 
+            # Accuracy (capped at 0-100)
+            accuracy = max(0.0, min(100.0, 100.0 - mape))
+
+            # Store results (use TEST data for charts)
             results["per_h"][h] = {
-                "stage1_pred": stage1_pred,
-                "stage2_correction": np.array(stage2_correction),
-                "final_pred": final_pred,
-                "actual": y_actual,
+                "stage1_pred": stage1_pred_test,
+                "stage2_correction": stage2_correction_test,
+                "final_pred": final_pred_test,
+                "actual": y_actual_test,
                 "mae": mae,
                 "rmse": rmse,
                 "mape": mape,
                 "accuracy": accuracy,
+                "n_train": len(resid_train),
+                "n_test": len(resid_test),
             }
 
         except Exception as e:
