@@ -3735,9 +3735,16 @@ def page_hyperparameter_tuning():
         model_name = ml_metrics.get("Model", "ML Model")
         available_models.append((model_name, ml_metrics))
 
-    # Check for individual model results (when "All Models" was trained)
+    # Check for individual model results
+    # Check BOTH capital and lowercase keys (for compatibility with single/all modes)
     for model_name in ["XGBoost", "LSTM", "ANN"]:
+        # Try capital key first (All Models mode stores with capitals)
         model_results = st.session_state.get(f"ml_mh_results_{model_name}")
+
+        # If not found, try lowercase key (Single Model mode stores with lowercase)
+        if model_results is None:
+            model_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+
         if model_results is not None:
             results_df = model_results.get("results_df")
             if results_df is not None and not results_df.empty:
