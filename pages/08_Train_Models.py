@@ -5466,7 +5466,7 @@ def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
         # This prevents data leakage (training and testing on same data)
         # =====================================================
         n_total = len(X_train_resid)
-        split_idx = int(n_total * 0.7)  # 70% for Stage 2 training
+        split_idx = int(n_total * 0.8)  # 80% train, 20% test (same as single models)
 
         # Stage 2 Training data
         X_s2_train = X_train_resid[:split_idx]
@@ -5605,7 +5605,7 @@ def _train_hybrid_sarimax_xgboost(df: pd.DataFrame) -> dict:
         # This prevents data leakage (training and testing on same data)
         # =====================================================
         n_total = len(X_train_resid)
-        split_idx = int(n_total * 0.7)  # 70% for Stage 2 training
+        split_idx = int(n_total * 0.8)  # 80% train, 20% test (same as single models)
 
         # Stage 2 Training data
         X_s2_train = X_train_resid[:split_idx]
@@ -5727,7 +5727,7 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
         # This prevents data leakage (using fittedvalues on same data)
         # =====================================================
         n_total = len(resid)
-        split_idx = int(n_total * 0.7)  # 70% for Stage 2 training
+        split_idx = int(n_total * 0.8)  # 80% train, 20% test (same as single models)
 
         resid_train = resid[:split_idx]
         resid_test = resid[split_idx:]
