@@ -260,7 +260,14 @@ def _safe_float(val, default=np.nan) -> float:
 def _get_model_category(model_name: str) -> str:
     """Determine model category from name."""
     name_lower = model_name.lower()
-    if "arima" in name_lower and "sarimax" not in name_lower:
+    # Check hybrid/ensemble/stacking first (before individual model types)
+    if "hybrid" in name_lower:
+        return "Hybrid"
+    elif "ensemble" in name_lower:
+        return "Ensemble"
+    elif "stack" in name_lower:
+        return "Stacking"
+    elif "arima" in name_lower and "sarimax" not in name_lower:
         return "ARIMA"
     elif "sarimax" in name_lower:
         return "SARIMAX"
@@ -270,12 +277,8 @@ def _get_model_category(model_name: str) -> str:
         return "LSTM"
     elif "ann" in name_lower or "neural" in name_lower or "mlp" in name_lower:
         return "ANN"
-    elif "ensemble" in name_lower:
-        return "Ensemble"
-    elif "stack" in name_lower:
-        return "Stacking"
-    elif "hybrid" in name_lower:
-        return "Hybrid"
+    elif "optimized" in name_lower:
+        return "Optimized"
     return "Other"
 
 
