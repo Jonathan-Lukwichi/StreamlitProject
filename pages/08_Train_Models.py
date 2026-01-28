@@ -5872,7 +5872,7 @@ def _display_hybrid_results():
 
 
 def _plot_hybrid_results(name: str, res: dict):
-    """Plot detailed results for a single hybrid model."""
+    """Plot detailed results for a single hybrid model with comprehensive charts."""
 
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -5883,24 +5883,42 @@ def _plot_hybrid_results(name: str, res: dict):
         st.info("No horizon data available.")
         return
 
-    # Metrics table
+    # =========================================================================
+    # PER-HORIZON METRICS TABLE (Enhanced with MAPE and Accuracy)
+    # =========================================================================
     metrics_data = []
-    for h, h_data in per_h.items():
+    for h, h_data in sorted(per_h.items()):
         metrics_data.append({
-            "Horizon": h,
+            "Horizon": f"Day {h}",
             "MAE": h_data.get("mae", 0),
             "RMSE": h_data.get("rmse", 0),
+            "MAPE (%)": h_data.get("mape", 0),
+            "Accuracy (%)": h_data.get("accuracy", 0),
         })
 
     if metrics_data:
-        st.markdown("**Per-Horizon Metrics:**")
-        st.dataframe(
-            pd.DataFrame(metrics_data).style.format({"MAE": "{:.2f}", "RMSE": "{:.2f}"}),
-            use_container_width=True,
-            hide_index=True
+        st.markdown("##### 📋 Per-Horizon Metrics")
+        metrics_df = pd.DataFrame(metrics_data)
+        styled_metrics = metrics_df.style.format({
+            "MAE": "{:.2f}",
+            "RMSE": "{:.2f}",
+            "MAPE (%)": "{:.2f}",
+            "Accuracy (%)": "{:.2f}",
+        }).background_gradient(
+            subset=["MAE", "RMSE", "MAPE (%)"],
+            cmap="RdYlGn_r",
+            vmin=0
+        ).background_gradient(
+            subset=["Accuracy (%)"],
+            cmap="RdYlGn",
+            vmin=0,
+            vmax=100
         )
+        st.dataframe(styled_metrics, use_container_width=True, hide_index=True)
 
-    # Plot actual vs predicted for first horizon
+    # =========================================================================
+    # CHART 1: FORECAST COMPARISON (Actual vs Stage1 vs Hybrid)
+    # =========================================================================
     first_h = list(per_h.keys())[0]
     h_data = per_h[first_h]
 
@@ -5908,46 +5926,200 @@ def _plot_hybrid_results(name: str, res: dict):
     final_pred = h_data.get("final_pred")
     stage1_pred = h_data.get("stage1_pred")
 
-    if actual is not None and final_pred is not None:
-        fig = go.Figure()
+    st.markdown("##### 📈 Forecast Comparison")
+    col_chart1, col_chart2 = st.columns(2)
 
-        # Actual values
-        fig.add_trace(go.Scatter(
-            y=actual,
-            mode='lines+markers',
-            name='Actual',
-            line=dict(color=PRIMARY_COLOR, width=2),
-            marker=dict(size=6)
-        ))
+    with col_chart1:
+        if actual is not None and final_pred is not None:
+            fig_forecast = go.Figure()
 
-        # Stage 1 predictions
-        if stage1_pred is not None:
-            fig.add_trace(go.Scatter(
-                y=stage1_pred,
-                mode='lines',
-                name='Stage 1 (Base Model)',
-                line=dict(color=WARNING_COLOR, width=2, dash='dot'),
+            # Actual values
+            fig_forecast.add_trace(go.Scatter(
+                y=actual,
+                mode='lines+markers',
+                name='Actual',
+                line=dict(color=PRIMARY_COLOR, width=2),
+                marker=dict(size=4)
             ))
 
-        # Final hybrid predictions
-        fig.add_trace(go.Scatter(
-            y=final_pred,
-            mode='lines+markers',
-            name='Hybrid (Stage 1 + Stage 2)',
-            line=dict(color=SUCCESS_COLOR, width=2),
-            marker=dict(size=6)
+            # Stage 1 predictions
+            if stage1_pred is not None:
+                fig_forecast.add_trace(go.Scatter(
+                    y=stage1_pred,
+                    mode='lines',
+                    name='Stage 1 (Base)',
+                    line=dict(color=WARNING_COLOR, width=2, dash='dot'),
+                ))
+
+            # Final hybrid predictions
+            fig_forecast.add_trace(go.Scatter(
+                y=final_pred,
+                mode='lines+markers',
+                name='Hybrid Final',
+                line=dict(color=SUCCESS_COLOR, width=2),
+                marker=dict(size=4)
+            ))
+
+            fig_forecast.update_layout(
+                title=f"Horizon {first_h}: Actual vs Predictions",
+                xaxis_title="Sample Index",
+                yaxis_title="ED Arrivals",
+                height=350,
+                hovermode='x unified',
+                template='plotly_white',
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=40, r=20, t=60, b=40)
+            )
+
+            st.plotly_chart(fig_forecast, use_container_width=True)
+
+    # =========================================================================
+    # CHART 2: RESIDUAL ANALYSIS (Stage2 Corrections)
+    # =========================================================================
+    with col_chart2:
+        stage2_correction = h_data.get("stage2_correction")
+        if stage2_correction is not None:
+            fig_residual = go.Figure()
+
+            # Residual distribution as histogram
+            fig_residual.add_trace(go.Histogram(
+                x=stage2_correction,
+                name='Stage 2 Corrections',
+                marker_color=SECONDARY_COLOR,
+                opacity=0.7,
+                nbinsx=30
+            ))
+
+            # Add vertical line at zero
+            fig_residual.add_vline(
+                x=0,
+                line_dash="dash",
+                line_color=WARNING_COLOR,
+                annotation_text="Zero",
+                annotation_position="top"
+            )
+
+            fig_residual.update_layout(
+                title="Stage 2 Correction Distribution",
+                xaxis_title="Correction Value",
+                yaxis_title="Frequency",
+                height=350,
+                template='plotly_white',
+                showlegend=False,
+                margin=dict(l=40, r=20, t=60, b=40)
+            )
+
+            st.plotly_chart(fig_residual, use_container_width=True)
+
+    # =========================================================================
+    # CHART 3: ERROR METRICS BY HORIZON (Bar Chart)
+    # =========================================================================
+    st.markdown("##### 📊 Error Metrics by Horizon")
+
+    horizons = list(sorted(per_h.keys()))
+    mae_values = [per_h[h].get("mae", 0) for h in horizons]
+    rmse_values = [per_h[h].get("rmse", 0) for h in horizons]
+    accuracy_values = [per_h[h].get("accuracy", 0) for h in horizons]
+
+    col_bar1, col_bar2 = st.columns(2)
+
+    with col_bar1:
+        fig_errors = go.Figure()
+
+        fig_errors.add_trace(go.Bar(
+            name='MAE',
+            x=[f"Day {h}" for h in horizons],
+            y=mae_values,
+            marker_color=PRIMARY_COLOR,
         ))
 
-        fig.update_layout(
-            title=f"{name} - Horizon {first_h} Predictions",
-            xaxis_title="Sample Index",
-            yaxis_title="Value",
-            height=400,
-            hovermode='x unified',
-            template='plotly_white'
+        fig_errors.add_trace(go.Bar(
+            name='RMSE',
+            x=[f"Day {h}" for h in horizons],
+            y=rmse_values,
+            marker_color=SECONDARY_COLOR,
+        ))
+
+        fig_errors.update_layout(
+            title="MAE & RMSE by Horizon",
+            xaxis_title="Forecast Horizon",
+            yaxis_title="Error Value",
+            barmode='group',
+            height=300,
+            template='plotly_white',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=40, r=20, t=60, b=40)
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_errors, use_container_width=True)
+
+    with col_bar2:
+        fig_accuracy = go.Figure()
+
+        fig_accuracy.add_trace(go.Bar(
+            name='Accuracy',
+            x=[f"Day {h}" for h in horizons],
+            y=accuracy_values,
+            marker_color=SUCCESS_COLOR,
+            text=[f"{v:.1f}%" for v in accuracy_values],
+            textposition='outside'
+        ))
+
+        fig_accuracy.update_layout(
+            title="Accuracy by Horizon",
+            xaxis_title="Forecast Horizon",
+            yaxis_title="Accuracy (%)",
+            height=300,
+            template='plotly_white',
+            yaxis=dict(range=[0, max(100, max(accuracy_values) * 1.1)]),
+            margin=dict(l=40, r=20, t=60, b=40)
+        )
+
+        st.plotly_chart(fig_accuracy, use_container_width=True)
+
+    # =========================================================================
+    # CHART 4: SCATTER PLOT (Actual vs Predicted)
+    # =========================================================================
+    st.markdown("##### 🎯 Prediction Accuracy Scatter")
+
+    if actual is not None and final_pred is not None:
+        fig_scatter = go.Figure()
+
+        # Scatter plot of actual vs predicted
+        fig_scatter.add_trace(go.Scatter(
+            x=actual,
+            y=final_pred,
+            mode='markers',
+            name='Predictions',
+            marker=dict(
+                color=PRIMARY_COLOR,
+                size=8,
+                opacity=0.6
+            )
+        ))
+
+        # Perfect prediction line
+        min_val = min(min(actual), min(final_pred))
+        max_val = max(max(actual), max(final_pred))
+        fig_scatter.add_trace(go.Scatter(
+            x=[min_val, max_val],
+            y=[min_val, max_val],
+            mode='lines',
+            name='Perfect Prediction',
+            line=dict(color=SUCCESS_COLOR, width=2, dash='dash')
+        ))
+
+        fig_scatter.update_layout(
+            title=f"Actual vs Predicted (Horizon {first_h})",
+            xaxis_title="Actual Values",
+            yaxis_title="Predicted Values",
+            height=350,
+            template='plotly_white',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=40, r=20, t=60, b=40)
+        )
+
+        st.plotly_chart(fig_scatter, use_container_width=True)
 
 
 def _get_hybrid_dataset():
