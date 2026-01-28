@@ -100,6 +100,8 @@ MODEL_COLORS = {
     "Ensemble": "#06B6D4",   # Cyan
     "Stacking": "#EC4899",   # Pink
     "Hybrid": "#84CC16",     # Lime
+    "Optimized": "#14B8A6",  # Teal
+    "Other": "#6B7280",      # Gray
 }
 
 # Fluorescent effects
