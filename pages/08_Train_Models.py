@@ -5461,11 +5461,30 @@ def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
             y_train_resid = y_train_resid[valid_mask]
             stage1_pred_aligned = stage1_pred_aligned[valid_mask]
 
-        # Skip if not enough valid samples
-        if len(y_train_resid) < 10:
+        # =====================================================
+        # SPLIT VALIDATION DATA INTO STAGE2_TRAIN / STAGE2_TEST
+        # This prevents data leakage (training and testing on same data)
+        # =====================================================
+        n_total = len(X_train_resid)
+        split_idx = int(n_total * 0.7)  # 70% for Stage 2 training
+
+        # Stage 2 Training data
+        X_s2_train = X_train_resid[:split_idx]
+        y_s2_train = y_train_resid[:split_idx]
+        stage1_pred_train = stage1_pred_aligned[:split_idx]
+
+        # Stage 2 Test data (held out for honest evaluation)
+        X_s2_test = X_train_resid[split_idx:]
+        y_s2_test = y_train_resid[split_idx:]
+        stage1_pred_test = stage1_pred_aligned[split_idx:]
+
+        # Skip if not enough samples for train/test
+        if len(X_s2_train) < 10 or len(X_s2_test) < 5:
             continue
 
-        # Train XGBoost on residuals
+        # =====================================================
+        # TRAIN XGBOOST ON STAGE2_TRAIN ONLY
+        # =====================================================
         xgb_model = XGBRegressor(
             n_estimators=100,
             max_depth=5,
@@ -5473,38 +5492,46 @@ def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
             random_state=42,
             n_jobs=-1
         )
-        xgb_model.fit(X_train_resid, y_train_resid)
+        xgb_model.fit(X_s2_train, y_s2_train)
 
-        # Predict residual correction
-        stage2_correction = xgb_model.predict(X_train_resid)
+        # =====================================================
+        # PREDICT ON HELD-OUT STAGE2_TEST (HONEST EVALUATION)
+        # =====================================================
+        stage2_correction_test = xgb_model.predict(X_s2_test)
+        final_pred_test = stage1_pred_test + stage2_correction_test
+        y_actual_test = stage1_pred_test + y_s2_test
 
-        # Final prediction = Stage1 + Stage2
-        final_pred = stage1_pred_aligned + stage2_correction
+        # =====================================================
+        # CALCULATE METRICS ON TEST SET ONLY
+        # =====================================================
+        mae = mean_absolute_error(y_actual_test, final_pred_test)
+        rmse = np.sqrt(mean_squared_error(y_actual_test, final_pred_test))
 
-        # Compute actual values from filtered data (residual = actual - pred, so actual = pred + residual)
-        y_actual = stage1_pred_aligned + y_train_resid
-
-        # Calculate metrics (all arrays now have same length after filtering)
-        mae = mean_absolute_error(y_actual, final_pred)
-        rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
-
-        # Calculate MAPE and Accuracy (avoid division by zero)
-        non_zero_mask = y_actual != 0
-        if non_zero_mask.any():
-            mape = np.mean(np.abs((y_actual[non_zero_mask] - final_pred[non_zero_mask]) / y_actual[non_zero_mask])) * 100
+        # MAPE with safe division (avoid near-zero values)
+        non_zero_mask = np.abs(y_actual_test) > 1e-8
+        if non_zero_mask.sum() > 0:
+            mape = np.mean(np.abs(
+                (y_actual_test[non_zero_mask] - final_pred_test[non_zero_mask])
+                / y_actual_test[non_zero_mask]
+            )) * 100
         else:
             mape = 0.0
-        accuracy = max(0, 100 - mape)
 
+        # Accuracy (capped at 0-100)
+        accuracy = max(0.0, min(100.0, 100.0 - mape))
+
+        # Store results (use TEST data for charts)
         results["per_h"][h] = {
-            "stage1_pred": stage1_pred_aligned,
-            "stage2_correction": stage2_correction,
-            "final_pred": final_pred,
-            "actual": y_actual,
+            "stage1_pred": stage1_pred_test,
+            "stage2_correction": stage2_correction_test,
+            "final_pred": final_pred_test,
+            "actual": y_actual_test,
             "mae": mae,
             "rmse": rmse,
             "mape": mape,
             "accuracy": accuracy,
+            "n_train": len(X_s2_train),
+            "n_test": len(X_s2_test),
         }
 
     # Calculate average metrics
