@@ -5481,21 +5481,15 @@ def _train_hybrid_lstm_xgboost(df: pd.DataFrame) -> dict:
         # Final prediction = Stage1 + Stage2
         final_pred = stage1_pred_aligned + stage2_correction
 
-        # Get actual values for metrics calculation
-        fe = st.session_state.get("feature_engineering", {})
-        test_idx = fe.get("test_idx")
-        if test_idx is not None and target_col in df.columns:
-            y_actual = df[target_col].iloc[test_idx].values[:n_samples]
-        else:
-            # Fallback: use residuals to compute actual
-            y_actual = stage1_pred[:n_samples] + resid[:n_samples]
+        # Compute actual values from filtered data (residual = actual - pred, so actual = pred + residual)
+        y_actual = stage1_pred_aligned + y_train_resid
 
-        # Calculate metrics
+        # Calculate metrics (all arrays now have same length after filtering)
         mae = mean_absolute_error(y_actual, final_pred)
         rmse = np.sqrt(mean_squared_error(y_actual, final_pred))
 
         results["per_h"][h] = {
-            "stage1_pred": stage1_pred[:n_samples],
+            "stage1_pred": stage1_pred_aligned,
             "stage2_correction": stage2_correction,
             "final_pred": final_pred,
             "actual": y_actual,
