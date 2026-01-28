@@ -517,6 +517,66 @@ def _extract_hybrid_metrics(hybrid_results: Dict) -> Optional[Dict]:
         return None
 
 
+def _extract_lstm_xgb_metrics(hybrid_results: Dict) -> Optional[Dict]:
+    """Extract metrics from hybrid LSTM-XGBoost results."""
+    try:
+        # Results structure: {"artifacts": artifacts, "config": config, "dataset_name": ...}
+        # artifacts.metrics contains the metrics dict
+        artifacts = hybrid_results.get("artifacts")
+        if artifacts is None:
+            return None
+
+        # Get metrics from artifacts object
+        metrics = getattr(artifacts, "metrics", {}) if hasattr(artifacts, "metrics") else {}
+        if not metrics:
+            metrics = hybrid_results.get("metrics", {})
+
+        return {
+            "Model": "Hybrid LSTM-XGBoost",
+            "Category": "Hybrid",
+            "Source": "Modeling Hub",
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            "Runtime_s": _safe_float(hybrid_results.get("runtime_s")),
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Parameters": "LSTM + XGBoost residual correction",
+        }
+    except Exception:
+        return None
+
+
+def _extract_lstm_ann_metrics(hybrid_results: Dict) -> Optional[Dict]:
+    """Extract metrics from hybrid LSTM-ANN results."""
+    try:
+        # Results structure: {"artifacts": artifacts, "config": config, "dataset_name": ...}
+        # artifacts.metrics contains the metrics dict
+        artifacts = hybrid_results.get("artifacts")
+        if artifacts is None:
+            return None
+
+        # Get metrics from artifacts object
+        metrics = getattr(artifacts, "metrics", {}) if hasattr(artifacts, "metrics") else {}
+        if not metrics:
+            metrics = hybrid_results.get("metrics", {})
+
+        return {
+            "Model": "Hybrid LSTM-ANN",
+            "Category": "Hybrid",
+            "Source": "Modeling Hub",
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            "Runtime_s": _safe_float(hybrid_results.get("runtime_s")),
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Parameters": "LSTM + ANN residual correction",
+        }
+    except Exception:
+        return None
+
+
 def _extract_optimized_metrics(opt_results: Dict, model_type: str) -> Optional[Dict]:
     """Extract metrics from hyperparameter-optimized model results."""
     try:
