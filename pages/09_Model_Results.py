@@ -643,6 +643,46 @@ def _extract_optimized_metrics(opt_results: Dict, model_type: str) -> Optional[D
         return None
 
 
+def _extract_generic_hybrid_metrics(hybrid_data: Dict, hybrid_name: str) -> Optional[Dict]:
+    """Extract metrics from generic hybrid pipeline results."""
+    try:
+        metrics = hybrid_data.get("metrics", {})
+        return {
+            "Model": f"Hybrid {hybrid_name}",
+            "Category": "Hybrid",
+            "Source": "Modeling Hub",
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            "Runtime_s": _safe_float(hybrid_data.get("runtime_s")),
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Parameters": f"Hybrid pipeline: {hybrid_name}",
+        }
+    except Exception:
+        return None
+
+
+def _extract_decomposition_metrics(decomp_results: Dict) -> Optional[Dict]:
+    """Extract metrics from decomposition ensemble results."""
+    try:
+        metrics = decomp_results.get("metrics", {})
+        return {
+            "Model": "Decomposition Ensemble",
+            "Category": "Ensemble",
+            "Source": "Modeling Hub",
+            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            "Runtime_s": _safe_float(decomp_results.get("runtime_s")),
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Parameters": "STL Decomposition + Component Models",
+        }
+    except Exception:
+        return None
+
+
 # =============================================================================
 # STATISTICAL ANALYSIS
 # =============================================================================
