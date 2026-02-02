@@ -1753,10 +1753,15 @@ with tab_experiments:
     for model_name in ["XGBoost", "LSTM", "ANN", "ARIMA", "SARIMAX"]:
         if model_name in ["ARIMA", "SARIMAX"]:
             results_key = f"{model_name.lower()}_mh_results" if model_name == "ARIMA" else f"{model_name.lower()}_results"
+            has_results = st.session_state.get(results_key) is not None
         else:
-            results_key = f"ml_mh_results_{model_name}"
+            # Check both lowercase and titlecase keys for ML models
+            has_results = (
+                st.session_state.get(f"ml_mh_results_{model_name.lower()}") is not None or
+                st.session_state.get(f"ml_mh_results_{model_name}") is not None
+            )
 
-        if st.session_state.get(results_key):
+        if has_results:
             available_models_to_save.append(model_name)
 
     if available_models_to_save and dataset_id:
