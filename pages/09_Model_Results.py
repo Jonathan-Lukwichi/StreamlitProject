@@ -1557,7 +1557,10 @@ with tab_horizons:
 
         if horizon_source in ["All Models", "ML (XGBoost/LSTM/ANN)"]:
             for model_name in ["XGBoost", "LSTM", "ANN"]:
-                ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+                # Check both lowercase and titlecase keys
+                ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+                if ml_results is None:
+                    ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
                 if ml_results:
                     # ML metrics are stored in results_df, not per_h
                     results_df = ml_results.get("results_df")
