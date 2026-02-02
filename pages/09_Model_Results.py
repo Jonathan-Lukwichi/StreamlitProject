@@ -1170,7 +1170,10 @@ def create_horizon_performance_chart(source: str = "all") -> Optional[go.Figure]
     if source in ["all", "ml"]:
         # ML Models - metrics are in results_df, not per_h
         for model_name in ["XGBoost", "LSTM", "ANN"]:
-            ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+            # Check both lowercase and titlecase keys
+            ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+            if ml_results is None:
+                ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
             if ml_results:
                 results_df = ml_results.get("results_df")
                 if results_df is not None and not results_df.empty:
