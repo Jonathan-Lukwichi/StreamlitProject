@@ -2336,7 +2336,10 @@ with tab_explainability:
     # Check for available ML models with explainability data
     available_models = []
     for model_name in ["XGBoost", "LSTM", "ANN"]:
-        ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+        # Check both lowercase and titlecase keys
+        ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+        if ml_results is None:
+            ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
         if ml_results and ml_results.get("pipelines"):
             available_models.append(model_name)
 
