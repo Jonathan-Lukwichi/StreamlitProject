@@ -5205,30 +5205,6 @@ def page_hybrid():
     # ==========================================================================
     _display_hybrid_results()
 
-    # ==========================================================================
-    # SECTION 4: LEGACY HYBRID OPTIONS (collapsed)
-    # ==========================================================================
-    with st.expander("📋 **Legacy Hybrid Options** (Advanced)", expanded=False):
-        st.caption("These are the original hybrid ensemble strategies. Use the two-stage approach above for best results.")
-
-        # Legacy dropdown for additional options
-        legacy_options = [
-            "⚖️ Weighted Ensemble (Combine Trained Models)",
-            "🔬 Decomposition + Ensemble (Component-Based Modeling)",
-            "🔗 Stacking Ensemble (Meta-Learning)",
-        ]
-
-        legacy_choice = st.selectbox("Select Legacy Strategy", legacy_options, index=0)
-
-        if st.button("Run Legacy Strategy", type="secondary"):
-            if "Weighted Ensemble" in legacy_choice:
-                _page_hybrid_weighted()
-            elif "Decomposition" in legacy_choice:
-                _page_hybrid_decomposition()
-            else:
-                _page_hybrid_stacking()
-
-
 def _check_stage1_readiness():
     """Display detailed status of Stage 1 models and their residuals."""
 
