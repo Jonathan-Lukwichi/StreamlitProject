@@ -341,7 +341,10 @@ def aggregate_all_model_results() -> pd.DataFrame:
 
     # 4. ML models (XGBoost, LSTM, ANN)
     for model_name in ["XGBoost", "LSTM", "ANN"]:
-        ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+        # Check both lowercase and titlecase keys (08_Train_Models.py uses lowercase)
+        ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+        if ml_results is None:
+            ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
         if ml_results:
             metrics = _extract_ml_metrics(ml_results, model_name)
             if metrics:
@@ -349,7 +352,12 @@ def aggregate_all_model_results() -> pd.DataFrame:
 
     # 5. Single ML model results (if only one model trained)
     ml_mh = st.session_state.get("ml_mh_results")
-    if ml_mh and not any(st.session_state.get(f"ml_mh_results_{m}") for m in ["XGBoost", "LSTM", "ANN"]):
+    # Check if any model-specific results exist (both lowercase and titlecase)
+    has_specific_results = any(
+        st.session_state.get(f"ml_mh_results_{m.lower()}") or st.session_state.get(f"ml_mh_results_{m}")
+        for m in ["XGBoost", "LSTM", "ANN"]
+    )
+    if ml_mh and not has_specific_results:
         # Determine model type from session state config
         model_type = st.session_state.get("ml_choice", "ML Model")
         metrics = _extract_ml_metrics(ml_mh, model_type)
