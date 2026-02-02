@@ -401,11 +401,30 @@ def aggregate_all_model_results() -> pd.DataFrame:
 
     # 11. Optimized model results
     for model_type in ["XGBoost", "LSTM", "ANN"]:
+        # Check both titlecase and lowercase keys
         opt_results = st.session_state.get(f"opt_results_{model_type}")
+        if opt_results is None:
+            opt_results = st.session_state.get(f"opt_results_{model_type.lower()}")
         if opt_results:
             metrics = _extract_optimized_metrics(opt_results, model_type)
             if metrics:
                 all_results.append(metrics)
+
+    # 12. Generic Hybrid Pipeline results (from diagnostics)
+    hybrid_pipeline = st.session_state.get("hybrid_pipeline_results")
+    if hybrid_pipeline and isinstance(hybrid_pipeline, dict):
+        for hybrid_name, hybrid_data in hybrid_pipeline.items():
+            if hybrid_data and isinstance(hybrid_data, dict) and hybrid_data.get("success"):
+                metrics = _extract_generic_hybrid_metrics(hybrid_data, hybrid_name)
+                if metrics:
+                    all_results.append(metrics)
+
+    # 13. Decomposition ensemble results
+    decomp_results = st.session_state.get("decomposition_results")
+    if decomp_results:
+        metrics = _extract_decomposition_metrics(decomp_results)
+        if metrics:
+            all_results.append(metrics)
 
     # Create DataFrame
     if all_results:
