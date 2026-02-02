@@ -2376,8 +2376,11 @@ with tab_explainability:
 
         # Get the selected model's results
         if selected_model in ["XGBoost", "LSTM", "ANN"]:
-            ml_results = st.session_state.get(f"ml_mh_results_{selected_model}")
-            if not ml_results:
+            # Check both lowercase and titlecase keys
+            ml_results = st.session_state.get(f"ml_mh_results_{selected_model.lower()}")
+            if ml_results is None:
+                ml_results = st.session_state.get(f"ml_mh_results_{selected_model}")
+            if ml_results is None:
                 ml_results = st.session_state.get("ml_mh_results")
         else:
             ml_results = st.session_state.get("ml_mh_results")
