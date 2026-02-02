@@ -1792,10 +1792,12 @@ with tab_experiments:
                         # Get model results
                         if model_name in ["ARIMA", "SARIMAX"]:
                             results_key = "arima_mh_results" if model_name == "ARIMA" else "sarimax_results"
+                            ml_results = st.session_state.get(results_key)
                         else:
-                            results_key = f"ml_mh_results_{model_name}"
-
-                        ml_results = st.session_state.get(results_key)
+                            # Check both lowercase and titlecase keys for ML models
+                            ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+                            if ml_results is None:
+                                ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
 
                         if ml_results:
                             results_df = ml_results.get("results_df")
