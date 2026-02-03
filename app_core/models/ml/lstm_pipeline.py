@@ -266,6 +266,20 @@ class LSTMPipeline:
         except ImportError:
             raise ImportError("TensorFlow is required for LSTM")
 
+        # Step 0: NaN/Inf validation and cleaning (CRITICAL for stable training)
+        if np.isnan(X_train).any() or np.isinf(X_train).any():
+            print("⚠️  WARNING: NaN/Inf detected in X_train - cleaning...")
+            X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+        if np.isnan(y_train).any() or np.isinf(y_train).any():
+            print("⚠️  WARNING: NaN/Inf detected in y_train - cleaning...")
+            y_train = np.nan_to_num(y_train, nan=0.0, posinf=0.0, neginf=0.0)
+        if np.isnan(X_val).any() or np.isinf(X_val).any():
+            print("⚠️  WARNING: NaN/Inf detected in X_val - cleaning...")
+            X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
+        if np.isnan(y_val).any() or np.isinf(y_val).any():
+            print("⚠️  WARNING: NaN/Inf detected in y_val - cleaning...")
+            y_val = np.nan_to_num(y_val, nan=0.0, posinf=0.0, neginf=0.0)
+
         # Step 1: Detect preprocessing state
         detection = self.detect_preprocessing_state(X_train, y_train)
         self.preprocessing_report = detection
