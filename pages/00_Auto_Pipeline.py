@@ -899,6 +899,7 @@ def run_full_pipeline(pipeline_config: Dict):
     config = pipeline_config["config"]
     models = pipeline_config["models"]
     uploaded_file = pipeline_config["uploaded_file"]
+    use_uploaded_data = pipeline_config.get("use_uploaded_data", False)
 
     # Count selected models
     selected_models = [name for name, selected in models.items() if selected]
@@ -916,10 +917,23 @@ def run_full_pipeline(pipeline_config: Dict):
         # Step 1: Load Data
         # =====================================================================
         current_step += 1
-        with status:
-            st.write("**Step 1**: Loading data file...")
-        df_raw = load_uploaded_data(uploaded_file)
-        st.write(f"Loaded {len(df_raw)} rows, {len(df_raw.columns)} columns")
+
+        if use_uploaded_data:
+            # Use data from Upload Data page (fuse patient, weather, calendar, reason)
+            with status:
+                st.write("**Step 1**: Loading and fusing data from Upload Data page...")
+            df_raw, fusion_log = load_and_fuse_uploaded_data()
+            st.write(f"Fused data: {len(df_raw)} rows, {len(df_raw.columns)} columns")
+            # Show fusion summary
+            success_count = sum(1 for log in fusion_log if log.startswith("✅"))
+            st.write(f"Fusion complete: {success_count} datasets merged successfully")
+        else:
+            # Use uploaded file
+            with status:
+                st.write("**Step 1**: Loading data file...")
+            df_raw = load_uploaded_data(uploaded_file)
+            st.write(f"Loaded {len(df_raw)} rows, {len(df_raw.columns)} columns")
+
         progress_bar.progress(current_step / total_steps)
         time.sleep(0.3)
 
