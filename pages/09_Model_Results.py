@@ -2098,71 +2098,142 @@ with tab_validation:
             st.info("Train models to compute confidence intervals.")
 
 # -----------------------------------------------------------------------------
-# TAB 4: RANKINGS
+# TAB 4: DIAGNOSTICS (PhD-Level Residual Analysis)
 # -----------------------------------------------------------------------------
-with tab_rankings:
-    st.markdown("### Comprehensive Model Rankings")
+with tab_diagnostics:
+    st.markdown("### 🔬 Residual Diagnostics")
+    st.caption("Validate model assumptions and detect issues - essential for thesis-quality work")
 
-    ranked_df = compute_model_rankings(all_models_df)
+    if not RESIDUAL_DIAGNOSTICS_AVAILABLE or not DIAGNOSTIC_PLOTS_AVAILABLE:
+        st.error("⚠️ Diagnostics modules not available. Please check installation.")
+    else:
+        # Model and horizon selection
+        col1, col2 = st.columns(2)
 
-    # Ranking heatmap
-    heatmap_fig = create_ranking_heatmap(all_models_df)
-    st.plotly_chart(heatmap_fig, use_container_width=True)
+        # Get available models with residuals
+        test_residuals = collect_model_residuals(horizon=1)
+        available_for_diagnostics = list(test_residuals.keys()) if test_residuals else []
 
-    # Detailed ranking table
-    st.markdown("#### Ranking Details")
+        with col1:
+            diag_model = st.selectbox(
+                "Select Model:",
+                options=available_for_diagnostics if available_for_diagnostics else ["No models available"],
+                key="diag_model_select"
+            )
 
-    rank_display_cols = ["Model", "Category", "Overall_Rank", "Composite_Score",
-                         "MAE_Rank", "RMSE_Rank", "MAPE_Rank", "Acc_Rank"]
-    rank_display_cols = [c for c in rank_display_cols if c in ranked_df.columns]
+        with col2:
+            diag_horizon = st.selectbox(
+                "Select Horizon:",
+                options=[1, 2, 3, 4, 5, 6, 7],
+                index=0,
+                key="diag_horizon_select"
+            )
 
-    # Apply medal styling
-    def style_rank(val):
-        if pd.isna(val):
-            return ""
-        if val == 1:
-            return "background-color: rgba(255, 215, 0, 0.3); font-weight: bold;"
-        elif val == 2:
-            return "background-color: rgba(192, 192, 192, 0.3);"
-        elif val == 3:
-            return "background-color: rgba(205, 127, 50, 0.3);"
-        return ""
+        if diag_model and diag_model != "No models available":
+            # Get residuals for selected model and horizon
+            residuals_data = collect_model_residuals(horizon=diag_horizon)
 
-    st.dataframe(
-        ranked_df[rank_display_cols].style.format({
-            "Composite_Score": "{:.4f}",
-            "Overall_Rank": "{:.0f}",
-            "MAE_Rank": "{:.0f}",
-            "RMSE_Rank": "{:.0f}",
-            "MAPE_Rank": "{:.0f}",
-            "Acc_Rank": "{:.0f}",
-        }, na_rep="—").applymap(
-            style_rank,
-            subset=[c for c in ["Overall_Rank", "MAE_Rank", "RMSE_Rank", "MAPE_Rank", "Acc_Rank"] if c in rank_display_cols]
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
+            if diag_model in residuals_data:
+                model_data = residuals_data[diag_model]
+                y_true = model_data["y_true"]
+                y_pred = model_data["y_pred"]
+                residuals = model_data["residuals"]
 
-    # Ranking methodology explanation
-    with st.expander("📖 Ranking Methodology"):
-        st.markdown("""
-        **Composite Score Calculation:**
+                # Section 1: Comprehensive Diagnostic Panel
+                st.markdown(f"#### Diagnostic Panel: {diag_model} (Horizon {diag_horizon})")
 
-        The composite ranking uses a weighted scoring system designed for healthcare forecasting:
+                diag_panel = create_diagnostic_panel(y_true, y_pred, diag_model, diag_horizon)
+                st.plotly_chart(diag_panel, use_container_width=True)
 
-        | Metric | Weight | Rationale |
-        |--------|--------|-----------|
-        | RMSE | 35% | Primary accuracy measure, penalizes large errors critical in healthcare |
-        | MAE | 30% | Robust to outliers, directly interpretable as average error |
-        | MAPE | 20% | Relative error, enables comparison across different scales |
-        | Accuracy | 15% | Overall prediction accuracy measure |
+                st.divider()
 
-        **Interpretation:**
-        - Lower composite score = better overall performance
-        - A model ranking #1 in all metrics would have the lowest possible composite score
-        - The ranking accounts for missing metrics by adjusting weights proportionally
-        """)
+                # Section 2: Statistical Tests Summary
+                st.markdown("#### 📋 Statistical Tests Summary")
+
+                # Compute full diagnostics
+                full_diag = compute_full_diagnostics(residuals, y_pred, diag_model, diag_horizon)
+
+                # Overall badge
+                badge_text, badge_color = get_diagnostic_badge(full_diag)
+                st.markdown(f"""
+                <div style="background: rgba(30, 41, 59, 0.8); border-left: 4px solid {badge_color};
+                            padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <strong style="color: {badge_color};">{badge_text}</strong>
+                    <span style="color: {SUBTLE_TEXT};">
+                        ({4 - len(full_diag.issues_found)}/4 tests passed)
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Tests table
+                tests_data = [
+                    {
+                        "Test": full_diag.normality_test.test_name,
+                        "Statistic": f"{full_diag.normality_test.statistic:.4f}" if pd.notna(full_diag.normality_test.statistic) else "—",
+                        "p-value": format_p_value_display(full_diag.normality_test.p_value) if pd.notna(full_diag.normality_test.p_value) else "—",
+                        "Result": "✅ PASS" if full_diag.normality_test.passed else "❌ FAIL",
+                        "Interpretation": full_diag.normality_test.interpretation,
+                    },
+                    {
+                        "Test": full_diag.autocorrelation_test.test_name,
+                        "Statistic": f"{full_diag.autocorrelation_test.statistic:.4f}" if pd.notna(full_diag.autocorrelation_test.statistic) else "—",
+                        "p-value": format_p_value_display(full_diag.autocorrelation_test.p_value) if pd.notna(full_diag.autocorrelation_test.p_value) else "—",
+                        "Result": "✅ PASS" if full_diag.autocorrelation_test.passed else "❌ FAIL",
+                        "Interpretation": full_diag.autocorrelation_test.interpretation,
+                    },
+                    {
+                        "Test": full_diag.heteroscedasticity_test.test_name,
+                        "Statistic": f"{full_diag.heteroscedasticity_test.statistic:.4f}" if pd.notna(full_diag.heteroscedasticity_test.statistic) else "—",
+                        "p-value": format_p_value_display(full_diag.heteroscedasticity_test.p_value) if pd.notna(full_diag.heteroscedasticity_test.p_value) else "—",
+                        "Result": "✅ PASS" if full_diag.heteroscedasticity_test.passed else "❌ FAIL",
+                        "Interpretation": full_diag.heteroscedasticity_test.interpretation,
+                    },
+                    {
+                        "Test": full_diag.bias_test.test_name,
+                        "Statistic": f"{full_diag.bias_test.statistic:.4f}" if pd.notna(full_diag.bias_test.statistic) else "—",
+                        "p-value": format_p_value_display(full_diag.bias_test.p_value) if pd.notna(full_diag.bias_test.p_value) else "—",
+                        "Result": "✅ PASS" if full_diag.bias_test.passed else "❌ FAIL",
+                        "Interpretation": full_diag.bias_test.interpretation,
+                    },
+                ]
+
+                tests_df = pd.DataFrame(tests_data)
+                st.dataframe(tests_df, use_container_width=True, hide_index=True)
+
+                # Issues and recommendations
+                if full_diag.issues_found:
+                    st.warning(f"⚠️ **Issues Found:** {', '.join(full_diag.issues_found)}")
+
+                if full_diag.recommendations:
+                    st.markdown("**Recommendations:**")
+                    for rec in full_diag.recommendations:
+                        st.markdown(f"- {rec}")
+
+                st.divider()
+
+                # Section 3: Residual Statistics
+                st.markdown("#### 📊 Residual Statistics")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Mean", f"{full_diag.mean:.4f}", help="Should be close to 0 for unbiased model")
+                with col2:
+                    st.metric("Std Dev", f"{full_diag.std:.4f}")
+                with col3:
+                    st.metric("Skewness", f"{full_diag.skewness:.3f}", help="Should be close to 0 for normal distribution")
+                with col4:
+                    st.metric("Kurtosis", f"{full_diag.kurtosis:.3f}", help="Excess kurtosis; 0 for normal distribution")
+
+                # ACF significant lags
+                if full_diag.acf_result.significant_lags:
+                    st.warning(f"⚠️ Significant autocorrelation at lags: {full_diag.acf_result.significant_lags}")
+                else:
+                    st.success("✅ No significant autocorrelation in residuals")
+
+            else:
+                st.warning(f"No residual data available for {diag_model} at horizon {diag_horizon}. Please train this model first.")
+        else:
+            st.info("Train models to see residual diagnostics.")
 
 # -----------------------------------------------------------------------------
 # TAB 5: DATASET EXPERIMENTS
