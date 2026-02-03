@@ -604,9 +604,9 @@ def train_sarimax(df: pd.DataFrame, config: Dict) -> Dict:
         from app_core.models.sarimax_pipeline import run_sarimax_multihorizon
 
         result = run_sarimax_multihorizon(
-            df=df,
+            df_merged=df,
             train_ratio=config["train_ratio"],
-            max_horizon=config["horizons"],
+            horizons=config["horizons"],
             order=config.get("sarimax_order", (1, 1, 1)),
             seasonal_order=config.get("sarimax_seasonal_order", (1, 1, 1, 7)),
         )
