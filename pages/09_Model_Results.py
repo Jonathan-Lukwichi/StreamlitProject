@@ -2240,9 +2240,15 @@ with tab_diagnostics:
 # to consolidate the PhD-level 6-tab structure
 # -----------------------------------------------------------------------------
 
-# REMOVED: tab_experiments section - key features moved to Export tab
-# with tab_experiments_REMOVED:
-    st.markdown("### Dataset-Based Experiment Tracking")
+# REMOVED: The old tab_experiments and tab_hyperparams sections have been
+# consolidated into the new 6-tab PhD-level structure.
+# Key experiment tracking features are available in the Export tab.
+
+# Skip to next tab (tab_explainability)
+if False:  # Disabled old sections
+    pass  # Placeholder to maintain syntax
+    # Old tab_experiments content was here (lines removed)
+    st.markdown("### [DISABLED] Dataset-Based Experiment Tracking")
     st.caption("Track and compare model performance across different feature configurations")
 
     # Initialize experiment service
