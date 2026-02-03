@@ -1607,70 +1607,151 @@ tab_summary, tab_performance, tab_validation, tab_diagnostics, tab_explainabilit
 ])
 
 # -----------------------------------------------------------------------------
-# TAB 1: OVERVIEW
+# TAB 1: EXECUTIVE SUMMARY (PhD-Level)
 # -----------------------------------------------------------------------------
-with tab_overview:
-    st.markdown("### All Trained Models")
+with tab_summary:
+    st.markdown("### 🎯 Executive Summary")
+    st.caption("30-second answer to: Which model should I use?")
 
-    # Format and display the main comparison table
-    display_df = all_models_df.copy()
-
-    # Select columns to display
-    display_cols = ["Model", "Category", "Source", "MAE", "RMSE", "MAPE_%", "Accuracy_%", "Runtime_s"]
-    display_cols = [c for c in display_cols if c in display_df.columns]
-
-    # Apply formatting
-    format_dict = {col: METRIC_FORMATTERS.get(col, "{:.4f}") for col in display_cols if col in METRIC_FORMATTERS}
-
-    st.dataframe(
-        display_df[display_cols].style.format(format_dict, na_rep="—").background_gradient(
-            subset=[c for c in ["MAE", "RMSE", "MAPE_%"] if c in display_cols],
-            cmap="RdYlGn_r"
-        ).background_gradient(
-            subset=["Accuracy_%"] if "Accuracy_%" in display_cols else [],
-            cmap="RdYlGn"
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    # Best model details
-    st.markdown("### Best Model Performance Metrics")
-
+    # Main recommendation card
     metrics = analysis.get("metrics", {})
-    col1, col2, col3, col4 = st.columns(4)
+    ranks = analysis.get("ranks", {})
+
+    # Compute skill score if baselines available
+    skill_score_pct = None
+    skill_interpretation = "N/A"
+    if STATISTICAL_TESTS_AVAILABLE:
+        baselines = compute_naive_baselines_for_comparison()
+        if baselines and "persistence" in baselines:
+            naive_rmse = baselines["persistence"]["rmse"]
+            model_rmse = metrics.get("RMSE", np.nan)
+            if np.isfinite(model_rmse) and naive_rmse > 0:
+                skill_score_pct = (1 - model_rmse / naive_rmse) * 100
+                if skill_score_pct > 30:
+                    skill_interpretation = "Substantial improvement"
+                elif skill_score_pct > 10:
+                    skill_interpretation = "Moderate improvement"
+                elif skill_score_pct > 0:
+                    skill_interpretation = "Marginal improvement"
+                else:
+                    skill_interpretation = "No improvement over baseline"
+
+    # Recommendation card with key metrics
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1));
+                border: 2px solid #22C55E; border-radius: 16px; padding: 1.5rem; margin: 1rem 0;
+                box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);">
+        <h2 style="color: #22C55E; margin: 0 0 1rem 0; font-size: 1.5rem;">
+            🏆 RECOMMENDED: {best_model}
+        </h2>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
+            <div style="text-align: center;">
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.8rem;">RMSE</div>
+                <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: bold;">
+                    {metrics.get('RMSE', 0):.2f}
+                </div>
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.7rem;">patients</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.8rem;">MAE</div>
+                <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: bold;">
+                    {metrics.get('MAE', 0):.2f}
+                </div>
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.7rem;">patients</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.8rem;">Accuracy</div>
+                <div style="color: {TEXT_COLOR}; font-size: 1.3rem; font-weight: bold;">
+                    {metrics.get('Accuracy_%', 0):.1f}%
+                </div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.8rem;">Skill Score</div>
+                <div style="color: {'#22C55E' if skill_score_pct and skill_score_pct > 10 else WARNING_COLOR}; font-size: 1.3rem; font-weight: bold;">
+                    {f'+{skill_score_pct:.1f}%' if skill_score_pct else 'N/A'}
+                </div>
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.7rem;">vs naive</div>
+            </div>
+        </div>
+        <div style="color: {SUBTLE_TEXT}; font-size: 0.85rem;">
+            Category: <strong style="color: {TEXT_COLOR}">{analysis.get('category', 'Unknown')}</strong> |
+            Consistency: <strong style="color: {TEXT_COLOR}">{analysis.get('consistency', 0)*100:.0f}%</strong> |
+            Skill: <strong style="color: {'#22C55E' if skill_score_pct and skill_score_pct > 10 else WARNING_COLOR}">{skill_interpretation}</strong>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # Business Impact Section
+    st.markdown("### 💼 Business Impact Interpretation")
+
+    col1, col2 = st.columns(2)
 
     with col1:
+        st.markdown("#### What These Metrics Mean")
         mae_val = metrics.get("MAE", np.nan)
-        st.metric(
-            "MAE",
-            f"{mae_val:.4f}" if np.isfinite(mae_val) else "—",
-            help="Mean Absolute Error - average magnitude of errors"
-        )
+        rmse_val = metrics.get("RMSE", np.nan)
+
+        if np.isfinite(mae_val) and np.isfinite(rmse_val):
+            st.markdown(f"""
+            - **Average forecast error:** ±{mae_val:.1f} patients per day
+            - **95% of forecasts within:** ±{rmse_val * 1.96:.1f} patients
+            - **For staffing:** Plan for ±{int(np.ceil(rmse_val))} staff buffer
+            """)
+        else:
+            st.info("Train models to see business impact metrics")
 
     with col2:
-        rmse_val = metrics.get("RMSE", np.nan)
-        st.metric(
-            "RMSE",
-            f"{rmse_val:.4f}" if np.isfinite(rmse_val) else "—",
-            help="Root Mean Square Error - penalizes larger errors more"
-        )
+        st.markdown("#### Model Selection Guidance")
 
-    with col3:
-        mape_val = metrics.get("MAPE_%", np.nan)
-        st.metric(
-            "MAPE",
-            f"{mape_val:.2f}%" if np.isfinite(mape_val) else "—",
-            help="Mean Absolute Percentage Error"
-        )
+        # Create guidance table based on available models
+        if len(all_models_df) > 1:
+            guidance_data = []
+            ranked = compute_model_rankings(all_models_df)
 
-    with col4:
-        acc_val = metrics.get("Accuracy_%", np.nan)
-        st.metric(
-            "Accuracy",
-            f"{acc_val:.2f}%" if np.isfinite(acc_val) else "—",
-            help="Overall prediction accuracy"
-        )
+            # Best for 1-day ahead (lowest RMSE)
+            if "RMSE" in ranked.columns:
+                best_1day = ranked.nsmallest(1, "RMSE")["Model"].iloc[0]
+                guidance_data.append({"Use Case": "1-day ahead", "Model": best_1day, "Why": "Lowest RMSE"})
+
+            # Best accuracy
+            if "Accuracy_%" in ranked.columns:
+                best_acc = ranked.nlargest(1, "Accuracy_%")["Model"].iloc[0]
+                guidance_data.append({"Use Case": "Overall accuracy", "Model": best_acc, "Why": "Highest accuracy"})
+
+            # Hybrid for complexity
+            hybrids = ranked[ranked["Category"] == "Hybrid"]
+            if not hybrids.empty:
+                best_hybrid = hybrids.iloc[0]["Model"]
+                guidance_data.append({"Use Case": "Complex patterns", "Model": best_hybrid, "Why": "Captures nonlinearity"})
+
+            if guidance_data:
+                guidance_df = pd.DataFrame(guidance_data)
+                st.dataframe(guidance_df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # Quick Rankings
+    st.markdown("### 🏅 Quick Rankings")
+
+    ranked_df = compute_model_rankings(all_models_df)
+    top_3 = ranked_df.head(3)
+
+    cols = st.columns(3)
+    medals = ["🥇", "🥈", "🥉"]
+
+    for i, (_, row) in enumerate(top_3.iterrows()):
+        with cols[i]:
+            st.markdown(f"""
+            <div style="background: rgba(30, 41, 59, 0.8); border-radius: 12px; padding: 1rem; text-align: center;">
+                <div style="font-size: 2rem;">{medals[i]}</div>
+                <div style="color: {TEXT_COLOR}; font-weight: bold;">{row['Model']}</div>
+                <div style="color: {SUBTLE_TEXT}; font-size: 0.8rem;">
+                    RMSE: {row.get('RMSE', 0):.3f} | Acc: {row.get('Accuracy_%', 0):.1f}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
 # TAB 2: COMPARISON
