@@ -1145,6 +1145,15 @@ def run_ml_multihorizon(
 
             successful.append(h)
 
+            # Clean up TensorFlow/Keras memory after each horizon (CRITICAL for LSTM/ANN)
+            if model_type in ["LSTM", "ANN"]:
+                try:
+                    import keras.backend as K
+                    K.clear_session()
+                except Exception:
+                    pass
+                gc.collect()
+
         except Exception as e:
             # Skip failed horizons and store error
             error_msg = str(e)
@@ -1152,6 +1161,16 @@ def run_ml_multihorizon(
             print(f"❌ Horizon {h} failed: {error_msg}")
             import traceback
             traceback.print_exc()  # Print full traceback to console
+
+            # Clean up even on failure
+            if model_type in ["LSTM", "ANN"]:
+                try:
+                    import keras.backend as K
+                    K.clear_session()
+                except Exception:
+                    pass
+                gc.collect()
+
             continue
 
     # Create results DataFrame (handle empty case)
