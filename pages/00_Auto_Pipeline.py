@@ -185,8 +185,15 @@ def prepare_pipeline_data(df_raw: pd.DataFrame, config: Dict) -> Tuple[pd.DataFr
     return processed_df, report
 
 
-def build_features(df: pd.DataFrame, config: Dict) -> Dict:
-    """Build feature DataFrame with train/test split."""
+def build_features(df: pd.DataFrame, config: Dict, selected_features: Optional[List[str]] = None) -> Dict:
+    """Build feature DataFrame with train/test split.
+
+    Args:
+        df: Processed DataFrame with features and targets
+        config: Pipeline configuration
+        selected_features: Optional list of selected feature names to use.
+                          If None, uses all numeric features.
+    """
     horizons = config["horizons"]
     train_ratio = config["train_ratio"]
 
@@ -201,9 +208,12 @@ def build_features(df: pd.DataFrame, config: Dict) -> Dict:
         elif pd.api.types.is_datetime64_any_dtype(df[col]):
             date_cols.append(col)
 
-    # Feature columns = all columns except targets and date
+    # All feature columns = all columns except targets and date
     exclude_cols = set(target_cols + date_cols)
-    feature_cols = [c for c in df.columns if c not in exclude_cols and df[c].dtype in ['int64', 'float64', 'int32', 'float32']]
+    all_feature_cols = [c for c in df.columns if c not in exclude_cols and df[c].dtype in ['int64', 'float64', 'int32', 'float32']]
+
+    # Use selected features if provided, otherwise use all
+    feature_cols = selected_features if selected_features else all_feature_cols
 
     # Temporal split (80/20)
     n = len(df)
@@ -217,16 +227,124 @@ def build_features(df: pd.DataFrame, config: Dict) -> Dict:
         "train_idx": train_idx,
         "test_idx": test_idx,
         "feature_cols": feature_cols,
+        "all_feature_cols": all_feature_cols,
         "summary": {
             "train_size": len(train_idx),
             "test_size": len(test_idx),
             "train_ratio": train_ratio,
             "n_features": len(feature_cols),
+            "n_total_features": len(all_feature_cols),
             "variant_used": "Auto Pipeline",
         }
     }
     st.session_state["feature_engineering"] = fe_result
     return fe_result
+
+
+def run_feature_selection(df: pd.DataFrame, config: Dict, fe_result: Dict) -> Dict:
+    """
+    Run automated feature selection using Gradient Boosting method.
+
+    This function selects the most important features across all horizons
+    to improve model training quality.
+
+    Args:
+        df: Processed DataFrame with features and targets
+        config: Pipeline configuration
+        fe_result: Feature engineering result from build_features()
+
+    Returns:
+        Dict with selected_features, importances, and metadata
+    """
+    feature_cols = fe_result["feature_cols"]
+    train_idx = fe_result["train_idx"]
+    test_idx = fe_result["test_idx"]
+    horizons = config["horizons"]
+
+    # Build X (features only)
+    X = df[feature_cols].copy()
+
+    # Build y_multi (all targets)
+    y_multi = {}
+    for h in range(1, horizons + 1):
+        target_col = f"Target_{h}"
+        if target_col in df.columns:
+            y_multi[target_col] = df[target_col]
+
+    if not y_multi:
+        return {
+            "selected_features": feature_cols,
+            "all_features": feature_cols,
+            "method": "none",
+            "error": "No targets found",
+            "n_selected": len(feature_cols),
+            "n_total": len(feature_cols),
+        }
+
+    # Use temporal indices from fe_result
+    X_train = X.iloc[train_idx].copy()
+    X_test = X.iloc[test_idx].copy()
+
+    # Scale features
+    scaler = StandardScaler()
+    num_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+    if num_cols:
+        X_train[num_cols] = scaler.fit_transform(X_train[num_cols])
+        X_test[num_cols] = scaler.transform(X_test[num_cols])
+
+    # Run Gradient Boosting feature selection across all targets
+    all_importances = []
+
+    for target_name, y in y_multi.items():
+        y_train = y.iloc[train_idx]
+        y_test = y.iloc[test_idx]
+
+        try:
+            # Gradient Boosting with grid search
+            gbr = GradientBoostingRegressor(random_state=42)
+            param_grid = {
+                "learning_rate": [0.05, 0.1],
+                "max_depth": [3, 5],
+                "n_estimators": [50, 100]
+            }
+            gscv = GridSearchCV(gbr, param_grid, cv=3, scoring="neg_root_mean_squared_error", n_jobs=-1)
+            gscv.fit(X_train, y_train)
+            best = gscv.best_estimator_
+
+            importances = getattr(best, "feature_importances_", np.zeros(X_train.shape[1]))
+            all_importances.append(pd.Series(importances, index=X_train.columns))
+        except Exception as e:
+            # If a target fails, continue with others
+            continue
+
+    if not all_importances:
+        return {
+            "selected_features": feature_cols,
+            "all_features": feature_cols,
+            "method": "fallback",
+            "error": "Feature selection failed for all targets",
+            "n_selected": len(feature_cols),
+            "n_total": len(feature_cols),
+        }
+
+    # Aggregate importances across targets (average)
+    imp_df = pd.concat(all_importances, axis=1)
+    avg_imp = imp_df.mean(axis=1).sort_values(ascending=False)
+
+    # Select features with importance > threshold (or top 80% if none pass)
+    importance_threshold = 0.01
+    selected = avg_imp[avg_imp > importance_threshold].index.tolist()
+    if not selected:
+        selected = avg_imp.head(max(1, int(0.8 * len(avg_imp)))).index.tolist()
+
+    return {
+        "selected_features": selected,
+        "all_features": feature_cols,
+        "importances": avg_imp.to_dict(),
+        "n_selected": len(selected),
+        "n_total": len(feature_cols),
+        "method": "Gradient Boosting (multi-target aggregation)",
+    }
 
 
 def run_ml_model_internal(
