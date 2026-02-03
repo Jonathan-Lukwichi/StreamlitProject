@@ -2726,7 +2726,7 @@ def page_ml():
                 cfg.setdefault("xgb_max_depth", 5)
                 cfg.setdefault("xgb_eta", 0.1)
                 cfg.setdefault("xgb_min_child_weight", 1)
-                cfg.setdefault("lstm_epochs", 30)  # Reduced for speed
+                cfg.setdefault("lstm_epochs", 15)  # Reduced for speed + early stopping
                 cfg.setdefault("lstm_hidden_units", 64)
                 cfg.setdefault("lstm_layers", 2)
                 cfg.setdefault("lookback_window", 14)
