@@ -297,7 +297,7 @@ DEFAULTS = {
     "lstm_lr_min": 1e-5, "lstm_lr_max": 1e-2,
     # ANN
     "ml_ann_param_mode": "Automatic",
-    "ann_hidden_layers": 2, "ann_neurons": 64, "ann_epochs": 30, "ann_activation": "relu",
+    "ann_hidden_layers": 2, "ann_neurons": 64, "ann_epochs": 10, "ann_activation": "relu",
     "ann_search_method": "Grid (bounded)",
     "ann_max_layers": 4, "ann_max_neurons": 256, "ann_max_epochs": 60,
     # XGB
