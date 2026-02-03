@@ -2732,7 +2732,7 @@ def page_ml():
                 cfg.setdefault("lookback_window", 14)
                 cfg.setdefault("lstm_lr", 0.001)
                 cfg.setdefault("batch_size", 32)
-                cfg.setdefault("ann_epochs", 20)  # Reduced for speed
+                cfg.setdefault("ann_epochs", 10)  # Reduced for speed + early stopping
                 cfg.setdefault("ann_hidden_layers", 2)
                 cfg.setdefault("ann_neurons", 64)
                 cfg.setdefault("ann_activation", "relu")
