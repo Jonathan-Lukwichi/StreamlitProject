@@ -735,6 +735,160 @@ def _extract_decomposition_metrics(decomp_results: Dict) -> Optional[Dict]:
 
 
 # =============================================================================
+# RESIDUAL COLLECTION FOR STATISTICAL TESTS
+# =============================================================================
+
+def collect_model_residuals(horizon: int = 1) -> Dict[str, Dict]:
+    """
+    Collect residuals from all trained models for a specific horizon.
+
+    Returns dictionary mapping model names to their prediction data:
+    {
+        "Model Name": {
+            "y_true": np.array,
+            "y_pred": np.array,
+            "residuals": np.array,
+        }
+    }
+    """
+    residuals_dict = {}
+
+    # ARIMA
+    arima_results = st.session_state.get("arima_mh_results")
+    if arima_results:
+        per_h = arima_results.get("per_h", {})
+        h_data = per_h.get(horizon, per_h.get(str(horizon), {}))
+        if h_data:
+            y_test = h_data.get("y_test")
+            forecast = h_data.get("forecast")
+            if y_test is not None and forecast is not None:
+                y_test = np.asarray(y_test).flatten()
+                forecast = np.asarray(forecast).flatten()
+                min_len = min(len(y_test), len(forecast))
+                residuals_dict["ARIMA"] = {
+                    "y_true": y_test[:min_len],
+                    "y_pred": forecast[:min_len],
+                    "residuals": y_test[:min_len] - forecast[:min_len],
+                }
+
+    # SARIMAX
+    sarimax_results = st.session_state.get("sarimax_results")
+    if sarimax_results:
+        per_h = sarimax_results.get("per_h", {})
+        h_data = per_h.get(horizon, per_h.get(str(horizon), {}))
+        if h_data:
+            y_test = h_data.get("y_test")
+            forecast = h_data.get("forecast")
+            if y_test is not None and forecast is not None:
+                y_test = np.asarray(y_test).flatten()
+                forecast = np.asarray(forecast).flatten()
+                min_len = min(len(y_test), len(forecast))
+                residuals_dict["SARIMAX"] = {
+                    "y_true": y_test[:min_len],
+                    "y_pred": forecast[:min_len],
+                    "residuals": y_test[:min_len] - forecast[:min_len],
+                }
+
+    # ML Models (XGBoost, LSTM, ANN)
+    for model_name in ["XGBoost", "LSTM", "ANN"]:
+        ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+        if ml_results is None:
+            ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+
+        if ml_results:
+            per_h = ml_results.get("per_h", {})
+            h_data = per_h.get(horizon, per_h.get(str(horizon), {}))
+            if h_data:
+                y_test = h_data.get("y_test")
+                y_pred = h_data.get("forecast", h_data.get("y_test_pred", h_data.get("y_pred")))
+                if y_test is not None and y_pred is not None:
+                    y_test = np.asarray(y_test).flatten()
+                    y_pred = np.asarray(y_pred).flatten()
+                    min_len = min(len(y_test), len(y_pred))
+                    residuals_dict[model_name] = {
+                        "y_true": y_test[:min_len],
+                        "y_pred": y_pred[:min_len],
+                        "residuals": y_test[:min_len] - y_pred[:min_len],
+                    }
+
+    # Hybrid models
+    for hybrid_name, hybrid_key in [
+        ("Hybrid LSTM-SARIMAX", "lstm_sarimax_results"),
+        ("Hybrid LSTM-XGBoost", "lstm_xgb_results"),
+        ("Hybrid LSTM-ANN", "lstm_ann_results"),
+    ]:
+        hybrid_results = st.session_state.get(hybrid_key)
+        if hybrid_results:
+            artifacts = hybrid_results.get("artifacts")
+            if artifacts:
+                y_test = getattr(artifacts, "y_test", None)
+                y_pred = getattr(artifacts, "y_pred", None)
+                if y_test is not None and y_pred is not None:
+                    y_test = np.asarray(y_test).flatten()
+                    y_pred = np.asarray(y_pred).flatten()
+                    min_len = min(len(y_test), len(y_pred))
+                    residuals_dict[hybrid_name] = {
+                        "y_true": y_test[:min_len],
+                        "y_pred": y_pred[:min_len],
+                        "residuals": y_test[:min_len] - y_pred[:min_len],
+                    }
+
+    return residuals_dict
+
+
+def get_training_data_for_baseline() -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """
+    Get training and test data from session state for baseline calculation.
+
+    Returns:
+        Tuple of (y_train, y_test) or (None, None) if not available
+    """
+    # Try to get from feature engineering state
+    fe_state = st.session_state.get("feature_engineering", {})
+
+    # Check for prepared data
+    prepared_data = st.session_state.get("prepared_data")
+    if prepared_data is not None and isinstance(prepared_data, pd.DataFrame):
+        # Look for target column
+        target_cols = [c for c in prepared_data.columns if c.startswith("Target_") or c == "ED_Total" or c == "Total_Patients"]
+        if target_cols:
+            y = prepared_data[target_cols[0]].values
+            # Simple 80/20 split
+            split_idx = int(len(y) * 0.8)
+            return y[:split_idx], y[split_idx:]
+
+    # Try to get from any model's per_h data
+    for model_key in ["arima_mh_results", "sarimax_results", "ml_mh_results_xgboost"]:
+        results = st.session_state.get(model_key)
+        if results:
+            per_h = results.get("per_h", {})
+            for h_data in per_h.values():
+                y_train = h_data.get("y_train")
+                y_test = h_data.get("y_test")
+                if y_train is not None and y_test is not None:
+                    return np.asarray(y_train).flatten(), np.asarray(y_test).flatten()
+
+    return None, None
+
+
+def compute_naive_baselines_for_comparison() -> Dict[str, Dict]:
+    """
+    Compute naive baseline forecasts for skill score calculation.
+
+    Returns dictionary with baseline forecasts and metrics.
+    """
+    y_train, y_test = get_training_data_for_baseline()
+
+    if y_train is None or y_test is None:
+        return {}
+
+    if not STATISTICAL_TESTS_AVAILABLE:
+        return {}
+
+    return compute_all_baselines(y_train, y_test)
+
+
+# =============================================================================
 # STATISTICAL ANALYSIS
 # =============================================================================
 
