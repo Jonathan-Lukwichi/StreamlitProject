@@ -2709,6 +2709,14 @@ def page_ml():
                     if old_key in st.session_state:
                         del st.session_state[old_key]
 
+                # CRITICAL: Clear TensorFlow session and free memory before training
+                try:
+                    import keras.backend as K
+                    K.clear_session()
+                except Exception:
+                    pass
+                gc.collect()
+
                 all_models = ["XGBoost", "LSTM", "ANN"]
                 all_results = {}
 
