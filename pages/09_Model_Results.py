@@ -40,6 +40,57 @@ from app_core.ui.page_navigation import render_page_navigation
 from app_core.ui.components import render_scifi_hero_header
 from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
+# =============================================================================
+# PhD-LEVEL STATISTICAL ANALYSIS IMPORTS
+# =============================================================================
+try:
+    from app_core.analytics.statistical_tests import (
+        diebold_mariano_test,
+        diebold_mariano_matrix,
+        compute_naive_baseline,
+        compute_all_baselines,
+        compute_skill_score,
+        bootstrap_confidence_interval,
+        evaluate_model_vs_baselines,
+        format_p_value_display,
+        get_significance_badge,
+        test_forecast_bias,
+    )
+    STATISTICAL_TESTS_AVAILABLE = True
+except ImportError:
+    STATISTICAL_TESTS_AVAILABLE = False
+
+try:
+    from app_core.analytics.residual_diagnostics import (
+        compute_full_diagnostics,
+        compute_acf,
+        compute_pacf,
+        ljung_box_test,
+        shapiro_wilk_test,
+        breusch_pagan_test,
+        get_diagnostic_badge,
+    )
+    RESIDUAL_DIAGNOSTICS_AVAILABLE = True
+except ImportError:
+    RESIDUAL_DIAGNOSTICS_AVAILABLE = False
+
+try:
+    from app_core.ui.diagnostic_plots import (
+        create_diagnostic_panel,
+        create_actual_vs_predicted_plot,
+        create_residuals_vs_predicted_plot,
+        create_residual_histogram,
+        create_qq_plot,
+        create_acf_plot,
+        create_skill_score_gauge,
+        create_dm_heatmap,
+        create_baseline_comparison_chart,
+        create_training_loss_plot,
+    )
+    DIAGNOSTIC_PLOTS_AVAILABLE = True
+except ImportError:
+    DIAGNOSTIC_PLOTS_AVAILABLE = False
+
 # Experiment tracking service
 from app_core.data.experiment_results_service import (
     ExperimentResultsService,
