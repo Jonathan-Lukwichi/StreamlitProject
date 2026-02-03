@@ -2240,42 +2240,7 @@ with tab_diagnostics:
 # These features are now consolidated in Tab 6: Export & Reports
 # -----------------------------------------------------------------------------
 
-# [Legacy tab_experiments and tab_hyperparams code removed - see git history]
-
-        # Extract method name from results
-        fs_results = fs_state.get("results", {})
-        current_method = "Unknown"
-        current_features = []
-
-        # Try to get the active method index
-        method_idx = st.session_state.get("fs_selected_method_idx", 0)
-
-        # Get method names from results
-        method_names = {
-            0: "Baseline (All Features)",
-            1: "Permutation Importance",
-            2: "Lasso Regularization",
-            3: "Gradient Boosting"
-        }
-
-        if fs_results:
-            for method_key, method_data in fs_results.items():
-                if isinstance(method_data, dict) and method_data.get("method_name"):
-                    current_method = method_data.get("method_name")
-                    break
-
-        current_method = method_names.get(method_idx, current_method)
-
-        # Get feature count from selected features
-        selected_features = fs_state.get("selected_features", {})
-        if selected_features:
-            # Get features for the current method index
-            for key, features in selected_features.items():
-                if isinstance(features, list):
-                    current_features = features
-                    break
-
-        feature_count = len(current_features) if current_features else 0
+# [Legacy code removed]
 
         # Get engineering variant
         fe_summary = fe_state.get("summary", {})
