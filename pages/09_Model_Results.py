@@ -2242,612 +2242,6 @@ with tab_diagnostics:
 
 # [Legacy code removed]
 
-        # Get engineering variant
-        fe_summary = fe_state.get("summary", {})
-        current_variant = fe_summary.get("variant_used", "Unknown")
-
-        st.info(f"""
-        **Current Dataset Configuration:**
-        - Feature Selection Method: **{current_method}**
-        - Engineering Variant: **{current_variant}**
-        - Feature Count: **{feature_count}**
-        """)
-
-    with col2:
-        # Generate dataset ID
-        if feature_count > 0:
-            dataset_id = ExperimentResultsService.generate_dataset_id(
-                method=current_method,
-                date=datetime.now(),
-                feature_count=feature_count
-            )
-            st.code(f"Dataset ID: {dataset_id}", language=None)
-        else:
-            dataset_id = None
-            st.warning("No features selected. Please run Feature Selection first.")
-
-    st.divider()
-
-    # --- Section 2: Save Current Results ---
-    st.markdown("#### Save Current Model Results to Experiment Database")
-
-    # Get available models with results
-    available_models_to_save = []
-    for model_name in ["XGBoost", "LSTM", "ANN", "ARIMA", "SARIMAX"]:
-        if model_name in ["ARIMA", "SARIMAX"]:
-            results_key = f"{model_name.lower()}_mh_results" if model_name == "ARIMA" else f"{model_name.lower()}_results"
-            has_results = st.session_state.get(results_key) is not None
-        else:
-            # Check both lowercase and titlecase keys for ML models
-            has_results = (
-                st.session_state.get(f"ml_mh_results_{model_name.lower()}") is not None or
-                st.session_state.get(f"ml_mh_results_{model_name}") is not None
-            )
-
-        if has_results:
-            available_models_to_save.append(model_name)
-
-    if available_models_to_save and dataset_id:
-        models_to_save = st.multiselect(
-            "Select models to save:",
-            options=available_models_to_save,
-            default=available_models_to_save,
-            key="exp_models_to_save"
-        )
-
-        notes = st.text_area(
-            "Experiment Notes (optional):",
-            placeholder="Add any notes about this experiment...",
-            key="exp_notes"
-        )
-
-        col_save1, col_save2 = st.columns([1, 3])
-
-        with col_save1:
-            if st.button("💾 Save to Experiment Database", type="primary", use_container_width=True):
-                saved_count = 0
-                error_count = 0
-
-                progress_bar = st.progress(0)
-
-                for i, model_name in enumerate(models_to_save):
-                    try:
-                        # Get model results
-                        if model_name in ["ARIMA", "SARIMAX"]:
-                            results_key = "arima_mh_results" if model_name == "ARIMA" else "sarimax_results"
-                            ml_results = st.session_state.get(results_key)
-                        else:
-                            # Check both lowercase and titlecase keys for ML models
-                            ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
-                            if ml_results is None:
-                                ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
-
-                        if ml_results:
-                            results_df = ml_results.get("results_df")
-
-                            if results_df is not None and not results_df.empty:
-                                # Extract metrics per horizon
-                                horizon_metrics = []
-                                predictions = {}
-
-                                for _, row in results_df.iterrows():
-                                    horizon = int(row.get("Horizon", 1))
-                                    horizon_metrics.append({
-                                        "horizon": horizon,
-                                        "mae": float(row.get("Test_MAE", row.get("MAE", 0))),
-                                        "rmse": float(row.get("Test_RMSE", row.get("RMSE", 0))),
-                                        "mape": float(row.get("Test_MAPE", row.get("MAPE_%", 0))),
-                                        "accuracy": float(row.get("Test_Acc", row.get("Accuracy_%", 0))),
-                                    })
-
-                                # Get predictions from per_h data
-                                per_h = ml_results.get("per_h", {})
-                                for h, h_data in per_h.items():
-                                    y_test = h_data.get("y_test")
-                                    y_pred = h_data.get("y_test_pred", h_data.get("y_pred"))
-
-                                    if y_test is not None and y_pred is not None:
-                                        predictions[h] = {
-                                            "actual": y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test),
-                                            "predicted": y_pred.tolist() if hasattr(y_pred, 'tolist') else list(y_pred),
-                                        }
-
-                                # Create experiment record
-                                record = ExperimentRecord(
-                                    dataset_id=dataset_id,
-                                    feature_selection_method=current_method,
-                                    feature_engineering_variant=current_variant,
-                                    feature_count=feature_count,
-                                    feature_names=current_features[:50] if current_features else [],  # Limit to 50 features
-                                    model_name=model_name,
-                                    model_category=get_model_category(model_name),
-                                    model_params=ml_results.get("params", {}),
-                                    horizon_metrics=horizon_metrics,
-                                    avg_mae=float(results_df["Test_MAE"].mean()) if "Test_MAE" in results_df.columns else float(results_df.get("MAE", pd.Series([0])).mean()),
-                                    avg_rmse=float(results_df["Test_RMSE"].mean()) if "Test_RMSE" in results_df.columns else float(results_df.get("RMSE", pd.Series([0])).mean()),
-                                    avg_mape=float(results_df["Test_MAPE"].mean()) if "Test_MAPE" in results_df.columns else float(results_df.get("MAPE_%", pd.Series([0])).mean()),
-                                    avg_accuracy=float(results_df["Test_Acc"].mean()) if "Test_Acc" in results_df.columns else float(results_df.get("Accuracy_%", pd.Series([0])).mean()),
-                                    avg_r2=None,
-                                    runtime_seconds=float(ml_results.get("runtime_s", 0)),
-                                    predictions=predictions,
-                                    trained_at=datetime.now(),
-                                    horizons_trained=ml_results.get("successful", list(range(1, 8))),
-                                    train_size=fe_summary.get("train_size", 0),
-                                    test_size=fe_summary.get("test_size", 0),
-                                    notes=notes if notes else None,
-                                )
-
-                                success, msg = exp_service.save_experiment(record)
-
-                                if success:
-                                    saved_count += 1
-                                else:
-                                    error_count += 1
-
-                    except Exception as e:
-                        error_count += 1
-                        st.error(f"Error saving {model_name}: {str(e)}")
-
-                    progress_bar.progress((i + 1) / len(models_to_save))
-
-                progress_bar.empty()
-
-                if saved_count > 0:
-                    st.success(f"✅ Successfully saved {saved_count} model(s) to experiment database!")
-                if error_count > 0:
-                    st.warning(f"⚠️ Failed to save {error_count} model(s)")
-
-    elif not available_models_to_save:
-        st.info("No trained models available to save. Please train models from the Modelling Studio first.")
-    elif not dataset_id:
-        st.info("Please configure Feature Engineering and Feature Selection before saving experiments.")
-
-    st.divider()
-
-    # --- Section 3: Experiment History Table ---
-    st.markdown("#### Experiment History")
-
-    if exp_service.is_connected():
-        experiments_df = exp_service.list_experiments()
-
-        if not experiments_df.empty:
-            # Format the dataframe for display
-            display_cols = ["dataset_id", "model_name", "feature_selection_method",
-                           "feature_count", "avg_rmse", "avg_accuracy", "trained_at"]
-            available_display_cols = [c for c in display_cols if c in experiments_df.columns]
-
-            st.dataframe(
-                experiments_df[available_display_cols].style.format({
-                    "avg_rmse": "{:.4f}",
-                    "avg_accuracy": "{:.2f}%",
-                    "trained_at": lambda x: x.strftime("%Y-%m-%d %H:%M") if pd.notna(x) else "—"
-                }, na_rep="—"),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            # Delete functionality
-            with st.expander("🗑️ Delete Experiments"):
-                unique_datasets = experiments_df["dataset_id"].unique().tolist()
-                unique_models = experiments_df["model_name"].unique().tolist()
-
-                del_col1, del_col2 = st.columns(2)
-                with del_col1:
-                    del_dataset = st.selectbox("Select Dataset:", [""] + unique_datasets, key="del_dataset")
-                with del_col2:
-                    del_model = st.selectbox("Select Model:", [""] + unique_models, key="del_model")
-
-                if del_dataset and del_model:
-                    if st.button("🗑️ Delete Selected Experiment", type="secondary"):
-                        if exp_service.delete_experiment(del_dataset, del_model):
-                            st.success(f"Deleted {del_model} for dataset {del_dataset}")
-                            st.rerun()
-                        else:
-                            st.error("Failed to delete experiment")
-
-        else:
-            st.info("No experiments saved yet. Train some models and save them to the database.")
-    else:
-        st.warning("⚠️ Supabase not connected. Experiment tracking is unavailable.")
-
-    st.divider()
-
-    # --- Section 4: Dataset Comparison Charts ---
-    st.markdown("#### Performance Variation Across Datasets")
-
-    if exp_service.is_connected():
-        experiments_df = exp_service.list_experiments()
-
-        if not experiments_df.empty:
-            unique_models = experiments_df["model_name"].unique().tolist()
-
-            selected_model_compare = st.selectbox(
-                "Select model to compare across datasets:",
-                options=unique_models,
-                key="exp_compare_model"
-            )
-
-            if selected_model_compare:
-                comparison_df = exp_service.compare_across_datasets(selected_model_compare)
-
-                if not comparison_df.empty:
-                    # Create visualizations
-                    viz_col1, viz_col2 = st.columns(2)
-
-                    with viz_col1:
-                        # Histogram: RMSE distribution
-                        if "avg_rmse" in comparison_df.columns:
-                            fig_hist = px.histogram(
-                                comparison_df,
-                                x="avg_rmse",
-                                color="feature_selection_method" if "feature_selection_method" in comparison_df.columns else None,
-                                title=f"{selected_model_compare}: RMSE Distribution Across Datasets",
-                                nbins=15,
-                                color_discrete_sequence=px.colors.qualitative.Set2
-                            )
-                            fig_hist.update_layout(
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                plot_bgcolor="rgba(0,0,0,0)",
-                                font=dict(color=TEXT_COLOR),
-                                height=350
-                            )
-                            st.plotly_chart(fig_hist, use_container_width=True)
-
-                    with viz_col2:
-                        # Histogram: Accuracy distribution
-                        if "avg_accuracy" in comparison_df.columns:
-                            fig_acc_hist = px.histogram(
-                                comparison_df,
-                                x="avg_accuracy",
-                                color="feature_selection_method" if "feature_selection_method" in comparison_df.columns else None,
-                                title=f"{selected_model_compare}: Accuracy Distribution",
-                                nbins=15,
-                                color_discrete_sequence=px.colors.qualitative.Set2
-                            )
-                            fig_acc_hist.update_layout(
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                plot_bgcolor="rgba(0,0,0,0)",
-                                font=dict(color=TEXT_COLOR),
-                                height=350
-                            )
-                            st.plotly_chart(fig_acc_hist, use_container_width=True)
-
-                    # Bar Chart: Metrics by dataset
-                    st.markdown("##### Metrics by Dataset")
-
-                    if len(comparison_df) > 0:
-                        metrics_to_plot = ["avg_mae", "avg_rmse", "avg_mape"]
-                        available_metrics = [m for m in metrics_to_plot if m in comparison_df.columns]
-
-                        if available_metrics:
-                            # Melt for grouped bar chart
-                            melted_df = comparison_df.melt(
-                                id_vars=["dataset_id"],
-                                value_vars=available_metrics,
-                                var_name="Metric",
-                                value_name="Value"
-                            )
-
-                            fig_bar = px.bar(
-                                melted_df,
-                                x="dataset_id",
-                                y="Value",
-                                color="Metric",
-                                barmode="group",
-                                title=f"{selected_model_compare}: Error Metrics by Dataset"
-                            )
-                            fig_bar.update_layout(
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                plot_bgcolor="rgba(0,0,0,0)",
-                                font=dict(color=TEXT_COLOR),
-                                xaxis_tickangle=-45,
-                                height=400
-                            )
-                            st.plotly_chart(fig_bar, use_container_width=True)
-
-                    # Line Chart: Performance trend over time
-                    st.markdown("##### Performance Trend Over Time")
-
-                    if "trained_at" in comparison_df.columns and "avg_accuracy" in comparison_df.columns:
-                        sorted_df = comparison_df.sort_values("trained_at")
-
-                        fig_trend = px.line(
-                            sorted_df,
-                            x="trained_at",
-                            y="avg_accuracy",
-                            markers=True,
-                            title=f"{selected_model_compare}: Accuracy Trend Over Experiments"
-                        )
-                        fig_trend.update_layout(
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            font=dict(color=TEXT_COLOR),
-                            height=350
-                        )
-                        st.plotly_chart(fig_trend, use_container_width=True)
-
-                    # Feature selection method comparison
-                    st.markdown("##### Performance by Feature Selection Method")
-
-                    if "feature_selection_method" in comparison_df.columns:
-                        method_stats = comparison_df.groupby("feature_selection_method").agg({
-                            "avg_rmse": ["mean", "std", "min", "max"],
-                            "avg_accuracy": ["mean", "std", "min", "max"],
-                        }).round(4)
-
-                        # Flatten column names
-                        method_stats.columns = ['_'.join(col).strip() for col in method_stats.columns.values]
-                        method_stats = method_stats.reset_index()
-
-                        st.dataframe(method_stats, use_container_width=True, hide_index=True)
-
-                else:
-                    st.info(f"No experiments found for {selected_model_compare}.")
-        else:
-            st.info("No experiments in database. Save some model results first.")
-    else:
-        st.warning("⚠️ Supabase not connected.")
-
-# -----------------------------------------------------------------------------
-# DISABLED: OLD TAB - HYPERPARAMETER TUNING RESULTS
-# (Moved to a collapsible section in Export tab for cleaner 6-tab structure)
-# -----------------------------------------------------------------------------
-if False:  # Disabled - old tab_hyperparams
-    st.markdown("### 🔬 Hyperparameter Optimization Results")
-    st.caption("Results from Grid Search, Random Search, and Bayesian Optimization")
-
-    # Collect all hyperparameter optimization results
-    opt_models = []
-    for model_type in ["XGBoost", "LSTM", "ANN"]:
-        opt_key = f"opt_results_{model_type}"
-        if opt_key in st.session_state and st.session_state[opt_key] is not None:
-            opt_models.append(model_type)
-
-    if not opt_models:
-        st.warning(
-            "⚠️ **No hyperparameter optimization results found**\n\n"
-            "Please run hyperparameter tuning from:\n"
-            "- **08_Modeling_Hub.py** → 🔬 Hyperparameter Tuning tab\n\n"
-            "After optimization, return here to view and compare results."
-        )
-
-        # Show available session keys for debugging
-        with st.expander("📂 Debug: Available Session Keys", expanded=False):
-            opt_keys = [k for k in st.session_state.keys() if 'opt' in k.lower()]
-            st.write("Optimization-related keys:", opt_keys)
-    else:
-        # Summary metrics
-        st.markdown("#### 📊 Optimization Summary")
-
-        summary_data = []
-        for model_type in opt_models:
-            opt_results = st.session_state.get(f"opt_results_{model_type}")
-            if opt_results:
-                all_scores = opt_results.get("all_scores", {})
-                summary_data.append({
-                    "Model": model_type,
-                    "Method": st.session_state.get("opt_last_method", "Unknown"),
-                    "RMSE": _safe_float(all_scores.get("RMSE")),
-                    "MAE": _safe_float(all_scores.get("MAE")),
-                    "MAPE_%": _safe_float(all_scores.get("MAPE")),
-                    "Accuracy_%": _safe_float(all_scores.get("Accuracy")),
-                    "Refit Metric": opt_results.get("refit_metric", "N/A"),
-                })
-
-        if summary_data:
-            summary_df = pd.DataFrame(summary_data)
-
-            # Display summary table with color coding
-            st.dataframe(
-                summary_df.style.format({
-                    "RMSE": "{:.4f}",
-                    "MAE": "{:.4f}",
-                    "MAPE_%": "{:.2f}",
-                    "Accuracy_%": "{:.2f}",
-                }, na_rep="—").background_gradient(
-                    subset=["RMSE", "MAE", "MAPE_%"],
-                    cmap="RdYlGn_r"
-                ).background_gradient(
-                    subset=["Accuracy_%"],
-                    cmap="RdYlGn"
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            # Find best optimized model
-            if "Accuracy_%" in summary_df.columns:
-                best_idx = summary_df["Accuracy_%"].idxmax()
-                best_opt_model = summary_df.loc[best_idx, "Model"]
-                best_acc = summary_df.loc[best_idx, "Accuracy_%"]
-                st.success(f"🏆 **Best Optimized Model: {best_opt_model}** with {best_acc:.2f}% accuracy")
-
-        st.divider()
-
-        # Detailed results per model
-        st.markdown("#### 🔍 Detailed Results by Model")
-
-        selected_opt_model = st.selectbox(
-            "Select Model:",
-            options=opt_models,
-            key="results_opt_model_select"
-        )
-
-        if selected_opt_model:
-            opt_results = st.session_state.get(f"opt_results_{selected_opt_model}")
-
-            if opt_results:
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.markdown("##### 🏆 Best Parameters")
-                    best_params = opt_results.get("best_params", {})
-                    if best_params:
-                        params_df = pd.DataFrame(
-                            list(best_params.items()),
-                            columns=["Parameter", "Value"]
-                        )
-                        st.dataframe(params_df, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("No parameters available")
-
-                with col2:
-                    st.markdown("##### 📈 Best Scores")
-                    all_scores = opt_results.get("all_scores", {})
-                    if all_scores:
-                        scores_df = pd.DataFrame([
-                            {"Metric": "RMSE", "Value": f"{all_scores.get('RMSE', 'N/A'):.4f}" if isinstance(all_scores.get('RMSE'), (int, float)) else "N/A"},
-                            {"Metric": "MAE", "Value": f"{all_scores.get('MAE', 'N/A'):.4f}" if isinstance(all_scores.get('MAE'), (int, float)) else "N/A"},
-                            {"Metric": "MAPE (%)", "Value": f"{all_scores.get('MAPE', 'N/A'):.2f}" if isinstance(all_scores.get('MAPE'), (int, float)) else "N/A"},
-                            {"Metric": "Accuracy (%)", "Value": f"{all_scores.get('Accuracy', 'N/A'):.2f}" if isinstance(all_scores.get('Accuracy'), (int, float)) else "N/A"},
-                        ])
-                        st.dataframe(scores_df, use_container_width=True, hide_index=True)
-
-                # CV Results
-                cv_results = opt_results.get("cv_results")
-                if cv_results is not None and isinstance(cv_results, pd.DataFrame) and not cv_results.empty:
-                    with st.expander("📋 Cross-Validation Results (All Parameter Combinations)", expanded=False):
-                        # Select relevant columns
-                        display_cols = ['params', 'mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE', 'mean_test_Accuracy']
-                        available_cols = [col for col in display_cols if col in cv_results.columns]
-
-                        if available_cols:
-                            display_cv = cv_results[available_cols].copy()
-
-                            # Invert negative scores for display
-                            for col in ['mean_test_RMSE', 'mean_test_MAE', 'mean_test_MAPE']:
-                                if col in display_cv.columns:
-                                    display_cv[col] = -display_cv[col]
-
-                            st.dataframe(display_cv, use_container_width=True, height=300)
-
-                # Backtesting results
-                backtest_key = f"backtest_results_{selected_opt_model}"
-                backtest_results = st.session_state.get(backtest_key)
-
-                if backtest_results:
-                    st.markdown("##### 📅 7-Day Rolling-Origin Backtesting")
-
-                    aggregate_metrics = backtest_results.get("aggregate_metrics", {})
-                    n_windows = backtest_results.get("n_successful_windows", 0)
-
-                    if aggregate_metrics.get("RMSE") is not None:
-                        metric_cols = st.columns(4)
-                        with metric_cols[0]:
-                            st.metric("RMSE", f"{aggregate_metrics['RMSE']:.4f}")
-                        with metric_cols[1]:
-                            st.metric("MAE", f"{aggregate_metrics['MAE']:.4f}")
-                        with metric_cols[2]:
-                            st.metric("MAPE", f"{aggregate_metrics['MAPE']:.2f}%")
-                        with metric_cols[3]:
-                            st.metric("Accuracy", f"{aggregate_metrics['Accuracy']:.2f}%")
-
-                        st.caption(f"Aggregated across {n_windows} rolling windows")
-
-                        # Window-by-window results
-                        window_results = backtest_results.get("window_results", [])
-                        if window_results:
-                            with st.expander(f"📋 Individual Window Results ({len(window_results)} windows)", expanded=False):
-                                window_df = pd.DataFrame(window_results)
-                                st.dataframe(window_df, use_container_width=True, hide_index=True)
-
-        # Comparison chart if multiple models optimized
-        if len(opt_models) > 1:
-            st.divider()
-            st.markdown("#### 📊 Optimized Models Comparison")
-
-            # Create comparison bar chart
-            comp_data = []
-            for model_type in opt_models:
-                opt_results = st.session_state.get(f"opt_results_{model_type}")
-                if opt_results:
-                    all_scores = opt_results.get("all_scores", {})
-                    comp_data.append({
-                        "Model": model_type,
-                        "Accuracy": _safe_float(all_scores.get("Accuracy")),
-                        "RMSE": _safe_float(all_scores.get("RMSE")),
-                    })
-
-            if comp_data:
-                comp_df = pd.DataFrame(comp_data)
-
-                fig_comp = make_subplots(rows=1, cols=2, subplot_titles=("Accuracy (%)", "RMSE"))
-
-                # Accuracy bars
-                fig_comp.add_trace(
-                    go.Bar(
-                        x=comp_df["Model"],
-                        y=comp_df["Accuracy"],
-                        marker_color=[MODEL_COLORS.get(m, "#6B7280") for m in comp_df["Model"]],
-                        text=[f"{v:.1f}%" for v in comp_df["Accuracy"]],
-                        textposition="auto",
-                        showlegend=False,
-                    ),
-                    row=1, col=1
-                )
-
-                # RMSE bars
-                fig_comp.add_trace(
-                    go.Bar(
-                        x=comp_df["Model"],
-                        y=comp_df["RMSE"],
-                        marker_color=[MODEL_COLORS.get(m, "#6B7280") for m in comp_df["Model"]],
-                        text=[f"{v:.4f}" for v in comp_df["RMSE"]],
-                        textposition="auto",
-                        showlegend=False,
-                    ),
-                    row=1, col=2
-                )
-
-                fig_comp.update_layout(
-                    title="Hyperparameter-Optimized Model Comparison",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    height=400,
-                )
-
-                st.plotly_chart(fig_comp, use_container_width=True)
-
-        # Export optimized parameters
-        st.divider()
-        st.markdown("#### 📥 Export Best Parameters")
-
-        export_model = st.selectbox(
-            "Select Model to Export Parameters:",
-            options=opt_models,
-            key="export_opt_params_select"
-        )
-
-        if export_model:
-            opt_results = st.session_state.get(f"opt_results_{export_model}")
-            if opt_results:
-                best_params = opt_results.get("best_params", {})
-                all_scores = opt_results.get("all_scores", {})
-
-                export_data = {
-                    "model": export_model,
-                    "method": st.session_state.get("opt_last_method", "Unknown"),
-                    "best_params": best_params,
-                    "best_scores": all_scores,
-                }
-
-                import json
-                json_str = json.dumps(export_data, indent=2, default=str)
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.download_button(
-                        "📥 Download Parameters (JSON)",
-                        json_str,
-                        f"best_params_{export_model}.json",
-                        "application/json",
-                        use_container_width=True,
-                    )
-
-                with col2:
-                    with st.expander("👁️ Preview JSON"):
-                        st.json(export_data)
-
 # -----------------------------------------------------------------------------
 # TAB 6: MODEL EXPLAINABILITY (SHAP & LIME)
 # -----------------------------------------------------------------------------
@@ -3175,8 +2569,177 @@ with tab_explainability:
             elif selected_horizon:
                 st.warning(f"No pipeline data found for Horizon {selected_horizon}. Please re-train the model.")
 
+        # =====================================================================
+        # CROSS-MODEL FEATURE IMPORTANCE COMPARISON (PhD Enhancement)
+        # =====================================================================
+        st.divider()
+        st.markdown("### 📊 Cross-Model Feature Importance Comparison")
+        st.caption("Compare feature importance rankings across different model types")
+
+        # Collect feature importance data from all available models
+        cross_model_data = {}
+
+        for model_name in ["XGBoost", "LSTM", "ANN"]:
+            ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+            if ml_results is None:
+                ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
+
+            if ml_results and ml_results.get("explainability_data"):
+                exp_data = ml_results.get("explainability_data", {})
+                # Get feature importance from first successful horizon
+                for h, h_data in exp_data.items():
+                    if h_data.get("feature_names") and h_data.get("X_val") is not None:
+                        # Check for cached SHAP values
+                        shap_cache_key = f"shap_values_{model_name}_{h}"
+                        shap_cache = st.session_state.get(shap_cache_key)
+
+                        if shap_cache and shap_cache.get("shap_values") is not None:
+                            shap_vals = shap_cache["shap_values"]
+                            feature_names = shap_cache.get("feature_names", h_data.get("feature_names", []))
+
+                            # Calculate mean absolute SHAP values
+                            if isinstance(shap_vals, np.ndarray):
+                                mean_abs_shap = np.abs(shap_vals).mean(axis=0)
+                                # Normalize to sum to 1
+                                if mean_abs_shap.sum() > 0:
+                                    mean_abs_shap = mean_abs_shap / mean_abs_shap.sum()
+
+                                cross_model_data[model_name] = {
+                                    "importance": dict(zip(feature_names, mean_abs_shap)),
+                                    "horizon": h
+                                }
+                        break  # Use first horizon with data
+
+        if len(cross_model_data) >= 2:
+            # Create comparison dataframe
+            all_features = set()
+            for model_data in cross_model_data.values():
+                all_features.update(model_data["importance"].keys())
+
+            comparison_rows = []
+            for feature in all_features:
+                row = {"Feature": feature}
+                for model_name, model_data in cross_model_data.items():
+                    row[model_name] = model_data["importance"].get(feature, 0)
+                comparison_rows.append(row)
+
+            comparison_df = pd.DataFrame(comparison_rows)
+
+            # Calculate average importance and sort by it
+            model_cols = [col for col in comparison_df.columns if col != "Feature"]
+            comparison_df["Average"] = comparison_df[model_cols].mean(axis=1)
+            comparison_df = comparison_df.sort_values("Average", ascending=False).head(15)
+
+            # Display comparison table
+            st.markdown("#### Top 15 Features by Average Importance")
+
+            styled_df = comparison_df.style.format({
+                col: "{:.3f}" for col in model_cols + ["Average"]
+            }).background_gradient(
+                subset=model_cols + ["Average"],
+                cmap="Blues"
+            )
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+            # Create grouped bar chart
+            st.markdown("#### Feature Importance Comparison Chart")
+
+            melted_df = comparison_df.melt(
+                id_vars=["Feature"],
+                value_vars=model_cols,
+                var_name="Model",
+                value_name="Importance"
+            )
+
+            fig_compare = px.bar(
+                melted_df,
+                x="Feature",
+                y="Importance",
+                color="Model",
+                barmode="group",
+                color_discrete_map={
+                    "XGBoost": MODEL_COLORS.get("XGBoost", "#10B981"),
+                    "LSTM": MODEL_COLORS.get("LSTM", "#F59E0B"),
+                    "ANN": MODEL_COLORS.get("ANN", "#EC4899")
+                }
+            )
+            fig_compare.update_layout(
+                title="Feature Importance Across Models (Normalized)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis_tickangle=-45,
+                height=450,
+                font=dict(color=TEXT_COLOR)
+            )
+            st.plotly_chart(fig_compare, use_container_width=True)
+
+            # Feature ranking stability analysis
+            st.markdown("#### 📈 Feature Ranking Stability")
+            st.caption("Consistency of feature rankings across models (lower std = more stable)")
+
+            # Calculate rank for each model
+            for col in model_cols:
+                comparison_df[f"{col}_Rank"] = comparison_df[col].rank(ascending=False)
+
+            rank_cols = [f"{col}_Rank" for col in model_cols]
+            comparison_df["Rank_Std"] = comparison_df[rank_cols].std(axis=1)
+            comparison_df["Rank_Mean"] = comparison_df[rank_cols].mean(axis=1)
+
+            stability_df = comparison_df[["Feature", "Rank_Mean", "Rank_Std"]].copy()
+            stability_df = stability_df.sort_values("Rank_Std")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**Most Stable Features** (consistent ranking)")
+                stable_features = stability_df.head(5)
+                st.dataframe(
+                    stable_features.style.format({
+                        "Rank_Mean": "{:.1f}",
+                        "Rank_Std": "{:.2f}"
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            with col2:
+                st.markdown("**Least Stable Features** (model-dependent)")
+                unstable_features = stability_df.tail(5).sort_values("Rank_Std", ascending=False)
+                st.dataframe(
+                    unstable_features.style.format({
+                        "Rank_Mean": "{:.1f}",
+                        "Rank_Std": "{:.2f}"
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            # Interpretation guidance
+            with st.expander("📖 How to Interpret These Results", expanded=False):
+                st.markdown("""
+                **Cross-Model Feature Comparison** helps validate which features are genuinely predictive:
+
+                - **Stable features** (low Rank_Std) are consistently important across different model architectures,
+                  suggesting they capture true predictive signal rather than model-specific patterns.
+
+                - **Unstable features** (high Rank_Std) have importance that varies significantly by model type.
+                  This may indicate:
+                  - Non-linear relationships captured differently by each model
+                  - Interaction effects with other features
+                  - Potential overfitting in some models
+
+                **For thesis reporting:** Emphasize features that are consistently ranked highly across models,
+                as these provide the most robust evidence for predictive relationships.
+                """)
+
+        elif len(cross_model_data) == 1:
+            st.info(f"Only **{list(cross_model_data.keys())[0]}** has SHAP values computed. "
+                   "Train additional models and compute SHAP values to see cross-model comparison.")
+        else:
+            st.info("No SHAP values cached yet. Select models above and compute SHAP to enable cross-model comparison.")
+
 # -----------------------------------------------------------------------------
-# TAB 8: EXPORT (Enhanced)
+# TAB 6: EXPORT (Enhanced with Thesis Report)
 # -----------------------------------------------------------------------------
 with tab_export:
     st.markdown("### Export Results")
