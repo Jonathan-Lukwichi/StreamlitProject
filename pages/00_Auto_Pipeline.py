@@ -1053,49 +1053,27 @@ def main():
             return
 
         # Validation
-        uploaded_file = pipeline_config["uploaded_file"]
         use_uploaded_data = pipeline_config.get("use_uploaded_data", False)
         uploaded_status = pipeline_config.get("uploaded_status", {})
         selected_models = [name for name, selected in pipeline_config["models"].items() if selected]
 
-        # Check data availability
-        has_data = False
-        data_source_text = ""
-
-        if use_uploaded_data:
-            # Using data from Upload Data page
-            if uploaded_status.get("has_recommended", False):
-                has_data = True
-                data_source_text = "Using data from **Upload Data** page"
-            else:
-                st.warning("Insufficient data from Upload Data page. Need at least Patient, Weather, and Calendar data.")
-                if st.button("Go to Upload Data", use_container_width=True):
-                    st.switch_page("pages/02_Upload_Data.py")
-                return
-        else:
-            # Using new file upload
-            if uploaded_file is not None:
-                has_data = True
-                data_source_text = f"**Data file:** {uploaded_file.name}"
-            else:
-                st.info("Upload a data file or use data from the **Upload Data** page.")
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.button("Go to Upload Data", use_container_width=True):
-                        st.switch_page("pages/02_Upload_Data.py")
-                return
+        # Check data availability - data must come from Upload Data page
+        if not use_uploaded_data or not uploaded_status.get("has_recommended", False):
+            st.warning("Please upload data via **Upload Data** page first. Need Patient, Weather, and Calendar data.")
+            if st.button("Go to Upload Data", use_container_width=True):
+                st.switch_page("pages/02_Upload_Data.py")
+            return
 
         if not selected_models:
             st.warning("Select at least one model to train.")
             return
 
         # Show selected configuration
-        st.markdown(data_source_text)
-        if use_uploaded_data:
-            st.markdown(f"**Datasets:** Patient ({uploaded_status['patient_rows']} rows), "
-                       f"Weather ({uploaded_status['weather_rows']} rows), "
-                       f"Calendar ({uploaded_status['calendar_rows']} rows)"
-                       f"{', Reason (' + str(uploaded_status['reason_rows']) + ' rows)' if uploaded_status.get('reason') else ''}")
+        st.markdown("Using data from **Upload Data** page")
+        st.markdown(f"**Datasets:** Patient ({uploaded_status['patient_rows']} rows), "
+                   f"Weather ({uploaded_status['weather_rows']} rows), "
+                   f"Calendar ({uploaded_status['calendar_rows']} rows)"
+                   f"{', Reason (' + str(uploaded_status['reason_rows']) + ' rows)' if uploaded_status.get('reason') else ''}")
         st.markdown(f"**Models to train:** {', '.join([m.upper() for m in selected_models])}")
         st.markdown(f"**Train/Test split:** {int(pipeline_config['config']['train_ratio']*100)}% / {int((1-pipeline_config['config']['train_ratio'])*100)}%")
         st.markdown(f"**Forecast horizons:** {pipeline_config['config']['horizons']} days")
