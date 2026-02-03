@@ -741,29 +741,15 @@ def render_configuration_panel() -> Dict:
             """,
             unsafe_allow_html=True,
         )
-
-        # Radio to choose data source
-        data_source = st.radio(
-            "Select data source:",
-            options=["Use Uploaded Data (Recommended)", "Upload New File"],
-            index=0,
-            key="data_source_radio",
-            horizontal=True,
-        )
-        use_uploaded_data = data_source == "Use Uploaded Data (Recommended)"
+        use_uploaded_data = True
     else:
-        st.info("No data detected. Please upload data via **Upload Data** page or upload a file below.")
+        st.warning("No data detected. Please upload data via **Upload Data** page first.")
+        if st.button("Go to Upload Data", key="go_upload_config", use_container_width=True):
+            st.switch_page("pages/02_Upload_Data.py")
         use_uploaded_data = False
 
-    # File Upload (shown if not using uploaded data or no data available)
+    # No file upload option - data must come from Upload Data page
     uploaded_file = None
-    if not use_uploaded_data:
-        st.markdown(f"**Upload New File**", unsafe_allow_html=True)
-        uploaded_file = st.file_uploader(
-            "Upload Patient Data",
-            type=["csv", "xlsx", "xls", "parquet"],
-            help="Upload your ED patient data file (CSV, Excel, or Parquet)",
-        )
 
     # Parameters
     with st.expander("Pipeline Parameters", expanded=False):
