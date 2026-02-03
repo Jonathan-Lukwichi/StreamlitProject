@@ -3182,7 +3182,7 @@ with tab_export:
     with export_col2:
         st.markdown("##### Thesis Exports")
 
-        # Thesis summary
+        # Thesis summary (basic)
         thesis_summary = generate_thesis_summary(all_models_df, best_model, analysis)
 
         st.download_button(
@@ -3202,6 +3202,66 @@ with tab_export:
             "text/plain",
             use_container_width=True,
         )
+
+    # =========================================================================
+    # ONE-CLICK PHD THESIS REPORT (Enhanced)
+    # =========================================================================
+    st.divider()
+    st.markdown("### 📚 One-Click PhD Thesis Report")
+    st.caption("Generate a comprehensive, publication-ready evaluation report with statistical validation")
+
+    phd_col1, phd_col2 = st.columns([2, 1])
+
+    with phd_col1:
+        st.info("""
+        **The PhD Thesis Report includes:**
+        - Executive Summary with model recommendations
+        - Methodology description (models, metrics, ranking system)
+        - Detailed results with statistical significance
+        - Diagnostic validation summary
+        - Use-case specific recommendations
+        - Reproducibility documentation
+
+        This report is suitable for thesis appendices, technical papers, and stakeholder presentations.
+        """)
+
+    with phd_col2:
+        # Collect any cached statistical results
+        cached_dm_results = st.session_state.get("dm_test_matrix", None)
+        cached_skill_scores = st.session_state.get("skill_scores_cache", None)
+        residuals_data = collect_model_residuals(horizon=1) if not all_models_df.empty else None
+
+        # Generate the comprehensive report
+        phd_report = generate_phd_thesis_report(
+            df=all_models_df,
+            best_model=best_model,
+            analysis=analysis,
+            residuals_by_model=residuals_data,
+            dm_results=cached_dm_results,
+            skill_scores=cached_skill_scores
+        )
+
+        st.download_button(
+            "📥 Download PhD Thesis Report",
+            phd_report,
+            f"phd_evaluation_report_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+            "text/markdown",
+            use_container_width=True,
+            type="primary"
+        )
+
+        # Also offer as text file for compatibility
+        st.download_button(
+            "📄 Download as Text",
+            phd_report,
+            f"phd_evaluation_report_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+            "text/plain",
+            use_container_width=True,
+        )
+
+    # Preview section
+    with st.expander("📄 Preview PhD Thesis Report", expanded=False):
+        st.markdown(phd_report)
 
     st.divider()
 
