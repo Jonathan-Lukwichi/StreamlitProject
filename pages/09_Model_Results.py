@@ -2240,8 +2240,7 @@ with tab_diagnostics:
 # These features are now consolidated in Tab 6: Export & Reports
 # -----------------------------------------------------------------------------
 
-    # Initialize experiment service
-    exp_service = get_experiment_service()
+# [REMOVED: ~650 lines of legacy tab_experiments and tab_hyperparams code]
 
     # --- Section 1: Current Dataset Info ---
     st.markdown("#### Current Dataset Configuration")
