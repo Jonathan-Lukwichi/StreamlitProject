@@ -72,6 +72,13 @@ add_logout_button()
 from app_core.data.data_processing import process_dataset
 from app_core.data.fusion import fuse_data
 
+# =============================================================================
+# FEATURE SELECTION IMPORTS
+# =============================================================================
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import GradientBoostingRegressor
+
 
 # =============================================================================
 # DEFAULT CONFIGURATION
