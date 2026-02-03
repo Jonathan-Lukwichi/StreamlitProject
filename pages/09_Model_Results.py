@@ -1601,9 +1601,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Main tabs
-tab_overview, tab_comparison, tab_horizons, tab_rankings, tab_experiments, tab_hyperparams, tab_explainability, tab_export = st.tabs([
-    "📋 Overview", "📊 Comparison", "🗓️ Per-Horizon", "🏅 Rankings", "🧪 Dataset Experiments", "🔬 Hyperparameter Tuning", "🔍 Explainability", "📤 Export"
+# Main tabs - PhD-level structure (6 tabs)
+tab_summary, tab_performance, tab_validation, tab_diagnostics, tab_explainability, tab_export = st.tabs([
+    "🎯 Executive Summary", "📊 Model Performance", "📐 Statistical Validation", "🔬 Diagnostics", "🔍 Explainability", "📤 Export"
 ])
 
 # -----------------------------------------------------------------------------
