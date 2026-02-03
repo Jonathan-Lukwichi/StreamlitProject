@@ -2240,17 +2240,7 @@ with tab_diagnostics:
 # These features are now consolidated in Tab 6: Export & Reports
 # -----------------------------------------------------------------------------
 
-# [REMOVED: ~650 lines of legacy tab_experiments and tab_hyperparams code]
-
-    # --- Section 1: Current Dataset Info ---
-    st.markdown("#### Current Dataset Configuration")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Get current feature engineering and selection info from session state
-        fe_state = st.session_state.get("feature_engineering", {})
-        fs_state = st.session_state.get("feature_selection", {})
+# [Legacy tab_experiments and tab_hyperparams code removed - see git history]
 
         # Extract method name from results
         fs_results = fs_state.get("results", {})
