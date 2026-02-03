@@ -2236,9 +2236,12 @@ with tab_diagnostics:
             st.info("Train models to see residual diagnostics.")
 
 # -----------------------------------------------------------------------------
-# TAB 5: DATASET EXPERIMENTS
+# NOTE: Dataset Experiments and Hyperparameter Tuning have been moved to Export tab
+# to consolidate the PhD-level 6-tab structure
 # -----------------------------------------------------------------------------
-with tab_experiments:
+
+# REMOVED: tab_experiments section - key features moved to Export tab
+# with tab_experiments_REMOVED:
     st.markdown("### Dataset-Based Experiment Tracking")
     st.caption("Track and compare model performance across different feature configurations")
 
