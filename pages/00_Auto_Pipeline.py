@@ -882,6 +882,11 @@ def render_configuration_panel() -> Dict:
             n_lags = st.number_input("Number of Lags", 1, 14, 7)
         with col2:
             horizons = st.number_input("Forecast Horizons", 1, 14, 7)
+            run_feature_selection_cb = st.checkbox(
+                "Run Feature Selection",
+                value=True,
+                help="Automatically select important features using Gradient Boosting across all horizons"
+            )
 
     # Model Selection
     st.markdown("---")
