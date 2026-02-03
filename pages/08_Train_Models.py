@@ -1681,7 +1681,7 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
                 "ann_neurons": config.get("ann_neurons", 64),
                 "ann_activation": config.get("ann_activation", "relu"),
                 "dropout": config.get("dropout", 0.2),
-                "ann_epochs": config.get("ann_epochs", 20),  # Reduced for speed
+                "ann_epochs": config.get("ann_epochs", 10),  # Reduced for speed + early stopping
             }
             pipeline = ANNPipeline(model_config)
         else:
