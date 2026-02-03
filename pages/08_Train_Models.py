@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 import joblib
+import gc
 from pathlib import Path
 
 from app_core.ui.theme import apply_css
