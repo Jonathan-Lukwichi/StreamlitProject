@@ -781,6 +781,8 @@ def render_configuration_panel() -> Dict:
 
     return {
         "uploaded_file": uploaded_file,
+        "use_uploaded_data": use_uploaded_data,
+        "uploaded_status": uploaded_status,
         "config": config,
         "models": models,
     }
