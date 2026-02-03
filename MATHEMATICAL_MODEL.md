@@ -34,10 +34,16 @@ This document presents the complete mathematical formulation of an integrated ho
 
 A hospital Emergency Department (ED) must plan resources (staff and supplies) to serve stochastic patient demand. The planning problem involves:
 
-1. **Forecasting** daily patient arrivals over a planning horizon H (typically 7 days)
-2. **Disaggregating** total demand into clinical categories (RESPIRATORY, CARDIAC, TRAUMA, etc.)
+1. **Forecasting** daily total patient arrivals over a planning horizon H (typically 7 days)
+2. **Distributing** the total demand forecast into clinical categories using learned seasonal proportions (the historical dataset contains both total arrivals AND arrival reasons by category: RESPIRATORY, CARDIAC, TRAUMA, etc.)
 3. **Optimizing** staff schedules to minimize labor costs while meeting service requirements
 4. **Optimizing** inventory orders to minimize total inventory costs while maintaining service levels
+
+**Note on Data Structure:** The original historical dataset contains:
+- Total daily ED arrivals (aggregate count)
+- Arrival reasons/categories (RESPIRATORY, CARDIAC, TRAUMA, GASTROINTESTINAL, INFECTIOUS, NEUROLOGICAL, OTHER)
+
+The seasonal proportions are **learned** from the historical category-level data, then **applied** to distribute total demand forecasts into category-level demand for optimization.
 
 ### 1.2 Objective
 
