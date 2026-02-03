@@ -622,6 +622,35 @@ def render_hero_header():
     )
 
 
+def check_uploaded_data_available() -> Dict:
+    """Check if data from Upload Data page is available in session state."""
+    patient_df = st.session_state.get("patient_data")
+    weather_df = st.session_state.get("weather_data")
+    calendar_df = st.session_state.get("calendar_data")
+    reason_df = st.session_state.get("reason_data")
+
+    has_patient = patient_df is not None and not getattr(patient_df, "empty", True)
+    has_weather = weather_df is not None and not getattr(weather_df, "empty", True)
+    has_calendar = calendar_df is not None and not getattr(calendar_df, "empty", True)
+    has_reason = reason_df is not None and not getattr(reason_df, "empty", True)
+
+    # Minimum required: patient data
+    # Recommended: patient + weather + calendar
+    return {
+        "patient": has_patient,
+        "weather": has_weather,
+        "calendar": has_calendar,
+        "reason": has_reason,
+        "has_minimum": has_patient,
+        "has_recommended": has_patient and has_weather and has_calendar,
+        "has_all": has_patient and has_weather and has_calendar and has_reason,
+        "patient_rows": len(patient_df) if has_patient else 0,
+        "weather_rows": len(weather_df) if has_weather else 0,
+        "calendar_rows": len(calendar_df) if has_calendar else 0,
+        "reason_rows": len(reason_df) if has_reason else 0,
+    }
+
+
 def render_configuration_panel() -> Dict:
     """Render the configuration panel and return selected options."""
     st.markdown(
@@ -639,13 +668,65 @@ def render_configuration_panel() -> Dict:
         unsafe_allow_html=True,
     )
 
-    # File Upload
-    st.markdown(f"**Data Upload**", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Upload Patient Data",
-        type=["csv", "xlsx", "xls", "parquet"],
-        help="Upload your ED patient data file (CSV, Excel, or Parquet)",
-    )
+    # Check for existing data from Upload Data page
+    uploaded_status = check_uploaded_data_available()
+
+    # Data Source Selection
+    st.markdown(f"**Data Source**", unsafe_allow_html=True)
+
+    # Show status of uploaded data
+    if uploaded_status["has_minimum"]:
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.05));
+                        border: 1px solid rgba(34, 197, 94, 0.3);
+                        border-radius: 8px;
+                        padding: 0.75rem;
+                        margin-bottom: 1rem;'>
+                <p style='margin: 0; color: {SUCCESS_COLOR}; font-size: 0.9rem;'>
+                    Data detected from Upload Data page
+                </p>
+                <div style='display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;'>
+                    <span style='font-size: 0.8rem; color: {TEXT_COLOR};'>
+                        {"Patient: " + str(uploaded_status['patient_rows']) + " rows" if uploaded_status['patient'] else "Patient: ---"}
+                    </span>
+                    <span style='font-size: 0.8rem; color: {TEXT_COLOR};'>
+                        {"Weather: " + str(uploaded_status['weather_rows']) + " rows" if uploaded_status['weather'] else "Weather: ---"}
+                    </span>
+                    <span style='font-size: 0.8rem; color: {TEXT_COLOR};'>
+                        {"Calendar: " + str(uploaded_status['calendar_rows']) + " rows" if uploaded_status['calendar'] else "Calendar: ---"}
+                    </span>
+                    <span style='font-size: 0.8rem; color: {TEXT_COLOR};'>
+                        {"Reason: " + str(uploaded_status['reason_rows']) + " rows" if uploaded_status['reason'] else "Reason: ---"}
+                    </span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Radio to choose data source
+        data_source = st.radio(
+            "Select data source:",
+            options=["Use Uploaded Data (Recommended)", "Upload New File"],
+            index=0,
+            key="data_source_radio",
+            horizontal=True,
+        )
+        use_uploaded_data = data_source == "Use Uploaded Data (Recommended)"
+    else:
+        st.info("No data detected. Please upload data via **Upload Data** page or upload a file below.")
+        use_uploaded_data = False
+
+    # File Upload (shown if not using uploaded data or no data available)
+    uploaded_file = None
+    if not use_uploaded_data:
+        st.markdown(f"**Upload New File**", unsafe_allow_html=True)
+        uploaded_file = st.file_uploader(
+            "Upload Patient Data",
+            type=["csv", "xlsx", "xls", "parquet"],
+            help="Upload your ED patient data file (CSV, Excel, or Parquet)",
+        )
 
     # Parameters
     with st.expander("Pipeline Parameters", expanded=False):
