@@ -1735,10 +1735,25 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
 
         return result
 
-    except Exception as e:
+    except MemoryError as e:
+        gc.collect()  # Try to free memory
         return {
             "success": False,
-            "error": str(e)
+            "error": f"Out of memory: {e}. Try reducing epochs, batch size, or data size."
+        }
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": f"Data shape/value error: {e}. Check feature consistency across horizons."
+        }
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"ML Training Error:\n{error_traceback}")  # Log to console
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": error_traceback
         }
 
 def render_ml_results(results: dict):
