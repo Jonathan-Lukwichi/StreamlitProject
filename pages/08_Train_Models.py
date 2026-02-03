@@ -1665,7 +1665,7 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
                 "lstm_hidden_units": config.get("lstm_hidden_units", 64),
                 "lstm_layers": config.get("lstm_layers", 2),
                 "dropout": config.get("dropout", 0.2),
-                "lstm_epochs": config.get("lstm_epochs", 30),  # Reduced for speed
+                "lstm_epochs": config.get("lstm_epochs", 15),  # Reduced for speed + early stopping
                 "lstm_lr": config.get("lstm_lr", 0.001),
                 "batch_size": config.get("batch_size", 32),
             }
