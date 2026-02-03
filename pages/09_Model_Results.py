@@ -1754,10 +1754,96 @@ with tab_summary:
             """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# TAB 2: COMPARISON
+# TAB 2: MODEL PERFORMANCE (Enhanced with Baseline Comparison)
 # -----------------------------------------------------------------------------
-with tab_comparison:
-    st.markdown("### Visual Model Comparison")
+with tab_performance:
+    st.markdown("### 📊 Model Performance Analysis")
+
+    # Section 1: All Models Table with Skill Scores
+    st.markdown("#### All Trained Models")
+
+    display_df = all_models_df.copy()
+
+    # Add skill score column if baselines available
+    if STATISTICAL_TESTS_AVAILABLE:
+        baselines = compute_naive_baselines_for_comparison()
+        if baselines and "persistence" in baselines:
+            naive_rmse = baselines["persistence"]["rmse"]
+            display_df["Skill_%"] = display_df["RMSE"].apply(
+                lambda x: (1 - x / naive_rmse) * 100 if pd.notna(x) and naive_rmse > 0 else np.nan
+            )
+
+    # Select columns to display
+    display_cols = ["Model", "Category", "MAE", "RMSE", "MAPE_%", "Accuracy_%"]
+    if "Skill_%" in display_df.columns:
+        display_cols.insert(4, "Skill_%")
+    display_cols = [c for c in display_cols if c in display_df.columns]
+
+    # Apply formatting
+    format_dict = {col: METRIC_FORMATTERS.get(col, "{:.4f}") for col in display_cols if col in METRIC_FORMATTERS}
+    if "Skill_%" in display_df.columns:
+        format_dict["Skill_%"] = "{:+.1f}"
+
+    st.dataframe(
+        display_df[display_cols].style.format(format_dict, na_rep="—").background_gradient(
+            subset=[c for c in ["MAE", "RMSE", "MAPE_%"] if c in display_cols],
+            cmap="RdYlGn_r"
+        ).background_gradient(
+            subset=[c for c in ["Accuracy_%", "Skill_%"] if c in display_cols],
+            cmap="RdYlGn"
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.divider()
+
+    # Section 2: Baseline Comparison (NEW)
+    st.markdown("#### 📏 Baseline Comparison")
+
+    if STATISTICAL_TESTS_AVAILABLE and DIAGNOSTIC_PLOTS_AVAILABLE:
+        baselines = compute_naive_baselines_for_comparison()
+        if baselines:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Baseline metrics table
+                baseline_data = []
+                for name, data in baselines.items():
+                    baseline_data.append({
+                        "Baseline": name.replace("_", " ").title(),
+                        "RMSE": data["rmse"],
+                        "MAE": data["mae"],
+                        "MAPE_%": data.get("mape", np.nan),
+                    })
+                baseline_df = pd.DataFrame(baseline_data)
+
+                st.markdown("##### Naive Baseline Forecasts")
+                st.dataframe(
+                    baseline_df.style.format({"RMSE": "{:.4f}", "MAE": "{:.4f}", "MAPE_%": "{:.2f}"}, na_rep="—"),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            with col2:
+                # Best model vs baselines bar chart
+                if not all_models_df.empty:
+                    best_rmse = all_models_df["RMSE"].min()
+                    model_metrics = {"rmse": best_rmse, "mae": all_models_df["MAE"].min()}
+                    baseline_metrics = {name: {"rmse": data["rmse"], "mae": data["mae"]}
+                                       for name, data in baselines.items()}
+
+                    fig_baseline = create_baseline_comparison_chart(model_metrics, baseline_metrics, "rmse")
+                    st.plotly_chart(fig_baseline, use_container_width=True)
+        else:
+            st.info("💡 Train models to see baseline comparison. Baselines include: Naive (persistence), Seasonal Naive, Moving Average.")
+    else:
+        st.warning("⚠️ Statistical tests module not available. Install required dependencies.")
+
+    st.divider()
+
+    # Section 3: Visual Comparison (Radar + Bar)
+    st.markdown("#### 📈 Visual Comparison")
 
     col1, col2 = st.columns(2)
 
@@ -1772,6 +1858,7 @@ with tab_comparison:
             "Select metric to compare",
             ["RMSE", "MAE", "MAPE_%", "Accuracy_%"],
             index=0,
+            key="perf_metric_select"
         )
 
         bar_fig = create_metric_bar_chart(
@@ -1781,25 +1868,41 @@ with tab_comparison:
         )
         st.plotly_chart(bar_fig, use_container_width=True)
 
-    # Improvement chart
-    st.markdown("### Best Model vs Others")
-    improvements_df = compute_pairwise_improvements(all_models_df, best_model)
+    st.divider()
 
-    if not improvements_df.empty:
-        improvement_fig = create_improvement_chart(improvements_df, best_model)
-        st.plotly_chart(improvement_fig, use_container_width=True)
+    # Section 4: Per-Horizon Analysis
+    st.markdown("#### 🗓️ Performance by Forecast Horizon")
+    st.caption("How accuracy degrades as forecast horizon increases")
 
-        # Show improvement table
-        with st.expander("📊 Detailed Improvement Percentages"):
-            st.dataframe(
-                improvements_df.style.format({
-                    c: "{:.2f}%" for c in improvements_df.columns if "Improvement" in c
-                }, na_rep="—"),
-                use_container_width=True,
-                hide_index=True,
-            )
+    horizon_fig = create_horizon_performance_chart()
+    if horizon_fig:
+        st.plotly_chart(horizon_fig, use_container_width=True)
     else:
-        st.info("Train multiple models to see comparative improvements.")
+        st.info("Train multi-horizon models to see per-horizon analysis.")
+
+    st.divider()
+
+    # Section 5: Rankings with Heatmap
+    st.markdown("#### 🏅 Model Rankings")
+
+    ranked_df = compute_model_rankings(all_models_df)
+    heatmap_fig = create_ranking_heatmap(all_models_df)
+    st.plotly_chart(heatmap_fig, use_container_width=True)
+
+    # Ranking methodology
+    with st.expander("📖 Ranking Methodology"):
+        st.markdown("""
+        **Composite Score Calculation:**
+
+        The ranking uses weighted scoring designed for healthcare forecasting:
+
+        | Metric | Weight | Rationale |
+        |--------|--------|-----------|
+        | RMSE | 35% | Penalizes large errors critical in healthcare |
+        | MAE | 30% | Robust to outliers, interpretable |
+        | MAPE | 20% | Relative error for scale comparison |
+        | Accuracy | 15% | Overall prediction accuracy |
+        """)
 
 # -----------------------------------------------------------------------------
 # TAB 3: PER-HORIZON ANALYSIS
