@@ -2646,9 +2646,10 @@ if False:  # Disabled old sections
         st.warning("⚠️ Supabase not connected.")
 
 # -----------------------------------------------------------------------------
-# TAB 5: HYPERPARAMETER TUNING RESULTS
+# DISABLED: OLD TAB - HYPERPARAMETER TUNING RESULTS
+# (Moved to a collapsible section in Export tab for cleaner 6-tab structure)
 # -----------------------------------------------------------------------------
-with tab_hyperparams:
+if False:  # Disabled - old tab_hyperparams
     st.markdown("### 🔬 Hyperparameter Optimization Results")
     st.caption("Results from Grid Search, Random Search, and Bayesian Optimization")
 
