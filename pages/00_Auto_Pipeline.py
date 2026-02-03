@@ -133,6 +133,40 @@ def load_uploaded_data(uploaded_file) -> pd.DataFrame:
         raise Exception(f"Failed to load file: {str(e)}")
 
 
+def load_and_fuse_uploaded_data() -> Tuple[pd.DataFrame, List[str]]:
+    """
+    Load data from session state (uploaded via Upload Data page) and fuse them.
+    Returns fused DataFrame and log messages.
+    """
+    patient_df = st.session_state.get("patient_data")
+    weather_df = st.session_state.get("weather_data")
+    calendar_df = st.session_state.get("calendar_data")
+    reason_df = st.session_state.get("reason_data")
+
+    # Check minimum requirements
+    if patient_df is None or patient_df.empty:
+        raise Exception("Patient data is required. Please upload data via Upload Data page.")
+
+    if weather_df is None or weather_df.empty:
+        raise Exception("Weather data is required. Please upload data via Upload Data page.")
+
+    if calendar_df is None or calendar_df.empty:
+        raise Exception("Calendar data is required. Please upload data via Upload Data page.")
+
+    # Fuse datasets using existing fusion function
+    fused_df, fusion_log = fuse_data(
+        patient_df=patient_df,
+        weather_df=weather_df,
+        calendar_df=calendar_df,
+        reason_df=reason_df if reason_df is not None and not reason_df.empty else None,
+    )
+
+    if fused_df is None or fused_df.empty:
+        raise Exception(f"Data fusion failed. Check the fusion log: {fusion_log}")
+
+    return fused_df, fusion_log
+
+
 def prepare_pipeline_data(df_raw: pd.DataFrame, config: Dict) -> Tuple[pd.DataFrame, Dict]:
     """Process raw data using existing process_dataset function."""
     processed_df, report = process_dataset(
