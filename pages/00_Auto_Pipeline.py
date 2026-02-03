@@ -1012,10 +1012,12 @@ def run_full_pipeline(pipeline_config: Dict):
     models = pipeline_config["models"]
     uploaded_file = pipeline_config["uploaded_file"]
     use_uploaded_data = pipeline_config.get("use_uploaded_data", False)
+    run_feature_selection_flag = pipeline_config.get("run_feature_selection", True)
 
     # Count selected models
     selected_models = [name for name, selected in models.items() if selected]
-    total_steps = 3 + len(selected_models)  # Load + Prepare + Features + Models
+    # Total steps: Load + Prepare + Features + Selection (optional) + Models
+    total_steps = (4 if run_feature_selection_flag else 3) + len(selected_models)
 
     # Initialize progress
     progress_bar = st.progress(0)
@@ -1073,7 +1075,29 @@ def run_full_pipeline(pipeline_config: Dict):
         time.sleep(0.3)
 
         # =====================================================================
-        # Step 4+: Train Selected Models
+        # Step 4: Feature Selection (if enabled)
+        # =====================================================================
+        if run_feature_selection_flag:
+            current_step += 1
+            with status:
+                st.write("**Step 4**: Running automated feature selection...")
+
+            fs_result = run_feature_selection(df_processed, config, fe_result)
+            selected_features = fs_result.get("selected_features", fe_result["feature_cols"])
+
+            # Update feature engineering with selected features
+            fe_result = build_features(df_processed, config, selected_features=selected_features)
+
+            st.write(f"Selected {fs_result.get('n_selected', len(selected_features))} of {fs_result.get('n_total', len(selected_features))} features")
+            st.write(f"Method: {fs_result.get('method', 'N/A')}")
+
+            # Store feature selection results in session state
+            st.session_state["feature_selection_results"] = fs_result
+            progress_bar.progress(current_step / total_steps)
+            time.sleep(0.3)
+
+        # =====================================================================
+        # Step 5+: Train Selected Models
         # =====================================================================
         model_trainers = {
             "arima": lambda: train_arima(df_processed, config),
