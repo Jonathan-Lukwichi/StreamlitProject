@@ -647,9 +647,12 @@ def render_hero_header():
             </p>
             <div style='display: flex; justify-content: center; gap: 2rem; margin-top: 1rem;'>
                 <span style='color: {SUCCESS_COLOR}; font-size: 0.9rem;'>
-                    Data Loading &rarr; Preparation &rarr; Training &rarr; Results
+                    Upload Data &rarr; Fuse &rarr; Process &rarr; Train Models &rarr; View Results
                 </span>
             </div>
+            <p style='font-size: 0.85rem; color: {SUBTLE_TEXT}; margin: 1rem 0 0 0;'>
+                Uses data from <strong>Upload Data</strong> page or upload a new file
+            </p>
         </div>
         """,
         unsafe_allow_html=True,
