@@ -1905,86 +1905,197 @@ with tab_performance:
         """)
 
 # -----------------------------------------------------------------------------
-# TAB 3: PER-HORIZON ANALYSIS
+# TAB 3: STATISTICAL VALIDATION (PhD-Level)
 # -----------------------------------------------------------------------------
-with tab_horizons:
-    st.markdown("### Forecast Horizon Analysis")
-    st.caption("How model performance degrades as forecast horizon increases")
+with tab_validation:
+    st.markdown("### 📐 Statistical Validation")
+    st.caption("Prove your model is statistically significantly better - the PhD-level standard")
 
-    horizon_fig = create_horizon_performance_chart()
+    if not STATISTICAL_TESTS_AVAILABLE:
+        st.error("⚠️ Statistical tests module not available. Please check installation.")
+    else:
+        # Section 1: Diebold-Mariano Test Matrix
+        st.markdown("#### Diebold-Mariano Test Matrix")
+        st.markdown("""
+        <div style="background: rgba(30, 41, 59, 0.6); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+            <strong>What is this?</strong> The Diebold-Mariano test compares forecast accuracy between two models.
+            <br><br>
+            <strong>How to interpret:</strong> p < 0.05 means the models are <em>significantly</em> different.
+            <br>
+            *** = p<0.001 | ** = p<0.01 | * = p<0.05 | ns = not significant
+        </div>
+        """, unsafe_allow_html=True)
 
-    if horizon_fig:
-        st.plotly_chart(horizon_fig, use_container_width=True)
-
-        # Horizon-specific metrics table
-        st.markdown("#### Detailed Per-Horizon Metrics")
-
-        horizon_source = st.radio(
-            "Data source",
-            ["All Models", "Statistical (ARIMA/SARIMAX)", "ML (XGBoost/LSTM/ANN)"],
-            horizontal=True,
+        # Select horizon for comparison
+        horizon_select = st.selectbox(
+            "Select forecast horizon for comparison:",
+            options=[1, 2, 3, 4, 5, 6, 7],
+            index=0,
+            key="dm_horizon_select"
         )
 
-        # Collect per-horizon data based on selection
-        horizon_df_data = []
+        # Collect residuals for all models
+        residuals_data = collect_model_residuals(horizon=horizon_select)
 
-        if horizon_source in ["All Models", "Statistical (ARIMA/SARIMAX)"]:
-            for model_key, model_name in [("arima_mh_results", "ARIMA"), ("sarimax_results", "SARIMAX")]:
-                results = st.session_state.get(model_key)
-                if results:
-                    results_df = results.get("results_df")
-                    if results_df is not None:
-                        for _, row in results_df.iterrows():
-                            horizon_df_data.append({
-                                "Model": model_name,
-                                "Horizon": int(row.get("Horizon", 0)),
-                                "MAE": _safe_float(row.get("Test_MAE", row.get("MAE"))),
-                                "RMSE": _safe_float(row.get("Test_RMSE", row.get("RMSE"))),
-                                "MAPE_%": _safe_float(row.get("Test_MAPE", row.get("MAPE_%"))),
-                                "Accuracy_%": _safe_float(row.get("Test_Acc", row.get("Accuracy_%"))),
-                            })
+        if len(residuals_data) >= 2:
+            # Compute DM test matrix
+            errors_dict = {name: data["residuals"] for name, data in residuals_data.items()}
+            p_matrix, sig_matrix = diebold_mariano_matrix(errors_dict, h=horizon_select)
 
-        if horizon_source in ["All Models", "ML (XGBoost/LSTM/ANN)"]:
-            for model_name in ["XGBoost", "LSTM", "ANN"]:
-                # Check both lowercase and titlecase keys
-                ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
-                if ml_results is None:
-                    ml_results = st.session_state.get(f"ml_mh_results_{model_name}")
-                if ml_results:
-                    # ML metrics are stored in results_df, not per_h
-                    results_df = ml_results.get("results_df")
-                    if results_df is not None and not results_df.empty:
-                        for _, row in results_df.iterrows():
-                            horizon_df_data.append({
-                                "Model": model_name,
-                                "Horizon": int(row.get("Horizon", 0)),
-                                "MAE": _safe_float(row.get("Test_MAE")),
-                                "RMSE": _safe_float(row.get("Test_RMSE")),
-                                "MAPE_%": _safe_float(row.get("Test_MAPE")),
-                                "Accuracy_%": _safe_float(row.get("Test_Acc")),
-                            })
+            # Display heatmap
+            if DIAGNOSTIC_PLOTS_AVAILABLE:
+                dm_heatmap = create_dm_heatmap(p_matrix, sig_matrix)
+                st.plotly_chart(dm_heatmap, use_container_width=True)
+            else:
+                st.dataframe(p_matrix.style.format("{:.4f}", na_rep="—"), use_container_width=True)
 
-        if horizon_df_data:
-            horizon_df = pd.DataFrame(horizon_df_data)
-            horizon_df = horizon_df.sort_values(["Model", "Horizon"])
+            # Text summary
+            st.markdown("##### Key Findings")
 
-            st.dataframe(
-                horizon_df.style.format({
-                    "MAE": "{:.4f}",
-                    "RMSE": "{:.4f}",
-                    "MAPE_%": "{:.2f}",
-                    "Accuracy_%": "{:.2f}",
-                }, na_rep="—").background_gradient(
-                    subset=["MAE", "RMSE", "MAPE_%"],
-                    cmap="RdYlGn_r"
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+            # Find which models are significantly different from best
+            best_model_name = best_model.replace(" (Avg)", "")
+            if best_model_name in p_matrix.index:
+                sig_vs_best = []
+                for other_model in p_matrix.columns:
+                    if other_model != best_model_name:
+                        p_val = p_matrix.loc[best_model_name, other_model]
+                        if pd.notna(p_val) and p_val < 0.05:
+                            sig_vs_best.append(f"**{best_model_name}** vs **{other_model}**: p={p_val:.4f} {sig_matrix.loc[best_model_name, other_model]}")
+
+                if sig_vs_best:
+                    st.success(f"✅ The best model ({best_model_name}) is **statistically significantly better** than:")
+                    for finding in sig_vs_best:
+                        st.markdown(f"  - {finding}")
+                else:
+                    st.warning(f"⚠️ No statistically significant differences found between {best_model_name} and other models at p < 0.05")
         else:
-            st.info("No per-horizon data available. Train models with multi-horizon configuration.")
-    else:
-        st.info("No per-horizon data available. Train models from Benchmarks or Modeling Hub pages first.")
+            st.warning(f"Need at least 2 models with residuals for comparison. Found: {list(residuals_data.keys())}")
+
+        st.divider()
+
+        # Section 2: Skill Scores
+        st.markdown("#### 📊 Forecast Skill Scores")
+        st.markdown("""
+        <div style="background: rgba(30, 41, 59, 0.6); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+            <strong>Skill Score</strong> = 1 - (Model Error / Baseline Error)
+            <br><br>
+            <strong>Interpretation:</strong>
+            • Skill > 0.3 = Substantial improvement
+            • Skill 0.1-0.3 = Moderate improvement
+            • Skill < 0.1 = Marginal improvement
+            • Skill ≤ 0 = No better than baseline
+        </div>
+        """, unsafe_allow_html=True)
+
+        baselines = compute_naive_baselines_for_comparison()
+
+        if baselines and residuals_data:
+            # Compute skill scores for each model
+            skill_data = []
+
+            for model_name, model_data in residuals_data.items():
+                for baseline_name, baseline_data in baselines.items():
+                    y_test = model_data["y_true"]
+                    model_errors = model_data["residuals"]
+                    baseline_errors = baseline_data["errors"]
+
+                    # Align lengths
+                    min_len = min(len(model_errors), len(baseline_errors))
+                    if min_len > 0:
+                        skill = compute_skill_score(
+                            model_errors[:min_len],
+                            baseline_errors[:min_len],
+                            y_test[:min_len],
+                            model_name=model_name,
+                            baseline_type=baseline_name
+                        )
+
+                        skill_data.append({
+                            "Model": model_name,
+                            "vs Baseline": baseline_name.replace("_", " ").title(),
+                            "Skill Score": skill.skill_score,
+                            "MASE": skill.mase,
+                            "Improvement %": skill.improvement_pct,
+                            "Interpretation": skill.interpretation,
+                        })
+
+            if skill_data:
+                skill_df = pd.DataFrame(skill_data)
+
+                # Show vs primary baseline (persistence/naive)
+                primary_baseline = "Persistence"
+                primary_df = skill_df[skill_df["vs Baseline"] == primary_baseline]
+
+                if not primary_df.empty:
+                    st.markdown(f"##### Skill Scores vs {primary_baseline} Baseline")
+
+                    st.dataframe(
+                        primary_df[["Model", "Skill Score", "MASE", "Improvement %", "Interpretation"]].style.format({
+                            "Skill Score": "{:.3f}",
+                            "MASE": "{:.3f}",
+                            "Improvement %": "{:+.1f}%",
+                        }, na_rep="—").background_gradient(
+                            subset=["Skill Score", "Improvement %"],
+                            cmap="RdYlGn"
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                # Skill score gauges for top 3 models
+                if DIAGNOSTIC_PLOTS_AVAILABLE and len(primary_df) > 0:
+                    top_skills = primary_df.nlargest(3, "Skill Score")
+                    cols = st.columns(min(3, len(top_skills)))
+
+                    for i, (_, row) in enumerate(top_skills.iterrows()):
+                        with cols[i]:
+                            gauge = create_skill_score_gauge(
+                                row["Skill Score"],
+                                row["Model"],
+                                primary_baseline
+                            )
+                            st.plotly_chart(gauge, use_container_width=True)
+
+                with st.expander("📋 Full Skill Scores vs All Baselines"):
+                    st.dataframe(
+                        skill_df.style.format({
+                            "Skill Score": "{:.3f}",
+                            "MASE": "{:.3f}",
+                            "Improvement %": "{:+.1f}%",
+                        }, na_rep="—"),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+        else:
+            st.info("Train models to compute skill scores against naive baselines.")
+
+        st.divider()
+
+        # Section 3: Confidence Intervals
+        st.markdown("#### 📉 Metric Confidence Intervals (Bootstrap)")
+
+        if residuals_data:
+            ci_data = []
+            for model_name, model_data in residuals_data.items():
+                residuals = model_data["residuals"]
+                if len(residuals) > 10:
+                    rmse_ci = bootstrap_confidence_interval(residuals, metric="rmse", n_bootstrap=500)
+                    mae_ci = bootstrap_confidence_interval(residuals, metric="mae", n_bootstrap=500)
+
+                    ci_data.append({
+                        "Model": model_name,
+                        "RMSE": f"{rmse_ci.point_estimate:.3f}",
+                        "RMSE 95% CI": f"[{rmse_ci.ci_lower:.3f}, {rmse_ci.ci_upper:.3f}]",
+                        "MAE": f"{mae_ci.point_estimate:.3f}",
+                        "MAE 95% CI": f"[{mae_ci.ci_lower:.3f}, {mae_ci.ci_upper:.3f}]",
+                    })
+
+            if ci_data:
+                st.dataframe(pd.DataFrame(ci_data), use_container_width=True, hide_index=True)
+
+                st.caption("Confidence intervals computed using 500 bootstrap samples. Overlapping CIs suggest models may not be significantly different.")
+        else:
+            st.info("Train models to compute confidence intervals.")
 
 # -----------------------------------------------------------------------------
 # TAB 4: RANKINGS
