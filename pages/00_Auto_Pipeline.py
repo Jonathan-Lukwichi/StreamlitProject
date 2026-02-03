@@ -743,9 +743,7 @@ def render_configuration_panel() -> Dict:
         )
         use_uploaded_data = True
     else:
-        st.warning("No data detected. Please upload data via **Upload Data** page first.")
-        if st.button("Go to Upload Data", key="go_upload_config", use_container_width=True):
-            st.switch_page("pages/02_Upload_Data.py")
+        # No data detected - warning will be shown in execution panel only
         use_uploaded_data = False
 
     # No file upload option - data must come from Upload Data page
