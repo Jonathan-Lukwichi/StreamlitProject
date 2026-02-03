@@ -651,7 +651,7 @@ def render_hero_header():
                 </span>
             </div>
             <p style='font-size: 0.85rem; color: {SUBTLE_TEXT}; margin: 1rem 0 0 0;'>
-                Uses data from <strong>Upload Data</strong> page or upload a new file
+                Uses data from <strong>Upload Data</strong> page
             </p>
         </div>
         """,
