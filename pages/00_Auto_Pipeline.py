@@ -70,6 +70,7 @@ add_logout_button()
 # DATA PROCESSING IMPORTS
 # =============================================================================
 from app_core.data.data_processing import process_dataset
+from app_core.data.fusion import fuse_data
 
 
 # =============================================================================
