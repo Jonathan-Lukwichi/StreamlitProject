@@ -936,6 +936,7 @@ def render_configuration_panel() -> Dict:
         "uploaded_status": uploaded_status,
         "config": config,
         "models": models,
+        "run_feature_selection": run_feature_selection_cb,
     }
 
 
