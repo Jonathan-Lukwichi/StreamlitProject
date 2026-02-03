@@ -290,7 +290,7 @@ DEFAULTS = {
     "ml_choice": "XGBoost",                  # << default as requested
     # LSTM
     "ml_lstm_param_mode": "Automatic",
-    "lstm_layers": 2, "lstm_hidden_units": 64, "lstm_epochs": 100, "lstm_lr": 1e-3,
+    "lstm_layers": 2, "lstm_hidden_units": 64, "lstm_epochs": 15, "lstm_lr": 1e-3,
     "lookback_window": 14, "dropout": 0.2, "batch_size": 32,
     "lstm_search_method": "Grid (bounded)",
     "lstm_max_layers": 3, "lstm_max_units": 256, "lstm_max_epochs": 50,
