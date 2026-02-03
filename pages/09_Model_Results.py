@@ -2236,20 +2236,9 @@ with tab_diagnostics:
             st.info("Train models to see residual diagnostics.")
 
 # -----------------------------------------------------------------------------
-# NOTE: Dataset Experiments and Hyperparameter Tuning have been moved to Export tab
-# to consolidate the PhD-level 6-tab structure
+# NOTE: Legacy tabs (Experiments, Hyperparameters) removed in PhD restructure
+# These features are now consolidated in Tab 6: Export & Reports
 # -----------------------------------------------------------------------------
-
-# REMOVED: The old tab_experiments and tab_hyperparams sections have been
-# consolidated into the new 6-tab PhD-level structure.
-# Key experiment tracking features are available in the Export tab.
-
-# Skip to next tab (tab_explainability)
-if False:  # Disabled old sections
-    pass  # Placeholder to maintain syntax
-    # Old tab_experiments content was here (lines removed)
-    st.markdown("### [DISABLED] Dataset-Based Experiment Tracking")
-    st.caption("Track and compare model performance across different feature configurations")
 
     # Initialize experiment service
     exp_service = get_experiment_service()
