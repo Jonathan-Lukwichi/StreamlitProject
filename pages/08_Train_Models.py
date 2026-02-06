@@ -2788,6 +2788,15 @@ def page_ml():
                         model_key = f"ml_mh_results_{model_name.lower()}"
                         st.session_state[model_key] = results
 
+                        # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
+                        try:
+                            saved_paths = save_ml_models_to_disk(model_name, results)
+                            if saved_paths:
+                                st.success(f"💾 Saved {len(saved_paths)} model file(s) to `pipeline_artifacts/{model_name.lower()}/`")
+                        except Exception as save_err:
+                            st.warning(f"⚠️ Could not save model files: {save_err}")
+                        # ================================================
+
                         # Store residuals for hybrid models (Stage 1 → Stage 2)
                         total_residuals = full_results.get("total_residuals", {})
                         if total_residuals:
