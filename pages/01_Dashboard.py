@@ -334,22 +334,6 @@ st.markdown("""
 
 
 # =============================================================================
-# PROGRESS BAR
-# =============================================================================
-st.markdown(f"""
-<div class="progress-container">
-    <div class="progress-header">
-        <span class="progress-label">Workflow Progress</span>
-        <span class="progress-value">{completion_pct}%</span>
-    </div>
-    <div class="progress-bar">
-        <div class="progress-fill" style="width: {completion_pct}%;"></div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
-# =============================================================================
 # KPI STATUS CARDS
 # =============================================================================
 col1, col2, col3, col4 = st.columns(4)
