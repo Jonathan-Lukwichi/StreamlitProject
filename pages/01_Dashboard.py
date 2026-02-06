@@ -332,6 +332,18 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# =============================================================================
+# CLEAR SESSION BUTTON
+# =============================================================================
+col_spacer, col_btn = st.columns([5, 1])
+with col_btn:
+    if st.button("🗑️ Clear Session", key="clear_session", help="Reset all data and start fresh"):
+        # Keep only essential keys (authentication)
+        keys_to_keep = {"authentication_status", "username", "name", "logout"}
+        keys_to_delete = [k for k in st.session_state.keys() if k not in keys_to_keep]
+        for k in keys_to_delete:
+            del st.session_state[k]
+        st.rerun()
 
 # =============================================================================
 # KPI STATUS CARDS
