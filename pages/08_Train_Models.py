@@ -2949,6 +2949,14 @@ def page_ml():
                             all_results[model_name] = results
                             st.session_state[f"ml_mh_results_{model_name}"] = results
 
+                            # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
+                            try:
+                                saved_paths = save_ml_models_to_disk(model_name, results)
+                                if saved_paths:
+                                    logger.info(f"Saved {len(saved_paths)} {model_name} model files to disk")
+                            except Exception as save_err:
+                                logger.warning(f"Could not save {model_name} model files: {save_err}")
+
                             # Store residuals for hybrid models (Stage 1 → Stage 2)
                             total_residuals = full_results.get("total_residuals", {})
                             if total_residuals:
