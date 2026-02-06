@@ -1330,4 +1330,4 @@ with tab5:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(current_page=12)
+render_page_navigation(current_page_index=12)
