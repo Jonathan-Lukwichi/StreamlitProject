@@ -88,6 +88,10 @@ ARTIFACT_DIRECTORIES = [
     "pipeline_artifacts/optimized/ann_bayesian",
     # Legacy/other
     "models",
+    # Feature Studio transformers (scalers, encoders)
+    "app_core/pipelines/saved_transformers",
+    # Feature Selection results
+    "pipeline_artifacts/feature_selection",
 ]
 
 
