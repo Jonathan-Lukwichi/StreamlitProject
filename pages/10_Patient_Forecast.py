@@ -29,6 +29,9 @@ from app_core.analytics.seasonal_proportions import (
     combine_proportions_multiplicatively,
 )
 
+# Cloud Model Sync (Train Locally, Deploy to Cloud)
+from app_core.ui.model_download_ui import render_cloud_models_info
+
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
 # ============================================================================
