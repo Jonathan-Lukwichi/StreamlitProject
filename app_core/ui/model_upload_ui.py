@@ -12,7 +12,7 @@ import logging
 
 from app_core.ui.theme import (
     PRIMARY_COLOR, SECONDARY_COLOR, SUCCESS_COLOR,
-    WARNING_COLOR, ERROR_COLOR, TEXT_COLOR, CARD_BG
+    WARNING_COLOR, DANGER_COLOR, TEXT_COLOR
 )
 
 logger = logging.getLogger(__name__)
