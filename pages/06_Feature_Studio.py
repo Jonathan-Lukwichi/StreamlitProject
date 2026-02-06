@@ -535,6 +535,49 @@ def _ensure_transformers_dir():
     if not TRANSFORMERS_DIR.exists():
         TRANSFORMERS_DIR.mkdir(parents=True, exist_ok=True)
 
+def _ensure_transformers_from_cloud():
+    """
+    Download transformers from Supabase Storage if not present locally.
+
+    This enables the 'Train Locally, Deploy to Cloud' workflow:
+    - Transformers (scalers, encoders) fitted during local training
+    - Uploaded to Supabase via Cloud Sync tab
+    - Downloaded automatically on Streamlit Cloud startup
+
+    Returns:
+        int: Number of transformers downloaded (0 if already present or not connected)
+    """
+    _ensure_transformers_dir()
+
+    # Check if we already have transformers locally
+    existing_files = list(TRANSFORMERS_DIR.glob("*.joblib"))
+    if existing_files:
+        return 0  # Already have local transformers
+
+    # Try to download from cloud
+    try:
+        from app_core.data.model_storage_service import download_transformers
+        results = download_transformers(str(TRANSFORMERS_DIR))
+
+        if "error" in results:
+            return 0
+
+        downloaded = sum(1 for key, (success, _) in results.items() if key != "error" and success)
+        if downloaded > 0:
+            import logging
+            logging.getLogger(__name__).info(f"Downloaded {downloaded} transformer(s) from cloud storage")
+        return downloaded
+    except ImportError:
+        # Model storage service not available (e.g., no Supabase connection)
+        return 0
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Could not download transformers from cloud: {e}")
+        return 0
+
+# Auto-download transformers on module load (for cloud deployment)
+_ensure_transformers_from_cloud()
+
 def _save_transformer(transformer, name: str, variant: str = "A") -> Optional[str]:
     """
     Save a fitted transformer (scaler/encoder) for later inference.
