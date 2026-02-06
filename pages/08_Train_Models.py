@@ -1314,19 +1314,58 @@ def save_optimized_model_to_disk(
     artifact_dir: str = "pipeline_artifacts/optimized"
 ) -> dict:
     """
-    Save Optuna-optimized model to disk.
+    Save Optuna/Grid/Random search optimized results to disk.
+
+    This saves:
+    1. best_params as JSON (always saved if available)
+    2. Trained pipelines if available
 
     Args:
         model_name: Model name (e.g., "XGBoost_Optimized")
-        opt_results: Results from Optuna optimization
+        opt_results: Results from optimization (must have best_params)
         artifact_dir: Base directory for saving artifacts
 
     Returns:
-        dict: Mapping of horizon to saved file paths
+        dict: Mapping of saved file types to paths
     """
     import os
+    import json
 
     saved_paths = {}
+
+    # Create optimized model directory
+    model_dir = os.path.join(artifact_dir, model_name.lower().replace(" ", "_"))
+    os.makedirs(model_dir, exist_ok=True)
+
+    # 1. Always save best_params as JSON
+    best_params = opt_results.get("best_params", {})
+    if best_params:
+        params_path = os.path.join(model_dir, "best_params.json")
+        try:
+            with open(params_path, 'w') as f:
+                json.dump(best_params, f, indent=2, default=str)
+            saved_paths["best_params"] = params_path
+            logger.info(f"Saved best_params to {params_path}")
+        except Exception as e:
+            logger.warning(f"Could not save best_params: {e}")
+
+    # 2. Save optimization metrics summary
+    metrics_to_save = {
+        "best_cv_score": opt_results.get("best_cv_score"),
+        "best_rmse": opt_results.get("best_rmse"),
+        "best_mae": opt_results.get("best_mae"),
+        "best_r2": opt_results.get("best_r2"),
+        "search_method": opt_results.get("search_method", "unknown"),
+    }
+    metrics_path = os.path.join(model_dir, "optimization_metrics.json")
+    try:
+        with open(metrics_path, 'w') as f:
+            json.dump(metrics_to_save, f, indent=2, default=str)
+        saved_paths["metrics"] = metrics_path
+    except Exception as e:
+        logger.warning(f"Could not save optimization metrics: {e}")
+
+    # 3. Save trained pipelines if available
     pipelines = opt_results.get("pipelines", {})
 
     if not pipelines:
@@ -1335,13 +1374,6 @@ def save_optimized_model_to_disk(
         for h, h_data in per_h.items():
             if "pipeline" in h_data:
                 pipelines[h] = h_data["pipeline"]
-
-    if not pipelines:
-        return saved_paths
-
-    # Create optimized model directory
-    model_dir = os.path.join(artifact_dir, model_name.lower().replace(" ", "_"))
-    os.makedirs(model_dir, exist_ok=True)
 
     for h, pipeline in pipelines.items():
         try:
@@ -1355,10 +1387,10 @@ def save_optimized_model_to_disk(
             else:
                 joblib.dump(pipeline, filepath)
 
-            saved_paths[h] = filepath
+            saved_paths[f"horizon_{h}"] = filepath
 
         except Exception as e:
-            print(f"Warning: Could not save optimized {model_name} horizon {h}: {e}")
+            logger.warning(f"Could not save optimized {model_name} horizon {h}: {e}")
             continue
 
     return saved_paths
