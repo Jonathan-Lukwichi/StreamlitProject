@@ -146,8 +146,11 @@ def _detect_model_type(filename: str, ext: str) -> str:
         return "arima"
     elif "sarimax" in filename_lower:
         return "sarimax"
-    elif "scaler" in filename_lower or "preprocessor" in filename_lower:
+    elif any(x in filename_lower for x in ["scaler", "preprocessor", "ohe_", "scale_cols_", "encoder_"]):
         return "preprocessor"
+    # Feature selection config files
+    elif "selected_features" in filename_lower or "selection_config" in filename_lower:
+        return "feature_selection"
     else:
         return "unknown"
 
