@@ -2220,6 +2220,14 @@ def page_benchmarks():
                         st.session_state["arima_mh_results"] = arima_mh_out
                         st.success(f"✅ ARIMA multi-horizon training completed in {runtime_s:.2f}s!")
 
+                        # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
+                        try:
+                            saved_paths = save_baseline_model_to_disk("ARIMA", arima_mh_out)
+                            if saved_paths:
+                                st.success(f"💾 Saved {len(saved_paths)} ARIMA artifact(s) to `pipeline_artifacts/arima/`")
+                        except Exception as save_err:
+                            st.warning(f"⚠️ Could not save ARIMA model files: {save_err}")
+
                         res_df = arima_mh_out.get("results_df")
                         if res_df is not None and not res_df.empty:
                             res_df = _sanitize_metrics_df(res_df)
