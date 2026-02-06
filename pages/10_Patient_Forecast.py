@@ -1453,9 +1453,7 @@ with tab_forecast:
                     )
 
             # --- FORECAST HEADER ---
-            if using_ml_categories:
-                categories_text = " • <span style='color: #10b981;'>ML Category Predictions</span>"
-            elif has_seasonal_props:
+            if has_seasonal_props:
                 categories_text = " • <span style='color: #10b981;'>Categories (Seasonal DOW×Monthly)</span>"
             else:
                 categories_text = ""
