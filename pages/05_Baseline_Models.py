@@ -141,6 +141,88 @@ def _sanitize_artifacts(F, L, U):
         return arr
     return _san(F), _san(L), _san(U)
 
+
+# =============================================================================
+# MODEL SAVING FOR CLOUD SYNC
+# =============================================================================
+
+def save_baseline_model_to_disk(
+    model_type: str,
+    results: dict,
+    artifact_dir: str = "pipeline_artifacts"
+) -> dict:
+    """
+    Save ARIMA/SARIMAX model results to disk for Cloud Sync.
+
+    This saves:
+    1. Model parameters and configuration (JSON)
+    2. Per-horizon fitted models (pickle) if available
+    3. Results summary (JSON)
+
+    Args:
+        model_type: "ARIMA" or "SARIMAX"
+        results: Multi-horizon results dict with per_h data
+        artifact_dir: Base directory for saving artifacts
+
+    Returns:
+        dict: Mapping of saved file types to paths
+    """
+    import os
+    import json
+    import joblib
+    import logging
+
+    logger = logging.getLogger(__name__)
+    saved_paths = {}
+
+    # Create model directory
+    model_dir = os.path.join(artifact_dir, model_type.lower())
+    os.makedirs(model_dir, exist_ok=True)
+
+    # 1. Save model configuration
+    config_to_save = {
+        "model_type": model_type,
+        "order": results.get("order"),
+        "seasonal_order": results.get("seasonal_order"),
+        "horizons": results.get("horizons"),
+        "train_ratio": results.get("train_ratio"),
+    }
+    config_path = os.path.join(model_dir, "model_config.json")
+    try:
+        with open(config_path, 'w') as f:
+            json.dump(config_to_save, f, indent=2, default=str)
+        saved_paths["config"] = config_path
+        logger.info(f"Saved {model_type} config to {config_path}")
+    except Exception as e:
+        logger.warning(f"Could not save {model_type} config: {e}")
+
+    # 2. Save per-horizon models
+    per_h = results.get("per_h", {})
+    for h, h_data in per_h.items():
+        try:
+            # Get the fitted model
+            fitted_model = h_data.get("model") or h_data.get("fitted_model")
+            if fitted_model is not None:
+                model_path = os.path.join(model_dir, f"horizon_{h}.pkl")
+                joblib.dump(fitted_model, model_path)
+                saved_paths[f"horizon_{h}"] = model_path
+                logger.info(f"Saved {model_type} horizon {h} model to {model_path}")
+        except Exception as e:
+            logger.warning(f"Could not save {model_type} horizon {h}: {e}")
+            continue
+
+    # 3. Save results summary (metrics)
+    results_df = results.get("results_df")
+    if results_df is not None:
+        try:
+            metrics_path = os.path.join(model_dir, "metrics.csv")
+            results_df.to_csv(metrics_path, index=False)
+            saved_paths["metrics"] = metrics_path
+        except Exception as e:
+            logger.warning(f"Could not save {model_type} metrics: {e}")
+
+    return saved_paths
+
 # ---------------------------- Local fallback plotters (ARIMA single) ----------------------------
 
 def _plot_arima_forecast_local(arima_out, title="ARIMA Forecast"):
