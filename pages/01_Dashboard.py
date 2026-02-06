@@ -310,19 +310,10 @@ def get_page_statuses() -> Dict[str, bool]:
     }
 
 
-def get_completion_percentage(statuses: Dict[str, bool]) -> int:
-    """Calculate overall workflow completion percentage."""
-    # Core workflow steps (excluding 'actions' which is always True)
-    core_steps = ["upload", "prepare", "features", "train", "forecast"]
-    completed = sum(1 for step in core_steps if statuses.get(step, False))
-    return int((completed / len(core_steps)) * 100)
-
-
 # =============================================================================
 # GET STATUSES
 # =============================================================================
 page_statuses = get_page_statuses()
-completion_pct = get_completion_percentage(page_statuses)
 
 
 # =============================================================================
