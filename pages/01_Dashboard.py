@@ -384,64 +384,6 @@ with col4:
 
 
 # =============================================================================
-# WORKFLOW TIMELINE
-# =============================================================================
-st.markdown("""
-<div class="section-header">
-    <span class="section-icon">🔄</span>
-    <span class="section-title">Workflow Pipeline</span>
-</div>
-""", unsafe_allow_html=True)
-
-# Determine which steps are complete
-step_classes = [
-    "complete" if page_statuses["upload"] else "",
-    "complete" if page_statuses["prepare"] else "",
-    "complete" if page_statuses["explore"] else "",
-    "complete" if page_statuses["train"] else "",
-    "complete" if page_statuses["forecast"] else "",
-    "complete" if page_statuses["staff"] or page_statuses["supply"] else "",
-]
-
-st.markdown(f"""
-<div class="workflow-container">
-    <div class="workflow-step">
-        <div class="workflow-number {step_classes[0]}">1</div>
-        <div class="workflow-title">Upload</div>
-        <div class="workflow-desc">Import data</div>
-    </div>
-    <div class="workflow-step">
-        <div class="workflow-number {step_classes[1]}">2</div>
-        <div class="workflow-title">Prepare</div>
-        <div class="workflow-desc">Clean & fuse</div>
-    </div>
-    <div class="workflow-step">
-        <div class="workflow-number {step_classes[2]}">3</div>
-        <div class="workflow-title">Explore</div>
-        <div class="workflow-desc">Analyze</div>
-    </div>
-    <div class="workflow-step">
-        <div class="workflow-number {step_classes[3]}">4</div>
-        <div class="workflow-title">Train</div>
-        <div class="workflow-desc">Build models</div>
-    </div>
-    <div class="workflow-step">
-        <div class="workflow-number {step_classes[4]}">5</div>
-        <div class="workflow-title">Forecast</div>
-        <div class="workflow-desc">Predict</div>
-    </div>
-    <div class="workflow-step">
-        <div class="workflow-number {step_classes[5]}">6</div>
-        <div class="workflow-title">Optimize</div>
-        <div class="workflow-desc">Plan resources</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("---")
-
-
-# =============================================================================
 # HELPER FUNCTION FOR STATUS BADGE
 # =============================================================================
 def status_badge(is_complete: bool) -> str:
