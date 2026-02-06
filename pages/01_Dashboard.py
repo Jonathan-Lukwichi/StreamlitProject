@@ -327,7 +327,7 @@ st.markdown("""
     </div>
     <h1 class="hero-title">COMMAND CENTER</h1>
     <p class="hero-subtitle">
-        Central navigation hub for HealthForecast AI. Access all modules and track your workflow progress.
+        Central navigation hub for HealthForecast AI. Access all modules from one place.
     </p>
 </div>
 """, unsafe_allow_html=True)
