@@ -460,8 +460,20 @@ st.markdown("""
 def get_system_status() -> Dict[str, Any]:
     """Get current system status from session state."""
     has_data = "processed_df" in st.session_state or "merged_data" in st.session_state
-    has_forecast = any(k.startswith("ml_mh_results_") or k in ["arima_mh_results", "sarimax_results"]
-                       for k in st.session_state.keys() if st.session_state.get(k))
+
+    # Check for forecast results - avoid boolean evaluation of DataFrames
+    has_forecast = False
+    for k in st.session_state.keys():
+        if k.startswith("ml_mh_results_") or k in ["arima_mh_results", "sarimax_results"]:
+            val = st.session_state.get(k)
+            if val is not None and not (isinstance(val, pd.DataFrame) and val.empty):
+                if isinstance(val, dict) and val:
+                    has_forecast = True
+                    break
+                elif isinstance(val, pd.DataFrame) and not val.empty:
+                    has_forecast = True
+                    break
+
     has_features = "feature_engineering" in st.session_state
 
     return {
