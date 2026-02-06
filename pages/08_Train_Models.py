@@ -4703,6 +4703,18 @@ def page_hyperparameter_tuning():
 
                             st.success(f"✅ Optimization completed successfully!")
 
+                            # ===== SAVE OPTIMIZED PARAMS TO DISK FOR CLOUD SYNC =====
+                            try:
+                                results["search_method"] = "bayesian_optuna"
+                                saved_opt = save_optimized_model_to_disk(
+                                    f"{selected_model_opt}_Bayesian",
+                                    results
+                                )
+                                if saved_opt:
+                                    st.success(f"💾 Saved optimized params to `pipeline_artifacts/optimized/`")
+                            except Exception as save_err:
+                                st.warning(f"⚠️ Could not save optimized params: {save_err}")
+
                             # Show Optuna visualizations
                             if 'study' in results and OPTUNA_VIS_AVAILABLE:
                                 _render_optuna_visualizations(results['study'], selected_model_opt)
