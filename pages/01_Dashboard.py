@@ -277,17 +277,19 @@ st.markdown("""
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.95));
+    background: linear-gradient(135deg, #0f172a, #1e293b);
     border: 2px solid rgba(79, 143, 252, 0.5);
     border-radius: 50%;
     font-size: 1.1rem;
     font-weight: 800;
     color: #4f8ffc;
     box-shadow: 0 0 15px rgba(79, 143, 252, 0.2);
+    position: relative;
+    z-index: 2;
 }
 
 .workflow-number.complete {
-    background: rgba(34, 197, 94, 0.15);
+    background: linear-gradient(135deg, #0a1f0a, #14532d);
     border-color: #22c55e;
     color: #22c55e;
 }
