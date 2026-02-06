@@ -262,8 +262,6 @@ st.markdown("""
 /* Responsive */
 @media (max-width: 768px) {
     .hero-title { font-size: 2rem; }
-    .workflow-container { flex-direction: column; gap: 1rem; }
-    .workflow-container::before { display: none; }
 }
 </style>
 """, unsafe_allow_html=True)
