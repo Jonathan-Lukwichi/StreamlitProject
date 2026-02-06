@@ -1092,6 +1092,9 @@ if not available_models:
     After training, the test set forecasts will be available here.
     """)
 
+    # Cloud sync info - for Train Locally, Deploy to Cloud workflow
+    render_cloud_models_info()
+
     # Show session state keys for debugging
     with st.expander("🔧 Debug: Session State Keys", expanded=False):
         model_keys = [k for k in st.session_state.keys() if 'result' in k.lower() or 'model' in k.lower()]
