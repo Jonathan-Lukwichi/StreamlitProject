@@ -9800,11 +9800,12 @@ def _page_hybrid_lstm_ann():
 # -----------------------------------------------------------------------------
 # Tab Navigation
 # -----------------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📏 Benchmarks",
     "🧮 Machine Learning",
     "🔬 Hyperparameter Tuning",
-    "🧬 Hybrid Models"
+    "🧬 Hybrid Models",
+    "☁️ Cloud Sync"
 ])
 
 with tab1:
@@ -9818,6 +9819,9 @@ with tab3:
 
 with tab4:
     page_hybrid()
+
+with tab5:
+    render_cloud_sync_tab()
 
 # =============================================================================
 # PAGE NAVIGATION
