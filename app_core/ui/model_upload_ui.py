@@ -110,7 +110,7 @@ def find_local_models() -> List[Dict]:
                 filepath = os.path.join(dir_path, filename)
                 if os.path.isfile(filepath):
                     _, ext = os.path.splitext(filename)
-                    if ext.lower() in [".h5", ".keras", ".pkl", ".joblib", ".json", ".npy", ".npz"]:
+                    if ext.lower() in [".h5", ".keras", ".pkl", ".joblib", ".json", ".npy", ".npz", ".csv"]:
                         models.append({
                             "filename": filename,
                             "local_path": filepath,
