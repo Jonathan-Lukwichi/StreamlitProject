@@ -63,10 +63,30 @@ MODEL_FILE_PATTERNS = {
 # Local artifact directories to scan
 ARTIFACT_DIRECTORIES = [
     "pipeline_artifacts",
+    # ML models
+    "pipeline_artifacts/xgboost",
+    "pipeline_artifacts/lstm",
+    "pipeline_artifacts/ann",
+    # Baseline models
+    "pipeline_artifacts/arima",
+    "pipeline_artifacts/sarimax",
+    # Hybrid models
     "pipeline_artifacts/hybrids",
     "pipeline_artifacts/hybrids/lstm_xgb",
     "pipeline_artifacts/hybrids/lstm_sarimax",
     "pipeline_artifacts/hybrids/lstm_ann",
+    # Optimized models (from hyperparameter tuning)
+    "pipeline_artifacts/optimized",
+    "pipeline_artifacts/optimized/xgboost_gridsearch",
+    "pipeline_artifacts/optimized/xgboost_randomsearch",
+    "pipeline_artifacts/optimized/xgboost_bayesian",
+    "pipeline_artifacts/optimized/lstm_gridsearch",
+    "pipeline_artifacts/optimized/lstm_randomsearch",
+    "pipeline_artifacts/optimized/lstm_bayesian",
+    "pipeline_artifacts/optimized/ann_gridsearch",
+    "pipeline_artifacts/optimized/ann_randomsearch",
+    "pipeline_artifacts/optimized/ann_bayesian",
+    # Legacy/other
     "models",
 ]
 
