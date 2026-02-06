@@ -365,7 +365,7 @@ class ModelStorageService:
         models = []
 
         # Get files from each model type folder
-        model_folders = ["lstm", "xgboost", "arima", "ann", "hybrid", "preprocessors"]
+        model_folders = ["lstm", "xgboost", "arima", "ann", "hybrid", "preprocessors", "transformers", "feature_selection"]
 
         for folder in model_folders:
             files = self.list_files(folder=folder)
