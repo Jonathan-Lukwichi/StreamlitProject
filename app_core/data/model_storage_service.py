@@ -579,3 +579,121 @@ def download_model_for_prediction(
         return True, msg, local_path
     else:
         return False, msg, None
+
+
+def download_transformers(
+    local_dir: str = "app_core/pipelines/saved_transformers"
+) -> Dict[str, Tuple[bool, str]]:
+    """
+    Download all transformer files (scalers, encoders) from Supabase Storage.
+
+    Used on Streamlit Cloud startup to ensure transformers match
+    the trained models for correct feature scaling.
+
+    Args:
+        local_dir: Local directory to save transformers
+
+    Returns:
+        Dict mapping filename to (success, message)
+
+    Example:
+        results = download_transformers()
+        # Downloads ohe_A.joblib, scaler_A.joblib, etc.
+    """
+    service = get_model_storage_service()
+
+    if not service.is_connected():
+        return {"error": (False, "Not connected to Supabase")}
+
+    # Ensure local directory exists
+    os.makedirs(local_dir, exist_ok=True)
+
+    return service.download_all_models(
+        local_dir=local_dir,
+        folder="transformers"
+    )
+
+
+def download_feature_selection_config(
+    local_dir: str = "pipeline_artifacts/feature_selection"
+) -> Dict[str, Tuple[bool, str]]:
+    """
+    Download feature selection configuration from Supabase Storage.
+
+    Args:
+        local_dir: Local directory to save config files
+
+    Returns:
+        Dict mapping filename to (success, message)
+    """
+    service = get_model_storage_service()
+
+    if not service.is_connected():
+        return {"error": (False, "Not connected to Supabase")}
+
+    os.makedirs(local_dir, exist_ok=True)
+
+    return service.download_all_models(
+        local_dir=local_dir,
+        folder="feature_selection"
+    )
+
+
+def ensure_preprocessing_artifacts(
+    transformer_dir: str = "app_core/pipelines/saved_transformers",
+    selection_dir: str = "pipeline_artifacts/feature_selection"
+) -> Dict[str, bool]:
+    """
+    Ensure all preprocessing artifacts are available locally.
+    Downloads from cloud if missing.
+
+    This is the main entry point for cloud deployments to fetch
+    all preprocessing components needed for predictions.
+
+    Args:
+        transformer_dir: Local directory for transformers
+        selection_dir: Local directory for feature selection config
+
+    Returns:
+        Dict with status of each artifact type:
+        {"transformers": bool, "feature_selection": bool}
+
+    Example:
+        # Call on app startup
+        status = ensure_preprocessing_artifacts()
+        if not status["transformers"]:
+            st.warning("Transformers not available")
+    """
+    service = get_model_storage_service()
+    status = {"transformers": False, "feature_selection": False}
+
+    if not service.is_connected():
+        logger.warning("Cannot ensure preprocessing artifacts: not connected to Supabase")
+        return status
+
+    # Download transformers
+    try:
+        result = download_transformers(transformer_dir)
+        # Check if any downloads succeeded (excluding error key)
+        status["transformers"] = any(
+            success for key, (success, _) in result.items()
+            if key != "error" and success
+        )
+        if status["transformers"]:
+            logger.info(f"Transformers downloaded to {transformer_dir}")
+    except Exception as e:
+        logger.error(f"Failed to download transformers: {e}")
+
+    # Download feature selection config
+    try:
+        result = download_feature_selection_config(selection_dir)
+        status["feature_selection"] = any(
+            success for key, (success, _) in result.items()
+            if key != "error" and success
+        )
+        if status["feature_selection"]:
+            logger.info(f"Feature selection config downloaded to {selection_dir}")
+    except Exception as e:
+        logger.error(f"Failed to download feature selection config: {e}")
+
+    return status
