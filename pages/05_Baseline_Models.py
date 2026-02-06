@@ -2323,6 +2323,14 @@ def page_benchmarks():
                         st.session_state["sarimax_results"] = sarimax_mh_out
                         st.success(f"✅ SARIMAX multi-horizon training completed in {runtime_s:.2f}s!")
 
+                        # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
+                        try:
+                            saved_paths = save_baseline_model_to_disk("SARIMAX", sarimax_mh_out)
+                            if saved_paths:
+                                st.success(f"💾 Saved {len(saved_paths)} SARIMAX artifact(s) to `pipeline_artifacts/sarimax/`")
+                        except Exception as save_err:
+                            st.warning(f"⚠️ Could not save SARIMAX model files: {save_err}")
+
                         # Display selected model order
                         order_display = sarimax_mh_out.get("order")
                         sorder_display = sarimax_mh_out.get("seasonal_order")
