@@ -1595,4 +1595,4 @@ with tab5:
 # =============================================================================
 # PAGE NAVIGATION
 # =============================================================================
-render_page_navigation(current_page=11)
+render_page_navigation(current_page_index=11)
