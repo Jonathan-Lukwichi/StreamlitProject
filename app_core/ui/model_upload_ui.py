@@ -167,6 +167,17 @@ def get_remote_path(local_path: str, model_type: str) -> str:
         Remote path for Supabase Storage
     """
     filename = os.path.basename(local_path)
+
+    # Feature Studio transformers → "transformers" folder
+    if model_type == "preprocessor" and any(
+        x in filename.lower() for x in ["ohe_", "scaler_", "scale_cols_", "encoder_"]
+    ):
+        return f"transformers/{filename}"
+
+    # Feature Selection config → "feature_selection" folder
+    if model_type == "feature_selection":
+        return f"feature_selection/{filename}"
+
     folder = MODEL_FILE_PATTERNS.get(model_type, {}).get("folder", "other")
     return f"{folder}/{filename}"
 
