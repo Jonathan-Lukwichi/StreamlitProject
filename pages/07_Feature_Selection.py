@@ -934,6 +934,20 @@ def page_feature_selection():
         "test_idx": test_idx,
     }
 
+    # ===== SAVE SELECTION CONFIG TO DISK FOR CLOUD SYNC =====
+    try:
+        saved_paths = save_feature_selection_config(
+            selected_features=pipe.selected_features,
+            variant_used=variant_name,
+            targets=selected_targets,
+            primary_target=primary_target,
+            summary_df=summary
+        )
+        if saved_paths:
+            st.info(f"💾 Feature selection config saved to `{FEATURE_SELECTION_DIR}/` for cloud sync")
+    except Exception as save_err:
+        st.warning(f"Could not save feature selection config: {save_err}")
+
     st.success(f"✅ Done! Feature selection completed for **{len(selected_targets)} target(s)**: {', '.join(selected_targets)}")
 
     # Tabs per option
