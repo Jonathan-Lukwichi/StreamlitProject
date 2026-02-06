@@ -1002,12 +1002,20 @@ def classify_action_priority(
         Priority level: CRITICAL, HIGH, MEDIUM, or LOW
     """
     if ML_CLASSIFIER_AVAILABLE and priority_classifier is not None:
+        # Map function parameters to ActionPriorityFeatures fields
+        # time_sensitivity: 0=immediate, 1=urgent, 2=soon, 3=planned → urgency_score: 0-1
+        urgency_score = max(0.0, min(1.0, 1.0 - (time_sensitivity / 3.0)))
+        # service_level_gap → service_level (invert: gap=0 means level=1.0)
+        service_level = max(0.0, min(1.0, 1.0 - (service_level_gap / 100.0)))
+        # category_priority based on staff_type
+        category_priority = 1.0 if staff_type == "staff" else 0.8
+
         features = ActionPriorityFeatures(
             cost_impact_pct=cost_impact_pct,
             shortage_days=shortage_days,
-            service_level_gap=service_level_gap,
-            time_sensitivity=time_sensitivity,
-            staff_type=staff_type,
+            urgency_score=urgency_score,
+            service_level=service_level,
+            category_priority=category_priority,
         )
         priority_result = priority_classifier.predict_single(features)
         return priority_result.value if hasattr(priority_result, 'value') else str(priority_result)
