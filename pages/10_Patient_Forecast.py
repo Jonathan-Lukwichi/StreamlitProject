@@ -32,6 +32,34 @@ from app_core.analytics.seasonal_proportions import (
 # Cloud Model Sync (Train Locally, Deploy to Cloud)
 from app_core.ui.model_download_ui import render_cloud_models_info
 
+# Preprocessing artifacts check (for cloud deployment)
+def _ensure_preprocessing_on_startup():
+    """
+    Check and download preprocessing artifacts (transformers, feature selection)
+    from Supabase Storage if not present locally.
+
+    This enables the 'Train Locally, Deploy to Cloud' workflow where
+    preprocessing must match training data scaling.
+    """
+    try:
+        from app_core.data.model_storage_service import ensure_preprocessing_artifacts
+        status = ensure_preprocessing_artifacts()
+        # Only log, don't show warning to user (artifacts may not be needed)
+        import logging
+        logger = logging.getLogger(__name__)
+        if status.get("transformers"):
+            logger.info("Transformers downloaded from cloud storage")
+        if status.get("feature_selection"):
+            logger.info("Feature selection config downloaded from cloud storage")
+    except ImportError:
+        pass  # Model storage service not available
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"Preprocessing check: {e}")
+
+# Auto-check on page load
+_ensure_preprocessing_on_startup()
+
 # ============================================================================
 # AUTHENTICATION CHECK - USER OR ADMIN
 # ============================================================================
