@@ -1196,6 +1196,175 @@ def run_ml_multihorizon(
 
 
 # =============================================================================
+# MODEL SAVING FOR CLOUD SYNC
+# =============================================================================
+
+def save_ml_models_to_disk(
+    model_type: str,
+    ml_results: dict,
+    artifact_dir: str = "pipeline_artifacts"
+) -> dict:
+    """
+    Save trained ML models to disk for Cloud Sync (Train Locally, Deploy to Cloud).
+
+    Args:
+        model_type: Model name ("XGBoost", "LSTM", "ANN")
+        ml_results: Results from run_ml_multihorizon()
+        artifact_dir: Base directory for saving artifacts
+
+    Returns:
+        dict: Mapping of horizon to saved file paths
+    """
+    import os
+
+    saved_paths = {}
+    pipelines = ml_results.get("pipelines", {})
+
+    if not pipelines:
+        return saved_paths
+
+    # Create model-specific directory
+    model_dir = os.path.join(artifact_dir, model_type.lower())
+    os.makedirs(model_dir, exist_ok=True)
+
+    for h, pipeline in pipelines.items():
+        try:
+            if pipeline is None:
+                continue
+
+            # Determine file extension based on model type
+            if model_type.upper() in ["LSTM", "ANN"]:
+                # Keras models use .keras or .h5
+                filepath = os.path.join(model_dir, f"horizon_{h}.keras")
+                if hasattr(pipeline, 'model') and pipeline.model is not None:
+                    pipeline.model.save(filepath)
+                    saved_paths[h] = filepath
+            else:
+                # XGBoost and other sklearn-compatible models use joblib
+                filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
+                pipeline.save(filepath)
+                saved_paths[h] = filepath
+
+        except Exception as e:
+            print(f"Warning: Could not save {model_type} horizon {h}: {e}")
+            continue
+
+    return saved_paths
+
+
+def save_baseline_model_to_disk(
+    model_type: str,
+    results: dict,
+    artifact_dir: str = "pipeline_artifacts"
+) -> dict:
+    """
+    Save ARIMA/SARIMAX model results to disk.
+
+    Note: ARIMA/SARIMAX models from statsmodels can be large and
+    sometimes don't pickle well. We save what we can.
+
+    Args:
+        model_type: "ARIMA" or "SARIMAX"
+        results: Results from the baseline model training
+        artifact_dir: Base directory for saving artifacts
+
+    Returns:
+        dict: Mapping of horizon to saved file paths
+    """
+    import os
+
+    saved_paths = {}
+    per_h = results.get("per_h", {})
+
+    if not per_h:
+        return saved_paths
+
+    # Create model-specific directory
+    model_dir = os.path.join(artifact_dir, model_type.lower())
+    os.makedirs(model_dir, exist_ok=True)
+
+    for h, h_data in per_h.items():
+        try:
+            res = h_data.get("res")  # The fitted model object
+            if res is None:
+                continue
+
+            filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
+
+            # Try to save the model
+            joblib.dump({
+                "model": res,
+                "order": h_data.get("order"),
+                "sorder": h_data.get("sorder"),
+                "horizon": h,
+            }, filepath)
+
+            saved_paths[h] = filepath
+
+        except Exception as e:
+            print(f"Warning: Could not save {model_type} horizon {h}: {e}")
+            continue
+
+    return saved_paths
+
+
+def save_optimized_model_to_disk(
+    model_name: str,
+    opt_results: dict,
+    artifact_dir: str = "pipeline_artifacts/optimized"
+) -> dict:
+    """
+    Save Optuna-optimized model to disk.
+
+    Args:
+        model_name: Model name (e.g., "XGBoost_Optimized")
+        opt_results: Results from Optuna optimization
+        artifact_dir: Base directory for saving artifacts
+
+    Returns:
+        dict: Mapping of horizon to saved file paths
+    """
+    import os
+
+    saved_paths = {}
+    pipelines = opt_results.get("pipelines", {})
+
+    if not pipelines:
+        # Try to get from per_h structure
+        per_h = opt_results.get("per_h", {})
+        for h, h_data in per_h.items():
+            if "pipeline" in h_data:
+                pipelines[h] = h_data["pipeline"]
+
+    if not pipelines:
+        return saved_paths
+
+    # Create optimized model directory
+    model_dir = os.path.join(artifact_dir, model_name.lower().replace(" ", "_"))
+    os.makedirs(model_dir, exist_ok=True)
+
+    for h, pipeline in pipelines.items():
+        try:
+            if pipeline is None:
+                continue
+
+            filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
+
+            if hasattr(pipeline, 'save'):
+                pipeline.save(filepath)
+            else:
+                joblib.dump(pipeline, filepath)
+
+            saved_paths[h] = filepath
+
+        except Exception as e:
+            print(f"Warning: Could not save optimized {model_name} horizon {h}: {e}")
+            continue
+
+    return saved_paths
+
+
+# =============================================================================
 # CLINICAL CATEGORY DETECTION & RESIDUAL CAPTURE
 # =============================================================================
 CLINICAL_CATEGORIES = [
