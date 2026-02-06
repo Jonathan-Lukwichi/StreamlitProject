@@ -91,6 +91,82 @@ def _metrics_block(y_tr, yhat_tr, y_te, yhat_te) -> Dict[str, float]:
         "mape_test":  _mape(y_te, yhat_te),
     }
 
+# --------------------------- Disk Persistence for Cloud Sync ------------------
+import os
+FEATURE_SELECTION_DIR = "pipeline_artifacts/feature_selection"
+
+def save_feature_selection_config(
+    selected_features: Dict[int, List[str]],
+    variant_used: str,
+    targets: List[str],
+    primary_target: str,
+    summary_df: Optional[pd.DataFrame] = None
+) -> Dict[str, str]:
+    """
+    Save feature selection configuration and results to disk.
+
+    This enables the 'Train Locally, Deploy to Cloud' workflow:
+    - Feature selection run locally with full data
+    - Config uploaded to Supabase via Cloud Sync tab
+    - Cloud deployment uses same selected features
+
+    Args:
+        selected_features: Dict mapping method index to feature list
+        variant_used: Which feature engineering variant was used
+        targets: List of target columns
+        primary_target: Primary target for single-target selection
+        summary_df: Optional summary table DataFrame
+
+    Returns:
+        Dict mapping artifact name to saved filepath
+    """
+    os.makedirs(FEATURE_SELECTION_DIR, exist_ok=True)
+    saved_paths = {}
+
+    # 1. Save configuration
+    config = {
+        "variant_used": variant_used,
+        "targets": targets,
+        "primary_target": primary_target,
+        "selection_methods": list(selected_features.keys()),
+    }
+    config_path = os.path.join(FEATURE_SELECTION_DIR, "selection_config.json")
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+        saved_paths["config"] = config_path
+    except Exception as e:
+        st.warning(f"Could not save config: {e}")
+
+    # 2. Save selected features per method
+    for method_idx, features in selected_features.items():
+        method_names = {0: "baseline", 1: "permutation", 2: "lasso", 3: "gradient_boosting"}
+        method_name = method_names.get(method_idx, f"method_{method_idx}")
+
+        feat_path = os.path.join(FEATURE_SELECTION_DIR, f"selected_features_{method_name}.json")
+        try:
+            with open(feat_path, "w") as f:
+                json.dump({
+                    "method_index": method_idx,
+                    "method_name": method_name,
+                    "features": list(features),
+                    "feature_count": len(features)
+                }, f, indent=2)
+            saved_paths[f"features_{method_name}"] = feat_path
+        except Exception as e:
+            st.warning(f"Could not save features for {method_name}: {e}")
+
+    # 3. Save summary table if provided
+    if summary_df is not None:
+        summary_path = os.path.join(FEATURE_SELECTION_DIR, "selection_summary.csv")
+        try:
+            summary_df.to_csv(summary_path, index=False)
+            saved_paths["summary"] = summary_path
+        except Exception as e:
+            st.warning(f"Could not save summary: {e}")
+
+    return saved_paths
+
 # --------------------------- Pipeline class -----------------------------------
 class FeatureSelectionPipeline:
     """
