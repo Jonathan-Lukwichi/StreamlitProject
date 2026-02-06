@@ -1580,7 +1580,7 @@ with tab_forecast:
                         st.markdown(actual_html, unsafe_allow_html=True)
 
             # --- CATEGORY STATISTICS SECTION ---
-            if has_seasonal_props or using_ml_categories:
+            if has_seasonal_props:
                 st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
                 st.markdown("""
                 <div class='forecast-card' style='padding: 1.25rem;'>
