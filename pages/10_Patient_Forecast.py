@@ -1422,38 +1422,12 @@ with tab_forecast:
                 return result
 
             # Pre-calculate category breakdown for each horizon
+            # UNIFIED PIPELINE: Use seasonal proportions for ALL model types
+            # (Statistical, ML, Hybrid, and Optimized models all use the same approach)
             category_forecasts_by_horizon = {}
             has_seasonal_props = seasonal_props is not None
-            using_ml_categories = False
 
-            # Check if we have actual ML category predictions from training
-            ml_cat_results = st.session_state.get("ml_category_results", {})
-            ml_categories = ml_cat_results.get("categories", {})
-
-            if ml_categories:
-                # Use actual ML predictions for categories
-                using_ml_categories = True
-
-                for h_idx in range(min(forecast_days, len(horizons))):
-                    horizon_num = horizons[h_idx]
-                    horizon_cats = {}
-
-                    for cat_name, cat_data in ml_categories.items():
-                        per_h = cat_data.get("per_h", {})
-                        if horizon_num in per_h:
-                            h_data = per_h[horizon_num]
-                            forecast_arr = h_data.get("forecast")
-                            # FIX: Use forecast_idx (selected date) instead of always 0
-                            if forecast_arr is not None and len(forecast_arr) > forecast_idx:
-                                horizon_cats[cat_name] = int(round(forecast_arr[forecast_idx]))
-                            elif forecast_arr is not None and len(forecast_arr) > 0:
-                                # Fallback to last available value if forecast_idx out of bounds
-                                horizon_cats[cat_name] = int(round(forecast_arr[-1]))
-
-                    if horizon_cats:
-                        category_forecasts_by_horizon[horizon_num] = horizon_cats
-
-            elif has_seasonal_props:
+            if has_seasonal_props:
                 # Use SEASONAL PROPORTIONS (DOW x Monthly) for distribution
                 for h_idx in range(min(forecast_days, len(horizons))):
                     horizon_num = horizons[h_idx]
