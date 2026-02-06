@@ -4462,6 +4462,18 @@ def page_hyperparameter_tuning():
 
                             st.success(f"✅ Optimization completed successfully!")
 
+                            # ===== SAVE OPTIMIZED PARAMS TO DISK FOR CLOUD SYNC =====
+                            try:
+                                results["search_method"] = "grid_search"
+                                saved_opt = save_optimized_model_to_disk(
+                                    f"{selected_model_opt}_GridSearch",
+                                    results
+                                )
+                                if saved_opt:
+                                    st.success(f"💾 Saved optimized params to `pipeline_artifacts/optimized/`")
+                            except Exception as save_err:
+                                st.warning(f"⚠️ Could not save optimized params: {save_err}")
+
                             # Run 7-day backtesting if enabled
                             if cfg.get("enable_backtesting", False):
                                 n_backtest_windows = cfg.get("backtest_n_windows", 5)
