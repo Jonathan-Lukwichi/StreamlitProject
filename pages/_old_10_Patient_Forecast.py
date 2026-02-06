@@ -1443,9 +1443,12 @@ with tab_forecast:
                         if horizon_num in per_h:
                             h_data = per_h[horizon_num]
                             forecast_arr = h_data.get("forecast")
-                            if forecast_arr is not None and len(forecast_arr) > 0:
-                                # Use the first forecast value (or average if needed)
-                                horizon_cats[cat_name] = int(round(forecast_arr[0]))
+                            # FIX: Use forecast_idx (selected date) instead of always 0
+                            if forecast_arr is not None and len(forecast_arr) > forecast_idx:
+                                horizon_cats[cat_name] = int(round(forecast_arr[forecast_idx]))
+                            elif forecast_arr is not None and len(forecast_arr) > 0:
+                                # Fallback to last available value if forecast_idx out of bounds
+                                horizon_cats[cat_name] = int(round(forecast_arr[-1]))
 
                     if horizon_cats:
                         category_forecasts_by_horizon[horizon_num] = horizon_cats
