@@ -306,7 +306,7 @@ def get_page_statuses() -> Dict[str, bool]:
         "forecast": safe_check("forecast_generated") or has_ml_results(),
         "staff": safe_check("staff_schedule_data") or safe_check("milp_solution"),
         "supply": safe_check("inventory_data") or safe_check("inventory_optimization"),
-        "actions": True,  # Always accessible
+        "actions": safe_check("action_recommendations") or safe_check("ai_insights"),
     }
 
 
