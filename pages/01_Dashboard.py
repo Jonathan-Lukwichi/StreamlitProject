@@ -1,12 +1,14 @@
 # =============================================================================
 # 01_Dashboard.py - COMMAND CENTER
-# Futuristic Navigation Hub with All Pages
+# Blue Fluorescent Theme with Intelligent Status Tracking
 # =============================================================================
 """
-COMMAND CENTER - Futuristic Navigation Dashboard
+COMMAND CENTER - Central Navigation Hub
 
-Central hub with stunning visuals and quick access to all application pages.
-Features fluorescent/neon design, animated effects, and organized workflow navigation.
+Features:
+- Blue fluorescent color scheme
+- Static design (no animations)
+- Intelligent status tracking (Pending/Complete for each page)
 """
 from __future__ import annotations
 
@@ -48,109 +50,23 @@ render_sidebar_brand()
 add_logout_button()
 
 # =============================================================================
-# FUTURISTIC CSS - FLUORESCENT NEON THEME
+# BLUE FLUORESCENT CSS - STATIC DESIGN
 # =============================================================================
 st.markdown("""
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
-   FUTURISTIC FLUORESCENT THEME - COMMAND CENTER
+   BLUE FLUORESCENT THEME - STATIC DESIGN
    ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Animated Background Particles */
-@keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.3; }
-    50% { transform: translateY(-20px) rotate(180deg); opacity: 0.8; }
-}
-
-@keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.3), 0 0 40px rgba(0, 255, 255, 0.1); }
-    50% { box-shadow: 0 0 40px rgba(0, 255, 255, 0.5), 0 0 80px rgba(0, 255, 255, 0.2); }
-}
-
-@keyframes scan-line {
-    0% { top: -10%; }
-    100% { top: 110%; }
-}
-
-@keyframes text-glow {
-    0%, 100% { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
-    50% { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor; }
-}
-
-@keyframes border-pulse {
-    0%, 100% { border-color: rgba(0, 255, 255, 0.3); }
-    50% { border-color: rgba(0, 255, 255, 0.8); }
-}
-
-@keyframes gradient-shift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-/* Floating Orbs Background */
-.orb {
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(60px);
-    pointer-events: none;
-    z-index: 0;
-    animation: float 20s ease-in-out infinite;
-}
-
-.orb-1 {
-    width: 300px; height: 300px;
-    background: radial-gradient(circle, rgba(0, 255, 255, 0.15), transparent 70%);
-    top: 10%; left: 10%;
-    animation-delay: 0s;
-}
-
-.orb-2 {
-    width: 400px; height: 400px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 70%);
-    top: 60%; right: 10%;
-    animation-delay: 5s;
-}
-
-.orb-3 {
-    width: 250px; height: 250px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.15), transparent 70%);
-    bottom: 20%; left: 30%;
-    animation-delay: 10s;
-}
 
 /* Hero Header */
 .hero-container {
-    position: relative;
-    background: linear-gradient(135deg,
-        rgba(0, 20, 40, 0.95) 0%,
-        rgba(0, 40, 60, 0.9) 50%,
-        rgba(0, 20, 40, 0.95) 100%);
-    border: 1px solid rgba(0, 255, 255, 0.3);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 58, 95, 0.95) 50%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1px solid rgba(79, 143, 252, 0.4);
     border-radius: 20px;
-    padding: 3rem 2rem;
+    padding: 2.5rem 2rem;
     margin-bottom: 2rem;
-    overflow: hidden;
-    animation: border-pulse 3s ease-in-out infinite;
-}
-
-.hero-container::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #00ffff, transparent);
-    animation: gradient-shift 3s ease infinite;
-    background-size: 200% 200%;
-}
-
-.hero-container::after {
-    content: '';
-    position: absolute;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.5), transparent);
-    animation: scan-line 4s linear infinite;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(79, 143, 252, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .hero-eyebrow {
@@ -162,39 +78,33 @@ st.markdown("""
 }
 
 .status-dot {
-    width: 8px; height: 8px;
-    background: #00ff88;
+    width: 10px;
+    height: 10px;
+    background: #4f8ffc;
     border-radius: 50%;
-    animation: pulse-glow 2s ease-in-out infinite;
-    box-shadow: 0 0 10px #00ff88;
+    box-shadow: 0 0 10px #4f8ffc, 0 0 20px rgba(79, 143, 252, 0.5);
 }
 
 .status-text {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 3px;
     text-transform: uppercase;
-    color: #00ffff;
-    animation: text-glow 2s ease-in-out infinite;
+    color: #4f8ffc;
 }
 
 .hero-title {
-    font-size: 3.5rem;
+    font-size: 3rem;
     font-weight: 900;
-    text-align: center;
-    background: linear-gradient(135deg, #00ffff 0%, #00ff88 50%, #00ffff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-size: 200% 200%;
-    animation: gradient-shift 4s ease infinite;
+    color: #4f8ffc;
+    text-shadow: 0 0 30px rgba(79, 143, 252, 0.5);
     margin-bottom: 0.5rem;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
 }
 
 .hero-subtitle {
-    text-align: center;
     color: #94a3b8;
-    font-size: 1.1rem;
+    font-size: 1rem;
     max-width: 600px;
     margin: 0 auto;
 }
@@ -204,9 +114,9 @@ st.markdown("""
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin: 2rem 0 1.5rem 0;
+    margin: 2.5rem 0 1.5rem 0;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+    border-bottom: 2px solid rgba(79, 143, 252, 0.3);
 }
 
 .section-icon {
@@ -214,58 +124,33 @@ st.markdown("""
 }
 
 .section-title {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    color: #00ffff;
-    letter-spacing: 1px;
+    color: #4f8ffc;
+    letter-spacing: 2px;
     text-transform: uppercase;
 }
 
 /* Navigation Cards */
-.nav-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1rem;
-}
-
 .nav-card {
     position: relative;
-    background: linear-gradient(135deg, rgba(0, 30, 50, 0.8), rgba(0, 20, 40, 0.9));
-    border: 1px solid rgba(0, 255, 255, 0.2);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+    border: 1px solid rgba(79, 143, 252, 0.25);
     border-radius: 16px;
     padding: 1.5rem;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow: hidden;
-    cursor: pointer;
-}
-
-.nav-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), transparent);
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    min-height: 180px;
+    transition: all 0.3s ease;
 }
 
 .nav-card:hover {
-    transform: translateY(-5px);
-    border-color: rgba(0, 255, 255, 0.6);
-    box-shadow:
-        0 10px 40px rgba(0, 255, 255, 0.15),
-        0 0 20px rgba(0, 255, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.nav-card:hover::before {
-    opacity: 1;
+    border-color: rgba(79, 143, 252, 0.6);
+    box-shadow: 0 0 30px rgba(79, 143, 252, 0.15);
+    transform: translateY(-3px);
 }
 
 .nav-card-icon {
     font-size: 2.5rem;
-    margin-bottom: 0.75rem;
-    filter: drop-shadow(0 0 10px currentColor);
+    margin-bottom: 1rem;
 }
 
 .nav-card-title {
@@ -278,44 +163,39 @@ st.markdown("""
 .nav-card-desc {
     font-size: 0.8rem;
     color: #64748b;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
-.nav-card-number {
+/* Status Badges */
+.status-badge {
     position: absolute;
-    top: 1rem; right: 1rem;
+    top: 1rem;
+    right: 1rem;
     font-size: 0.65rem;
-    font-weight: 800;
-    color: rgba(0, 255, 255, 0.4);
-    letter-spacing: 1px;
+    font-weight: 700;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
 }
 
-/* Category Labels */
-.category-label {
-    display: inline-block;
-    padding: 0.5rem 1rem;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.1), rgba(0, 255, 255, 0.05));
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 20px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: #00ffff;
-    margin-bottom: 1rem;
+.status-badge.complete {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+}
+
+.status-badge.pending {
+    background: rgba(100, 116, 139, 0.15);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    color: #94a3b8;
 }
 
 /* KPI Cards */
-.kpi-container {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
-    margin-bottom: 2rem;
-}
-
 .kpi-card {
-    background: linear-gradient(135deg, rgba(0, 30, 50, 0.8), rgba(0, 20, 40, 0.9));
-    border: 1px solid rgba(0, 255, 255, 0.2);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+    border: 1px solid rgba(79, 143, 252, 0.25);
     border-radius: 12px;
     padding: 1.25rem;
     text-align: center;
@@ -323,8 +203,8 @@ st.markdown("""
 }
 
 .kpi-card:hover {
-    border-color: rgba(0, 255, 255, 0.5);
-    box-shadow: 0 0 30px rgba(0, 255, 255, 0.1);
+    border-color: rgba(79, 143, 252, 0.5);
+    box-shadow: 0 0 20px rgba(79, 143, 252, 0.1);
 }
 
 .kpi-icon {
@@ -335,8 +215,7 @@ st.markdown("""
 .kpi-value {
     font-size: 1.5rem;
     font-weight: 800;
-    color: #00ffff;
-    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    color: #4f8ffc;
 }
 
 .kpi-label {
@@ -355,9 +234,9 @@ st.markdown("""
     margin-top: 0.5rem;
 }
 
-.kpi-status.good { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-.kpi-status.warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-.kpi-status.neutral { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+.kpi-status.good { background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+.kpi-status.warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+.kpi-status.neutral { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
 
 /* Workflow Timeline */
 .workflow-container {
@@ -371,16 +250,17 @@ st.markdown("""
 .workflow-container::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 5%;
-    right: 5%;
-    height: 2px;
+    top: calc(25px + 1rem);
+    left: 8%;
+    right: 8%;
+    height: 3px;
     background: linear-gradient(90deg,
-        rgba(0, 255, 255, 0.1),
-        rgba(0, 255, 255, 0.5),
-        rgba(16, 185, 129, 0.5),
-        rgba(139, 92, 246, 0.5),
-        rgba(139, 92, 246, 0.1));
+        rgba(79, 143, 252, 0.2),
+        rgba(79, 143, 252, 0.6),
+        rgba(59, 130, 246, 0.6),
+        rgba(79, 143, 252, 0.6),
+        rgba(79, 143, 252, 0.2));
+    border-radius: 2px;
     z-index: 0;
 }
 
@@ -391,30 +271,79 @@ st.markdown("""
 }
 
 .workflow-number {
-    width: 50px; height: 50px;
+    width: 50px;
+    height: 50px;
     margin: 0 auto 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, rgba(0, 40, 60, 0.9), rgba(0, 20, 40, 0.95));
-    border: 2px solid rgba(0, 255, 255, 0.5);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.95));
+    border: 2px solid rgba(79, 143, 252, 0.5);
     border-radius: 50%;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 800;
-    color: #00ffff;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+    color: #4f8ffc;
+    box-shadow: 0 0 15px rgba(79, 143, 252, 0.2);
+}
+
+.workflow-number.complete {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: #22c55e;
+    color: #22c55e;
 }
 
 .workflow-title {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: #f1f5f9;
     margin-bottom: 0.25rem;
 }
 
 .workflow-desc {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: #64748b;
+}
+
+/* Progress Bar */
+.progress-container {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(79, 143, 252, 0.2);
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.progress-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.progress-value {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #4f8ffc;
+}
+
+.progress-bar {
+    height: 8px;
+    background: rgba(79, 143, 252, 0.15);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #4f8ffc);
+    border-radius: 4px;
+    transition: width 0.5s ease;
 }
 
 /* Footer */
@@ -422,73 +351,93 @@ st.markdown("""
     text-align: center;
     padding: 2rem;
     margin-top: 2rem;
-    border-top: 1px solid rgba(0, 255, 255, 0.1);
+    border-top: 1px solid rgba(79, 143, 252, 0.15);
 }
 
 .footer-text {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: #475569;
     letter-spacing: 2px;
 }
 
 .footer-brand {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 700;
-    color: #00ffff;
+    color: #4f8ffc;
     margin-top: 0.5rem;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
     .hero-title { font-size: 2rem; }
-    .kpi-container { grid-template-columns: repeat(2, 1fr); }
     .workflow-container { flex-direction: column; gap: 1rem; }
     .workflow-container::before { display: none; }
 }
 </style>
-
-<!-- Floating Orbs -->
-<div class="orb orb-1"></div>
-<div class="orb orb-2"></div>
-<div class="orb orb-3"></div>
 """, unsafe_allow_html=True)
 
 
 # =============================================================================
-# HELPER FUNCTIONS
+# INTELLIGENT STATUS TRACKING
 # =============================================================================
-def get_system_status() -> Dict[str, Any]:
-    """Get current system status from session state."""
-    has_data = "processed_df" in st.session_state or "merged_data" in st.session_state
+def get_page_statuses() -> Dict[str, bool]:
+    """Check completion status for each page based on session state."""
 
-    # Check for forecast results - avoid boolean evaluation of DataFrames
-    has_forecast = False
-    for k in st.session_state.keys():
-        if k.startswith("ml_mh_results_") or k in ["arima_mh_results", "sarimax_results"]:
-            val = st.session_state.get(k)
-            if val is not None and not (isinstance(val, pd.DataFrame) and val.empty):
-                if isinstance(val, dict) and val:
-                    has_forecast = True
-                    break
-                elif isinstance(val, pd.DataFrame) and not val.empty:
-                    has_forecast = True
-                    break
+    def safe_check(key: str) -> bool:
+        """Safely check if a key exists and has valid data."""
+        if key not in st.session_state:
+            return False
+        val = st.session_state[key]
+        if val is None:
+            return False
+        if isinstance(val, pd.DataFrame):
+            return not val.empty
+        if isinstance(val, dict):
+            return bool(val)
+        return bool(val)
 
-    has_features = "feature_engineering" in st.session_state
+    def has_ml_results() -> bool:
+        """Check if any ML model results exist."""
+        for k in st.session_state.keys():
+            if k.startswith("ml_mh_results_"):
+                if safe_check(k):
+                    return True
+        return False
 
     return {
-        "data_loaded": has_data,
-        "forecast_ready": has_forecast,
-        "features_ready": has_features,
-        "health_score": sum([has_data * 35, has_forecast * 40, has_features * 25])
+        "upload": safe_check("raw_data") or safe_check("uploaded_file") or safe_check("patient_data"),
+        "prepare": safe_check("processed_df") or safe_check("merged_data"),
+        "explore": safe_check("processed_df") or safe_check("merged_data"),
+        "baseline": safe_check("arima_mh_results") or safe_check("sarimax_results"),
+        "features": safe_check("feature_engineering") or safe_check("fe_data"),
+        "selection": safe_check("selected_features") or safe_check("feature_importance"),
+        "train": has_ml_results(),
+        "results": has_ml_results() or safe_check("arima_mh_results") or safe_check("sarimax_results"),
+        "forecast": safe_check("forecast_generated") or has_ml_results(),
+        "staff": safe_check("staff_schedule_data") or safe_check("milp_solution"),
+        "supply": safe_check("inventory_data") or safe_check("inventory_optimization"),
+        "actions": True,  # Always accessible
     }
+
+
+def get_completion_percentage(statuses: Dict[str, bool]) -> int:
+    """Calculate overall workflow completion percentage."""
+    # Core workflow steps (excluding 'actions' which is always True)
+    core_steps = ["upload", "prepare", "features", "train", "forecast"]
+    completed = sum(1 for step in core_steps if statuses.get(step, False))
+    return int((completed / len(core_steps)) * 100)
+
+
+# =============================================================================
+# GET STATUSES
+# =============================================================================
+page_statuses = get_page_statuses()
+completion_pct = get_completion_percentage(page_statuses)
 
 
 # =============================================================================
 # HERO HEADER
 # =============================================================================
-status = get_system_status()
-
 st.markdown("""
 <div class="hero-container">
     <div class="hero-eyebrow">
@@ -497,9 +446,24 @@ st.markdown("""
     </div>
     <h1 class="hero-title">COMMAND CENTER</h1>
     <p class="hero-subtitle">
-        Central navigation hub for HealthForecast AI. Access all modules,
-        monitor system status, and streamline your workflow.
+        Central navigation hub for HealthForecast AI. Access all modules and track your workflow progress.
     </p>
+</div>
+""", unsafe_allow_html=True)
+
+
+# =============================================================================
+# PROGRESS BAR
+# =============================================================================
+st.markdown(f"""
+<div class="progress-container">
+    <div class="progress-header">
+        <span class="progress-label">Workflow Progress</span>
+        <span class="progress-value">{completion_pct}%</span>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: {completion_pct}%;"></div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -510,46 +474,46 @@ st.markdown("""
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    data_status = "good" if status["data_loaded"] else "neutral"
+    data_ok = page_statuses["prepare"]
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-icon">📊</div>
-        <div class="kpi-value">{"✓" if status["data_loaded"] else "○"}</div>
+        <div class="kpi-value">{"✓" if data_ok else "○"}</div>
         <div class="kpi-label">Data Status</div>
-        <div class="kpi-status {data_status}">{"Loaded" if status["data_loaded"] else "Not Loaded"}</div>
+        <div class="kpi-status {"good" if data_ok else "neutral"}">{"Loaded" if data_ok else "Not Loaded"}</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col2:
-    feat_status = "good" if status["features_ready"] else "neutral"
+    feat_ok = page_statuses["features"]
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-icon">🛠️</div>
-        <div class="kpi-value">{"✓" if status["features_ready"] else "○"}</div>
+        <div class="kpi-value">{"✓" if feat_ok else "○"}</div>
         <div class="kpi-label">Features</div>
-        <div class="kpi-status {feat_status}">{"Ready" if status["features_ready"] else "Not Ready"}</div>
+        <div class="kpi-status {"good" if feat_ok else "neutral"}">{"Ready" if feat_ok else "Not Ready"}</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col3:
-    forecast_status = "good" if status["forecast_ready"] else "neutral"
+    model_ok = page_statuses["train"]
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-icon">🔮</div>
-        <div class="kpi-value">{"✓" if status["forecast_ready"] else "○"}</div>
-        <div class="kpi-label">Forecast</div>
-        <div class="kpi-status {forecast_status}">{"Ready" if status["forecast_ready"] else "Not Ready"}</div>
+        <div class="kpi-icon">🧠</div>
+        <div class="kpi-value">{"✓" if model_ok else "○"}</div>
+        <div class="kpi-label">Models</div>
+        <div class="kpi-status {"good" if model_ok else "neutral"}">{"Trained" if model_ok else "Not Trained"}</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col4:
-    health_class = "good" if status["health_score"] >= 70 else ("warning" if status["health_score"] >= 35 else "neutral")
+    forecast_ok = page_statuses["forecast"]
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-icon">⚡</div>
-        <div class="kpi-value">{status["health_score"]}%</div>
-        <div class="kpi-label">Health Score</div>
-        <div class="kpi-status {health_class}">{"Excellent" if status["health_score"] >= 70 else ("Good" if status["health_score"] >= 35 else "Setup Needed")}</div>
+        <div class="kpi-icon">🔮</div>
+        <div class="kpi-value">{"✓" if forecast_ok else "○"}</div>
+        <div class="kpi-label">Forecast</div>
+        <div class="kpi-status {"good" if forecast_ok else "neutral"}">{"Ready" if forecast_ok else "Not Ready"}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -564,35 +528,45 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("""
+# Determine which steps are complete
+step_classes = [
+    "complete" if page_statuses["upload"] else "",
+    "complete" if page_statuses["prepare"] else "",
+    "complete" if page_statuses["explore"] else "",
+    "complete" if page_statuses["train"] else "",
+    "complete" if page_statuses["forecast"] else "",
+    "complete" if page_statuses["staff"] or page_statuses["supply"] else "",
+]
+
+st.markdown(f"""
 <div class="workflow-container">
     <div class="workflow-step">
-        <div class="workflow-number">1</div>
+        <div class="workflow-number {step_classes[0]}">1</div>
         <div class="workflow-title">Upload</div>
         <div class="workflow-desc">Import data</div>
     </div>
     <div class="workflow-step">
-        <div class="workflow-number">2</div>
+        <div class="workflow-number {step_classes[1]}">2</div>
         <div class="workflow-title">Prepare</div>
         <div class="workflow-desc">Clean & fuse</div>
     </div>
     <div class="workflow-step">
-        <div class="workflow-number">3</div>
+        <div class="workflow-number {step_classes[2]}">3</div>
         <div class="workflow-title">Explore</div>
-        <div class="workflow-desc">Analyze patterns</div>
+        <div class="workflow-desc">Analyze</div>
     </div>
     <div class="workflow-step">
-        <div class="workflow-number">4</div>
+        <div class="workflow-number {step_classes[3]}">4</div>
         <div class="workflow-title">Train</div>
         <div class="workflow-desc">Build models</div>
     </div>
     <div class="workflow-step">
-        <div class="workflow-number">5</div>
+        <div class="workflow-number {step_classes[4]}">5</div>
         <div class="workflow-title">Forecast</div>
-        <div class="workflow-desc">Predict demand</div>
+        <div class="workflow-desc">Predict</div>
     </div>
     <div class="workflow-step">
-        <div class="workflow-number">6</div>
+        <div class="workflow-number {step_classes[5]}">6</div>
         <div class="workflow-title">Optimize</div>
         <div class="workflow-desc">Plan resources</div>
     </div>
@@ -600,6 +574,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("---")
+
+
+# =============================================================================
+# HELPER FUNCTION FOR STATUS BADGE
+# =============================================================================
+def status_badge(is_complete: bool) -> str:
+    if is_complete:
+        return '<div class="status-badge complete">✓ Complete</div>'
+    return '<div class="status-badge pending">○ Pending</div>'
 
 
 # =============================================================================
@@ -615,39 +598,39 @@ st.markdown("""
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 02</div>
+        {status_badge(page_statuses["upload"])}
         <div class="nav-card-icon">📁</div>
         <div class="nav-card-title">Upload Data</div>
-        <div class="nav-card-desc">Import patient data from CSV, Excel, or Parquet files. Connect to external APIs.</div>
+        <div class="nav-card-desc">Import patient data from CSV, Excel, or Parquet files.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Upload Data →", key="nav_upload", use_container_width=True):
+    if st.button("Open Upload Data", key="nav_upload", use_container_width=True):
         st.switch_page("pages/02_Upload_Data.py")
 
 with col2:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 03</div>
+        {status_badge(page_statuses["prepare"])}
         <div class="nav-card-icon">🔧</div>
         <div class="nav-card-title">Prepare Data</div>
-        <div class="nav-card-desc">Clean, transform, and fuse multiple data sources. Handle missing values.</div>
+        <div class="nav-card-desc">Clean, transform, and fuse multiple data sources.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Prepare Data →", key="nav_prepare", use_container_width=True):
+    if st.button("Open Prepare Data", key="nav_prepare", use_container_width=True):
         st.switch_page("pages/03_Prepare_Data.py")
 
 with col3:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 04</div>
+        {status_badge(page_statuses["explore"])}
         <div class="nav-card-icon">🔍</div>
         <div class="nav-card-title">Explore Data</div>
-        <div class="nav-card-desc">Visualize patterns, analyze distributions, and discover insights in your data.</div>
+        <div class="nav-card-desc">Visualize patterns and discover insights.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Explore Data →", key="nav_explore", use_container_width=True):
+    if st.button("Open Explore Data", key="nav_explore", use_container_width=True):
         st.switch_page("pages/04_Explore_Data.py")
 
 
@@ -664,51 +647,51 @@ st.markdown("""
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 05</div>
+        {status_badge(page_statuses["baseline"])}
         <div class="nav-card-icon">📈</div>
         <div class="nav-card-title">Baseline Models</div>
-        <div class="nav-card-desc">Train ARIMA & SARIMAX statistical time series models.</div>
+        <div class="nav-card-desc">ARIMA & SARIMAX time series models.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Baseline →", key="nav_baseline", use_container_width=True):
+    if st.button("Open Baseline", key="nav_baseline", use_container_width=True):
         st.switch_page("pages/05_Baseline_Models.py")
 
 with col2:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 06</div>
+        {status_badge(page_statuses["features"])}
         <div class="nav-card-icon">🛠️</div>
         <div class="nav-card-title">Feature Studio</div>
-        <div class="nav-card-desc">Engineer lag features, rolling stats, and target variables.</div>
+        <div class="nav-card-desc">Engineer lag features and targets.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Features →", key="nav_features", use_container_width=True):
+    if st.button("Open Features", key="nav_features", use_container_width=True):
         st.switch_page("pages/06_Feature_Studio.py")
 
 with col3:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 07</div>
+        {status_badge(page_statuses["selection"])}
         <div class="nav-card-icon">🎯</div>
         <div class="nav-card-title">Feature Selection</div>
-        <div class="nav-card-desc">Automated feature importance analysis and selection.</div>
+        <div class="nav-card-desc">Automated feature importance.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Selection →", key="nav_selection", use_container_width=True):
+    if st.button("Open Selection", key="nav_selection", use_container_width=True):
         st.switch_page("pages/07_Feature_Selection.py")
 
 with col4:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 08</div>
+        {status_badge(page_statuses["train"])}
         <div class="nav-card-icon">🧠</div>
         <div class="nav-card-title">Train Models</div>
-        <div class="nav-card-desc">XGBoost, LSTM, ANN, Hybrid models with hyperparameter tuning.</div>
+        <div class="nav-card-desc">XGBoost, LSTM, ANN, Hybrids.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Training →", key="nav_train", use_container_width=True):
+    if st.button("Open Training", key="nav_train", use_container_width=True):
         st.switch_page("pages/08_Train_Models.py")
 
 
@@ -725,27 +708,27 @@ st.markdown("""
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 09</div>
+        {status_badge(page_statuses["results"])}
         <div class="nav-card-icon">📊</div>
         <div class="nav-card-title">Model Results</div>
-        <div class="nav-card-desc">Compare model performance metrics, analyze accuracy, and review diagnostics across all trained models.</div>
+        <div class="nav-card-desc">Compare model performance, analyze accuracy, and review diagnostics.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Results →", key="nav_results", use_container_width=True):
+    if st.button("Open Results", key="nav_results", use_container_width=True):
         st.switch_page("pages/09_Model_Results.py")
 
 with col2:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 10</div>
+        {status_badge(page_statuses["forecast"])}
         <div class="nav-card-icon">🔮</div>
         <div class="nav-card-title">Patient Forecast</div>
-        <div class="nav-card-desc">Generate 7-day patient arrival forecasts with clinical category breakdowns and confidence intervals.</div>
+        <div class="nav-card-desc">7-day forecasts with clinical category breakdowns.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Forecast →", key="nav_forecast", use_container_width=True):
+    if st.button("Open Forecast", key="nav_forecast", use_container_width=True):
         st.switch_page("pages/10_Patient_Forecast.py")
 
 
@@ -762,58 +745,51 @@ st.markdown("""
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 11</div>
+        {status_badge(page_statuses["staff"])}
         <div class="nav-card-icon">👥</div>
         <div class="nav-card-title">Staff Planner</div>
-        <div class="nav-card-desc">Optimize staff schedules using MILP solver. Balance workloads and reduce labor costs.</div>
+        <div class="nav-card-desc">Optimize schedules with MILP solver.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Staff Planner →", key="nav_staff", use_container_width=True):
+    if st.button("Open Staff Planner", key="nav_staff", use_container_width=True):
         st.switch_page("pages/11_Staff_Planner.py")
 
 with col2:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 12</div>
+        {status_badge(page_statuses["supply"])}
         <div class="nav-card-icon">📦</div>
         <div class="nav-card-title">Supply Planner</div>
-        <div class="nav-card-desc">Optimize inventory levels, calculate safety stock, and manage reorder points.</div>
+        <div class="nav-card-desc">Optimize inventory and safety stock.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Supply Planner →", key="nav_supply", use_container_width=True):
+    if st.button("Open Supply Planner", key="nav_supply", use_container_width=True):
         st.switch_page("pages/12_Supply_Planner.py")
 
 with col3:
-    st.markdown("""
+    st.markdown(f"""
     <div class="nav-card">
-        <div class="nav-card-number">PAGE 13</div>
+        {status_badge(page_statuses["actions"])}
         <div class="nav-card-icon">✅</div>
         <div class="nav-card-title">Action Center</div>
-        <div class="nav-card-desc">View AI-powered recommendations and prioritized actions for operations.</div>
+        <div class="nav-card-desc">AI recommendations and priorities.</div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Open Action Center →", key="nav_actions", use_container_width=True):
+    if st.button("Open Action Center", key="nav_actions", use_container_width=True):
         st.switch_page("pages/13_Action_Center.py")
 
 
 # =============================================================================
-# QUICK ACCESS HOME
+# HOME BUTTON
 # =============================================================================
 st.markdown("---")
 
 col1, col2, col3 = st.columns([1, 1, 1])
 
 with col2:
-    st.markdown("""
-    <div style="text-align: center; padding: 1rem;">
-        <div style="font-size: 0.7rem; color: #64748b; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 0.5rem;">
-            Return to Landing
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("🏠 Home", key="nav_home", use_container_width=True):
+    if st.button("🏠 Return to Home", key="nav_home", use_container_width=True):
         st.switch_page("Welcome.py")
 
 
@@ -822,7 +798,7 @@ with col2:
 # =============================================================================
 st.markdown("""
 <div class="footer">
-    <div class="footer-text">POWERED BY ADVANCED MACHINE LEARNING & OPERATIONS RESEARCH</div>
-    <div class="footer-brand">HealthForecast AI · Command Center v2.0</div>
+    <div class="footer-text">POWERED BY MACHINE LEARNING & OPERATIONS RESEARCH</div>
+    <div class="footer-brand">HealthForecast AI · Command Center</div>
 </div>
 """, unsafe_allow_html=True)
