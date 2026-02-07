@@ -194,7 +194,7 @@ class ANNPipeline:
         """
         # ===== DATA VALIDATION & CLEANING =====
         print("=" * 70)
-        print("🔍 DATA VALIDATION & PREPROCESSING")
+        print("[INFO] DATA VALIDATION & PREPROCESSING")
         print("=" * 70)
 
         # Step 1: Ensure numpy arrays (not pandas DataFrames)
@@ -213,9 +213,9 @@ class ANNPipeline:
             y_train = y_train.astype(np.float64)
             X_val = X_val.astype(np.float64)
             y_val = y_val.astype(np.float64)
-            print("✅ Successfully converted to numeric arrays")
+            print("[OK] Successfully converted to numeric arrays")
         except (ValueError, TypeError) as e:
-            print(f"❌ ERROR: Cannot convert data to numeric format: {e}")
+            print(f"[ERROR] Cannot convert data to numeric format: {e}")
             raise ValueError(
                 "Data contains non-numeric values (strings, objects, etc.). "
                 "Please ensure all features are numeric before training. "
@@ -244,14 +244,14 @@ class ANNPipeline:
                      X_val_nans + X_val_infs + y_val_nans + y_val_infs) > 0
 
         if has_issues:
-            print("\n⚠️  WARNING: Found NaN/inf values - replacing with 0...")
+            print("\n[WARN] Found NaN/inf values - replacing with 0...")
             X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
             y_train = np.nan_to_num(y_train, nan=0.0, posinf=0.0, neginf=0.0)
             X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
             y_val = np.nan_to_num(y_val, nan=0.0, posinf=0.0, neginf=0.0)
-            print("✅ Data cleaned (NaN/inf → 0)")
+            print("[OK] Data cleaned (NaN/inf -> 0)")
         else:
-            print("✅ Data is clean (no NaN/inf values)")
+            print("[OK] Data is clean (no NaN/inf values)")
 
         # Step 5: Convert to float32 for TensorFlow
         X_train = X_train.astype(np.float32)
@@ -270,19 +270,19 @@ class ANNPipeline:
         self.preprocessing_report = detection
 
         print("=" * 70)
-        print("🔍 ANN PREPROCESSING DETECTION REPORT")
+        print("[INFO] ANN PREPROCESSING DETECTION REPORT")
         print("=" * 70)
         print(f"Overall State:    {detection['overall_state']}")
         print(f"Scaled Features:  {detection['scaled_count']}/{detection['total_features']}")
         print(f"")
-        print("ℹ️  ANN benefits from feature scaling (like LSTM), but can work without it.")
+        print("[INFO] ANN benefits from feature scaling (like LSTM), but can work without it.")
         print("   For optimal performance, consider applying MinMaxScaler or StandardScaler.")
         print("=" * 70)
 
         # Print per-feature analysis (first 5 features)
-        print("\n📊 Per-Feature Analysis (first 5 features):")
+        print("\n[INFO] Per-Feature Analysis (first 5 features):")
         for feat in detection['per_feature_analysis'][:5]:
-            status = "✅" if feat['is_scaled'] else "⚠️"
+            status = "[OK]" if feat['is_scaled'] else "[WARN]"
             print(f"  {status} Feature {feat['feature_idx']}: {feat['scaling_type']} "
                   f"(min={feat['min']:.3f}, max={feat['max']:.3f}, "
                   f"confidence={feat['confidence']})")
@@ -292,7 +292,7 @@ class ANNPipeline:
         print("=" * 70)
 
         # Training with EarlyStopping for faster convergence
-        print(f"\n🚀 Training ANN for {self.epochs} epochs (with early stopping)...")
+        print(f"\n[INFO] Training ANN for {self.epochs} epochs (with early stopping)...")
         print("=" * 70)
 
         # Add EarlyStopping to prevent unnecessary training
