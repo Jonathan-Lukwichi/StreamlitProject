@@ -1103,7 +1103,7 @@ def run_ml_multihorizon(
                 # Store the error message from result
                 error_msg = result.get("error", "Unknown error")
                 errors[h] = error_msg
-                print(f"❌ Horizon {h} failed: {error_msg}")
+                print(f"[ERROR] Horizon {h} failed: {error_msg}")
                 continue
 
             # Extract metrics
