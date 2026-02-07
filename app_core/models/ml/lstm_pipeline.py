@@ -683,7 +683,7 @@ class AttentionLSTM:
 
         # Preprocessing detection (reuse from LSTMPipeline logic)
         print("=" * 70)
-        print("🔍 ATTENTION LSTM - Building Model")
+        print("[INFO] ATTENTION LSTM - Building Model")
         print("=" * 70)
         print(f"   Architecture: Bidirectional={self.bidirectional}")
         print(f"   LSTM Units: {self.lstm_units}")
