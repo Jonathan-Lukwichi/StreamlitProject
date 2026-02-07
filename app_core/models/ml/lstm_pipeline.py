@@ -706,7 +706,7 @@ class AttentionLSTM:
 
         # Create sequences
         X_train_seq, y_train_seq = self.create_sequences(X_train_scaled, y_train_scaled)
-        print(f"📊 Train sequences: {X_train_seq.shape}")
+        print(f"[INFO] Train sequences: {X_train_seq.shape}")
 
         if X_val_scaled is not None:
             X_val_seq, y_val_seq = self.create_sequences(X_val_scaled, y_val_scaled)
@@ -717,7 +717,7 @@ class AttentionLSTM:
 
         # Build model
         if self.model is None:
-            print("🏗️  Building Attention LSTM...")
+            print("[INFO] Building Attention LSTM...")
             self.build_model(n_features=X_train.shape[1])
 
         # Callbacks - reduced patience for faster training
