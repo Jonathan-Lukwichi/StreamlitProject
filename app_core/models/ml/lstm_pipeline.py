@@ -268,16 +268,16 @@ class LSTMPipeline:
 
         # Step 0: NaN/Inf validation and cleaning (CRITICAL for stable training)
         if np.isnan(X_train).any() or np.isinf(X_train).any():
-            print("⚠️  WARNING: NaN/Inf detected in X_train - cleaning...")
+            print("[WARN] NaN/Inf detected in X_train - cleaning...")
             X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
         if np.isnan(y_train).any() or np.isinf(y_train).any():
-            print("⚠️  WARNING: NaN/Inf detected in y_train - cleaning...")
+            print("[WARN] NaN/Inf detected in y_train - cleaning...")
             y_train = np.nan_to_num(y_train, nan=0.0, posinf=0.0, neginf=0.0)
         if np.isnan(X_val).any() or np.isinf(X_val).any():
-            print("⚠️  WARNING: NaN/Inf detected in X_val - cleaning...")
+            print("[WARN] NaN/Inf detected in X_val - cleaning...")
             X_val = np.nan_to_num(X_val, nan=0.0, posinf=0.0, neginf=0.0)
         if np.isnan(y_val).any() or np.isinf(y_val).any():
-            print("⚠️  WARNING: NaN/Inf detected in y_val - cleaning...")
+            print("[WARN] NaN/Inf detected in y_val - cleaning...")
             y_val = np.nan_to_num(y_val, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Step 1: Detect preprocessing state
@@ -285,7 +285,7 @@ class LSTMPipeline:
         self.preprocessing_report = detection
 
         print("=" * 70)
-        print("🔍 LSTM PREPROCESSING DETECTION REPORT")
+        print("[INFO] LSTM PREPROCESSING DETECTION REPORT")
         print("=" * 70)
         print(f"Overall State: {detection['overall_state']}")
         print(f"Recommendation: {detection['recommendation']}")
@@ -294,7 +294,7 @@ class LSTMPipeline:
 
         # Step 2: Apply scaling if needed
         if detection['needs_scaling']:
-            print("⚙️  APPLYING SCALING for consistency...")
+            print("[INFO] APPLYING SCALING for consistency...")
             self.scaler_X = StandardScaler()
             self.scaler_y = MinMaxScaler(feature_range=(0, 1))
 
@@ -304,16 +304,16 @@ class LSTMPipeline:
             y_train = self.scaler_y.fit_transform(y_train.reshape(-1, 1)).flatten()
             y_val = self.scaler_y.transform(y_val.reshape(-1, 1)).flatten()
 
-            print("✓ Scaling applied")
+            print("[OK] Scaling applied")
         else:
-            print("✓ SKIPPING SCALING - data already preprocessed")
+            print("[OK] SKIPPING SCALING - data already preprocessed")
             self.scaler_X = None
             self.scaler_y = None
 
         print("=" * 70)
 
         # Step 3: Create sequences
-        print(f"📊 Creating sequences (lookback={self.lookback})...")
+        print(f"[INFO] Creating sequences (lookback={self.lookback})...")
         X_train_seq, y_train_seq = self.create_sequences(X_train, y_train)
         X_val_seq, y_val_seq = self.create_sequences(X_val, y_val)
 
@@ -322,12 +322,12 @@ class LSTMPipeline:
 
         # Step 4: Build model
         if self.model is None:
-            print(f"🏗️  Building LSTM model...")
+            print(f"[INFO] Building LSTM model...")
             self.build_model(n_features=X_train.shape[1])
             print(f"   Architecture: {self.lstm_layers} layers, {self.lstm_units} units")
 
         # Step 5: Train with callbacks
-        print(f"🚀 Training LSTM ({self.epochs} epochs max)...")
+        print(f"[INFO] Training LSTM ({self.epochs} epochs max)...")
 
         callbacks = [
             keras.callbacks.EarlyStopping(
