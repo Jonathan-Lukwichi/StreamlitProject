@@ -1159,7 +1159,7 @@ def run_ml_multihorizon(
             # Skip failed horizons and store error
             error_msg = str(e)
             errors[h] = error_msg
-            print(f"❌ Horizon {h} failed: {error_msg}")
+            print(f"[ERROR] Horizon {h} failed: {error_msg}")
             import traceback
             traceback.print_exc()  # Print full traceback to console
 
