@@ -225,7 +225,7 @@ class ForecastStacker:
                 # Fallback to GradientBoosting
                 from sklearn.ensemble import GradientBoostingRegressor
                 self.meta_model = GradientBoostingRegressor(n_estimators=100, random_state=42)
-                print("⚠️ XGBoost not available, using GradientBoosting as fallback")
+                print("[WARN] XGBoost not available, using GradientBoosting as fallback")
 
         else:
             raise ValueError(f"Unknown meta-model type: {self.meta_model_type}")
