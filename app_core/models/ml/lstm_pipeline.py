@@ -354,7 +354,7 @@ class LSTMPipeline:
         )
 
         final_epoch = len(history.history['loss'])
-        print(f"✓ Training complete ({final_epoch} epochs)")
+        print(f"[OK] Training complete ({final_epoch} epochs)")
         print("=" * 70)
 
     def predict(self, X, return_ci=False, mc_samples=100):
@@ -748,7 +748,7 @@ class AttentionLSTM:
         )
 
         final_epoch = len(history.history['loss'])
-        print(f"✓ Training complete ({final_epoch} epochs)")
+        print(f"[OK] Training complete ({final_epoch} epochs)")
         print("=" * 70)
 
         return history
