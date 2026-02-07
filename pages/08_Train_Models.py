@@ -6077,7 +6077,7 @@ def _train_hybrid_lstm_sarimax(df: pd.DataFrame) -> dict:
             }
 
         except Exception as e:
-            print(f"LSTM→SARIMAX horizon {h} failed: {e}")
+            print(f"LSTM-SARIMAX horizon {h} failed: {e}")
             continue
 
     # Calculate average metrics
