@@ -364,7 +364,7 @@ class ForecastStacker:
         stacked_metrics = self._compute_metrics(meta_y, meta_pred)
         results["stacked_metrics"] = stacked_metrics
 
-        print(f"✓ Stacking complete")
+        print(f"[OK] Stacking complete")
         print(f"   Stacked MAE: {stacked_metrics['MAE']:.4f}")
         print(f"   Stacked RMSE: {stacked_metrics['RMSE']:.4f}")
         print("=" * 70)
