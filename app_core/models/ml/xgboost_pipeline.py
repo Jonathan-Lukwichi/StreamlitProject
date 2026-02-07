@@ -217,13 +217,13 @@ class XGBoostPipeline(BaseMLPipeline):
         self.preprocessing_report = detection
 
         print("=" * 70)
-        print("🔍 XGBOOST PREPROCESSING DETECTION REPORT")
+        print("[INFO] XGBOOST PREPROCESSING DETECTION REPORT")
         print("=" * 70)
         print(f"Overall State: {detection['overall_state']}")
         print(f"Recommendation: {detection['recommendation']}")
         print(f"Scaled Features: {detection['scaled_features']}/{detection['total_features']}")
         print("-" * 70)
-        print("ℹ️  XGBoost is tree-based and doesn't require feature scaling")
+        print("[INFO] XGBoost is tree-based and doesn't require feature scaling")
         print("   Using data as-is for optimal performance")
         print("=" * 70)
 
