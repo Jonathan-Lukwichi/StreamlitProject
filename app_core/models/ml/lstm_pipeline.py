@@ -737,7 +737,7 @@ class AttentionLSTM:
         ]
 
         # Train
-        print(f"🚀 Training ({self.epochs} epochs max)...")
+        print(f"[INFO] Training ({self.epochs} epochs max)...")
         history = self.model.fit(
             X_train_seq, y_train_seq,
             validation_data=validation_data,
