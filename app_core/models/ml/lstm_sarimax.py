@@ -223,13 +223,13 @@ if __name__ == "__main__":
     hybrid_model = LSTMSARIMAXHybrid()
     try:
         artifacts = hybrid_model.fit(df, target="value", config=test_config)
-        print("\n✅ Fit completed successfully!")
+        print("\n[OK] Fit completed successfully!")
         print(f"  - LSTM model saved to: {artifacts.stage1_path}")
         print(f"  - SARIMAX model saved to: {artifacts.stage2_path}")
         print(f"  - Final evaluation metrics: {artifacts.metrics}")
         print("\nSmoke test passed. The model can be instantiated and fit.")
 
     except Exception as e:
-        print(f"\n❌ Smoke test failed: {e}")
+        print(f"\n[ERROR] Smoke test failed: {e}")
         import traceback
         traceback.print_exc()
