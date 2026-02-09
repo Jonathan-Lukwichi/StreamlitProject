@@ -3087,8 +3087,9 @@ def page_ml():
 
                 # Display each model's results (metrics only, no detailed graphs)
                 for model_name in ["XGBoost", "LSTM", "ANN"]:
-                    if f"ml_mh_results_{model_name}" in st.session_state:
-                        results = st.session_state[f"ml_mh_results_{model_name}"]
+                    model_key = f"ml_mh_results_{model_name.lower()}"
+                    if model_key in st.session_state:
+                        results = st.session_state[model_key]
                         if results:
                             st.markdown(
                                 f"""
