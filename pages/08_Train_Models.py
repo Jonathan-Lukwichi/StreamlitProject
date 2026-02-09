@@ -1795,9 +1795,9 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
                 "error": "No numeric features available after excluding datetime columns. Please select numeric features only."
             }
 
-        # Extract features and target
-        X = df[numeric_feature_cols].values
-        y = df[target_col].values
+        # Extract features and target (ensure numeric dtype to avoid 'isnan not supported' errors)
+        X = df[numeric_feature_cols].apply(pd.to_numeric, errors='coerce').values.astype(np.float64)
+        y = pd.to_numeric(df[target_col], errors='coerce').values.astype(np.float64)
 
         # =====================================================================
         # Check for Feature Engineering split indices (80/20 split from Feature Studio)
