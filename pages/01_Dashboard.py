@@ -715,7 +715,7 @@ with col3:
     st.markdown(f"""
     <div class="nav-card">
         {status_badge(page_statuses["actions"])}
-        <div class="nav-card-icon">✅</div>
+        <div class="nav-card-icon">🎯</div>
         <div class="nav-card-title">Action Center</div>
         <div class="nav-card-desc">AI recommendations and priorities.</div>
     </div>
