@@ -21,6 +21,7 @@ from app_core.ui.theme import (
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
 from app_core.ui.components import render_scifi_hero_header
+from app_core.ui.effects import inject_fluorescent_effects
 
 # Seasonal Proportions for category distribution (DOW x Monthly)
 from app_core.analytics.seasonal_proportions import (
