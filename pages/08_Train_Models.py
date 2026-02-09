@@ -2896,10 +2896,16 @@ def page_ml():
                         import traceback
                         st.code(traceback.format_exc())
 
-            # Display results if available
+            # Display results if available (only show if results match selected model)
             if "ml_mh_results" in st.session_state:
-                st.divider()
-                render_ml_multihorizon_results(st.session_state["ml_mh_results"], cfg['ml_choice'])
+                stored_results = st.session_state["ml_mh_results"]
+                stored_model = stored_results.get("model_type", "")
+                selected_model = cfg.get('ml_choice', '')
+
+                # Only display if results belong to the currently selected model
+                if stored_model.lower() == selected_model.lower():
+                    st.divider()
+                    render_ml_multihorizon_results(stored_results, cfg['ml_choice'])
 
                 # Add seasonal category forecast section
                 ml_results = st.session_state["ml_mh_results"]
