@@ -78,6 +78,7 @@ st.set_page_config(
 apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
+inject_fluorescent_effects()
 
 # =============================================================================
 # CUSTOM CSS
