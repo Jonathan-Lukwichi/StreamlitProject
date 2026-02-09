@@ -220,8 +220,8 @@ def extract_forecast_state() -> ForecastState:
             state.peak_patients = max(state.forecasts) if state.forecasts else 0
             return state
 
-    # Priority 3: ML model results
-    for model_key in ["ml_mh_results_XGBoost", "ml_mh_results_LSTM", "ml_mh_results_ANN"]:
+    # Priority 3: ML model results (using lowercase keys)
+    for model_key in ["ml_mh_results_xgboost", "ml_mh_results_lstm", "ml_mh_results_ann"]:
         ml_results = st.session_state.get(model_key)
         if ml_results and isinstance(ml_results, dict):
             per_h = ml_results.get("per_h", {})
