@@ -266,7 +266,30 @@ class LSTMPipeline:
         except ImportError:
             raise ImportError("TensorFlow is required for LSTM")
 
-        # Step 0: NaN/Inf validation and cleaning (CRITICAL for stable training)
+        # Step 0: Ensure numeric dtype (fixes 'isnan not supported' error for object dtypes)
+        try:
+            X_train = np.asarray(X_train, dtype=np.float64)
+            y_train = np.asarray(y_train, dtype=np.float64)
+            X_val = np.asarray(X_val, dtype=np.float64)
+            y_val = np.asarray(y_val, dtype=np.float64)
+        except (ValueError, TypeError) as e:
+            print(f"[WARN] Could not convert data to float64: {e}")
+            # Try to convert with coercion (non-numeric becomes NaN)
+            import pandas as pd
+            if hasattr(X_train, 'values'):
+                X_train = pd.DataFrame(X_train).apply(pd.to_numeric, errors='coerce').values
+            if hasattr(y_train, 'values'):
+                y_train = pd.Series(y_train).apply(pd.to_numeric, errors='coerce').values
+            if hasattr(X_val, 'values'):
+                X_val = pd.DataFrame(X_val).apply(pd.to_numeric, errors='coerce').values
+            if hasattr(y_val, 'values'):
+                y_val = pd.Series(y_val).apply(pd.to_numeric, errors='coerce').values
+            X_train = np.asarray(X_train, dtype=np.float64)
+            y_train = np.asarray(y_train, dtype=np.float64)
+            X_val = np.asarray(X_val, dtype=np.float64)
+            y_val = np.asarray(y_val, dtype=np.float64)
+
+        # Step 0b: NaN/Inf validation and cleaning (CRITICAL for stable training)
         if np.isnan(X_train).any() or np.isinf(X_train).any():
             print("[WARN] NaN/Inf detected in X_train - cleaning...")
             X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
