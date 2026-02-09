@@ -2521,6 +2521,24 @@ def render_ml_multihorizon_results(ml_mh_results: dict, model_name: str):
         )
 
 # -----------------------------------------------------------------------------
+# HELPER: Check ML Training Status
+# -----------------------------------------------------------------------------
+def get_ml_training_status() -> dict:
+    """
+    Check which ML models have been trained.
+
+    Returns:
+        Dict mapping model keys (lowercase) to trained status.
+        e.g., {"xgboost": True, "lstm": False, "ann": True}
+    """
+    status = {}
+    for model in ["xgboost", "lstm", "ann"]:
+        key = f"ml_mh_results_{model}"
+        status[model] = key in st.session_state and st.session_state[key] is not None
+    return status
+
+
+# -----------------------------------------------------------------------------
 # MACHINE LEARNING (LSTM / ANN / XGBoost)
 # -----------------------------------------------------------------------------
 def page_ml():
