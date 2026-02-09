@@ -588,18 +588,6 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.markdown(f"""
     <div class="nav-card">
-        {status_badge(page_statuses["baseline"])}
-        <div class="nav-card-icon">📈</div>
-        <div class="nav-card-title">Baseline Models</div>
-        <div class="nav-card-desc">ARIMA & SARIMAX time series models.</div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("Open Baseline", key="nav_baseline", use_container_width=True):
-        st.switch_page("pages/05_Baseline_Models.py")
-
-with col2:
-    st.markdown(f"""
-    <div class="nav-card">
         {status_badge(page_statuses["features"])}
         <div class="nav-card-icon">🛠️</div>
         <div class="nav-card-title">Feature Studio</div>
@@ -607,9 +595,9 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     if st.button("Open Features", key="nav_features", use_container_width=True):
-        st.switch_page("pages/06_Feature_Studio.py")
+        st.switch_page("pages/05_Feature_Studio.py")
 
-with col3:
+with col2:
     st.markdown(f"""
     <div class="nav-card">
         {status_badge(page_statuses["selection"])}
@@ -619,7 +607,19 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
     if st.button("Open Selection", key="nav_selection", use_container_width=True):
-        st.switch_page("pages/07_Feature_Selection.py")
+        st.switch_page("pages/06_Feature_Selection.py")
+
+with col3:
+    st.markdown(f"""
+    <div class="nav-card">
+        {status_badge(page_statuses["baseline"])}
+        <div class="nav-card-icon">📈</div>
+        <div class="nav-card-title">Baseline Models</div>
+        <div class="nav-card-desc">ARIMA & SARIMAX time series models.</div>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Open Baseline", key="nav_baseline", use_container_width=True):
+        st.switch_page("pages/07_Baseline_Models.py")
 
 with col4:
     st.markdown(f"""
