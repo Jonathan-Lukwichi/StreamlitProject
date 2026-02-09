@@ -2907,10 +2907,10 @@ def page_ml():
                     st.divider()
                     render_ml_multihorizon_results(stored_results, cfg['ml_choice'])
 
-                # Add seasonal category forecast section
-                ml_results = st.session_state["ml_mh_results"]
-                per_h = ml_results.get("per_h", {})
-                successful = ml_results.get("successful", [])
+                    # Add seasonal category forecast section (only for matching model)
+                    ml_results = st.session_state["ml_mh_results"]
+                    per_h = ml_results.get("per_h", {})
+                    successful = ml_results.get("successful", [])
 
                 if per_h and successful:
                     # Construct a proper 7-day forecast from the multi-horizon results
