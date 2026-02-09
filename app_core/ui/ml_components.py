@@ -23,18 +23,31 @@ class MLUIComponents:
     """
 
     @staticmethod
-    def render_model_selector(current_model: Optional[str] = None) -> str:
+    def render_model_selector(
+        current_model: Optional[str] = None,
+        training_status: Optional[Dict[str, bool]] = None
+    ) -> str:
         """
-        Generic model selection dropdown (preserves existing design).
+        Generic model selection dropdown with training status indicators.
 
         Args:
             current_model: Currently selected model key (e.g., "XGBoost")
+            training_status: Dict mapping model keys (lowercase) to trained status
+                            e.g., {"xgboost": True, "lstm": False, "ann": True}
 
         Returns:
             Selected model key
         """
-        model_names = get_all_model_names()
+        model_names = get_all_model_names()  # ["LSTM", "ANN", "XGBoost"]
         display_names = get_all_display_names()
+
+        # Build display options with training status badges
+        display_options = []
+        for i, model in enumerate(model_names):
+            model_key = model.lower()
+            is_trained = training_status.get(model_key, False) if training_status else False
+            badge = " ✅" if is_trained else ""
+            display_options.append(f"{display_names[i]}{badge}")
 
         # Find current index
         if current_model and current_model in model_names:
@@ -43,17 +56,17 @@ class MLUIComponents:
             # Default to XGBoost (index 2)
             default_idx = model_names.index("XGBoost") if "XGBoost" in model_names else 0
 
-        # Render dropdown (preserves existing label and help text)
+        # Render dropdown with status indicators
         selected_display = st.selectbox(
-            "Choose a ml model",
-            options=display_names,
+            "Choose ML Model",
+            options=display_options,
             index=default_idx,
-            help="Pick your ML model. XGBoost is pre-selected."
+            help="✅ = Model trained. Select a model to train or view results."
         )
 
-        # Map back to model key
-        selected_model = map_display_to_key(selected_display)
-        return selected_model
+        # Map back to model key (strip badge from display name)
+        selected_idx = display_options.index(selected_display)
+        return model_names[selected_idx]
 
     @staticmethod
     def render_parameter_mode(model_key: str, config: Dict) -> str:
