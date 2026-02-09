@@ -2845,6 +2845,9 @@ def page_ml():
                         # Extract total results for backward compatibility
                         results = full_results.get("total_results", {})
 
+                        # Add model identifier to results (fixes bug: wrong model name on display)
+                        results["model_type"] = model_name
+
                         # Store total results in session state (backward compatible)
                         st.session_state["ml_mh_results"] = results
 
