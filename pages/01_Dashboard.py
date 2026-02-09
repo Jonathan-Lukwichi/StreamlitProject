@@ -41,6 +41,8 @@ st.set_page_config(
 # =============================================================================
 from app_core.ui.theme import apply_css
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
+from app_core.ui.components import render_scifi_hero_header
+from app_core.ui.effects import inject_fluorescent_effects
 
 # =============================================================================
 # APPLY BASE STYLES
@@ -49,6 +51,7 @@ apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
 add_logout_button()
+inject_fluorescent_effects()
 
 # =============================================================================
 # BLUE + GREEN FLUORESCENT CSS - STUNNING DESIGN
