@@ -333,7 +333,7 @@ class ANNPipeline:
         final_val_mae = history.history['val_mae'][-1]
 
         print("=" * 70)
-        print("✅ ANN TRAINING COMPLETED")
+        print("[OK] ANN TRAINING COMPLETED")
         print("=" * 70)
         print(f"Final Training Loss (MSE):     {final_train_loss:.6f}")
         print(f"Final Validation Loss (MSE):   {final_val_loss:.6f}")
