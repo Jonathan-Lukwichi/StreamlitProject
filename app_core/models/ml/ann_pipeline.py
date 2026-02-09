@@ -47,7 +47,7 @@ class ANNPipeline:
         self.preprocessing_report = None
 
         print("=" * 70)
-        print("🤖 ANN PIPELINE INITIALIZED")
+        print("[INFO] ANN PIPELINE INITIALIZED")
         print("=" * 70)
         print(f"Hidden Layers:  {self.hidden_layers}")
         print(f"Neurons/Layer:  {self.neurons}")
