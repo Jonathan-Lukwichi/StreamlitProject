@@ -2969,9 +2969,14 @@ def page_ml():
                 if "ml_all_models_trained" in st.session_state:
                     del st.session_state["ml_all_models_trained"]
                 for old_model in ["xgboost", "lstm", "ann"]:
+                    # Clear model results
                     old_key = f"ml_mh_results_{old_model}"
                     if old_key in st.session_state:
                         del st.session_state[old_key]
+                    # Also clear corresponding residuals (they'll be regenerated)
+                    residuals_key = f"stage1_residuals_{old_model}"
+                    if residuals_key in st.session_state:
+                        del st.session_state[residuals_key]
 
                 # CRITICAL: Clear TensorFlow session and free memory before training
                 try:
