@@ -3009,9 +3009,9 @@ def page_ml():
                             # Extract total results for backward compatibility
                             results = full_results.get("total_results", {})
 
-                            # Store results for each model
+                            # Store results for each model (using lowercase keys for consistency)
                             all_results[model_name] = results
-                            st.session_state[f"ml_mh_results_{model_name}"] = results
+                            st.session_state[f"ml_mh_results_{model_name.lower()}"] = results
 
                             # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
                             try:
