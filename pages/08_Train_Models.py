@@ -2595,13 +2595,27 @@ def page_ml():
         )
         cfg["ml_training_mode"] = training_mode
 
+    # Get training status for all models
+    training_status = get_ml_training_status()
+
     # Only show model selector if training single model
     if training_mode == "Single Model":
-        selected_model = MLUIComponents.render_model_selector(cfg.get("ml_choice", "XGBoost"))
+        selected_model = MLUIComponents.render_model_selector(
+            cfg.get("ml_choice", "XGBoost"),
+            training_status=training_status
+        )
         cfg["ml_choice"] = selected_model
     else:
         st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially using optimized defaults (XGBoost: 200 trees, LSTM: 30 epochs, ANN: 20 epochs with early stopping).")
         selected_model = None  # Not needed for all models mode
+
+    # Show training status summary
+    trained_count = sum(training_status.values())
+    if trained_count > 0:
+        trained_models = [m.upper() for m, t in training_status.items() if t]
+        st.success(f"**Trained Models:** {', '.join(trained_models)} ({trained_count}/3)")
+    else:
+        st.info("📋 No models trained yet. Select a model and configure parameters below.")
 
     # 2. Dataset Selection (from Feature Selection results)
     datasets, metadata = get_feature_selection_datasets()
