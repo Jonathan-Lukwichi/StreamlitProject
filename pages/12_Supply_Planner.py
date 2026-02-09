@@ -445,8 +445,8 @@ def get_forecast_data() -> Dict[str, Any]:
             result["synced_with_page10"] = True
             return result
 
-    # Priority 3: ML model results
-    for model_key in ["ml_mh_results_XGBoost", "ml_mh_results_LSTM", "ml_mh_results_ANN"]:
+    # Priority 3: ML model results (using lowercase keys)
+    for model_key in ["ml_mh_results_xgboost", "ml_mh_results_lstm", "ml_mh_results_ann"]:
         if model_key in st.session_state and st.session_state[model_key]:
             ml_results = st.session_state[model_key]
             if isinstance(ml_results, dict):
