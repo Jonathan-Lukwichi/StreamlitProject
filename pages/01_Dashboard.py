@@ -1,14 +1,15 @@
 # =============================================================================
 # 01_Dashboard.py - COMMAND CENTER
-# Blue Fluorescent Theme with Intelligent Status Tracking
+# Blue + Green Fluorescent Theme with Intelligent Status Tracking
 # =============================================================================
 """
 COMMAND CENTER - Central Navigation Hub
 
 Features:
-- Blue fluorescent color scheme
+- Blue + Green fluorescent color scheme
 - Static design (no animations)
 - Intelligent status tracking (Pending/Complete for each page)
+- Comprehensive session reset
 """
 from __future__ import annotations
 
@@ -50,23 +51,48 @@ render_sidebar_brand()
 add_logout_button()
 
 # =============================================================================
-# BLUE FLUORESCENT CSS - STATIC DESIGN
+# BLUE + GREEN FLUORESCENT CSS - STUNNING DESIGN
 # =============================================================================
 st.markdown("""
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
-   BLUE FLUORESCENT THEME - STATIC DESIGN
+   BLUE + GREEN FLUORESCENT THEME - STUNNING DESIGN
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Hero Header */
 .hero-container {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 58, 95, 0.95) 50%, rgba(15, 23, 42, 0.98) 100%);
-    border: 1px solid rgba(79, 143, 252, 0.4);
-    border-radius: 20px;
-    padding: 2.5rem 2rem;
+    background: linear-gradient(135deg,
+        rgba(15, 23, 42, 0.98) 0%,
+        rgba(20, 50, 70, 0.95) 30%,
+        rgba(15, 40, 50, 0.95) 70%,
+        rgba(15, 23, 42, 0.98) 100%);
+    border: 2px solid transparent;
+    border-image: linear-gradient(135deg, rgba(79, 143, 252, 0.6), rgba(34, 197, 94, 0.6)) 1;
+    border-radius: 24px;
+    padding: 3rem 2rem;
     margin-bottom: 2rem;
     text-align: center;
-    box-shadow: 0 0 30px rgba(79, 143, 252, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow:
+        0 0 40px rgba(79, 143, 252, 0.15),
+        0 0 60px rgba(34, 197, 94, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(79, 143, 252, 0.8) 20%,
+        rgba(34, 197, 94, 0.8) 50%,
+        rgba(79, 143, 252, 0.8) 80%,
+        transparent);
 }
 
 .hero-eyebrow {
@@ -78,34 +104,43 @@ st.markdown("""
 }
 
 .status-dot {
-    width: 10px;
-    height: 10px;
-    background: #4f8ffc;
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(135deg, #4f8ffc, #22c55e);
     border-radius: 50%;
-    box-shadow: 0 0 10px #4f8ffc, 0 0 20px rgba(79, 143, 252, 0.5);
+    box-shadow:
+        0 0 10px #4f8ffc,
+        0 0 20px rgba(79, 143, 252, 0.5),
+        0 0 30px rgba(34, 197, 94, 0.3);
 }
 
 .status-text {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 3px;
+    letter-spacing: 4px;
     text-transform: uppercase;
-    color: #4f8ffc;
+    background: linear-gradient(90deg, #4f8ffc, #22c55e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .hero-title {
-    font-size: 3rem;
+    font-size: 3.5rem;
     font-weight: 900;
-    color: #4f8ffc;
-    text-shadow: 0 0 30px rgba(79, 143, 252, 0.5);
-    margin-bottom: 0.5rem;
-    letter-spacing: 3px;
+    background: linear-gradient(135deg, #4f8ffc 0%, #60a5fa 30%, #22c55e 70%, #4ade80 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    margin-bottom: 0.75rem;
+    letter-spacing: 4px;
 }
 
 .hero-subtitle {
     color: #94a3b8;
-    font-size: 1rem;
-    max-width: 600px;
+    font-size: 1.1rem;
+    max-width: 650px;
     margin: 0 auto;
 }
 
@@ -116,7 +151,8 @@ st.markdown("""
     gap: 0.75rem;
     margin: 2.5rem 0 1.5rem 0;
     padding-bottom: 0.75rem;
-    border-bottom: 2px solid rgba(79, 143, 252, 0.3);
+    border-bottom: 2px solid;
+    border-image: linear-gradient(90deg, rgba(79, 143, 252, 0.5), rgba(34, 197, 94, 0.5), transparent) 1;
 }
 
 .section-icon {
@@ -126,7 +162,10 @@ st.markdown("""
 .section-title {
     font-size: 1.1rem;
     font-weight: 700;
-    color: #4f8ffc;
+    background: linear-gradient(90deg, #4f8ffc, #22c55e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     letter-spacing: 2px;
     text-transform: uppercase;
 }
@@ -134,8 +173,8 @@ st.markdown("""
 /* Navigation Cards */
 .nav-card {
     position: relative;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
-    border: 1px solid rgba(79, 143, 252, 0.25);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(20, 35, 50, 0.9));
+    border: 1px solid rgba(79, 143, 252, 0.2);
     border-radius: 16px;
     padding: 1.5rem;
     min-height: 180px;
@@ -143,9 +182,28 @@ st.markdown("""
 }
 
 .nav-card:hover {
-    border-color: rgba(79, 143, 252, 0.6);
-    box-shadow: 0 0 30px rgba(79, 143, 252, 0.15);
-    transform: translateY(-3px);
+    border-color: rgba(34, 197, 94, 0.5);
+    box-shadow:
+        0 0 20px rgba(79, 143, 252, 0.15),
+        0 0 30px rgba(34, 197, 94, 0.1);
+    transform: translateY(-4px);
+}
+
+.nav-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.5), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.nav-card:hover::after {
+    opacity: 1;
 }
 
 .nav-card-icon {
@@ -181,9 +239,10 @@ st.markdown("""
 }
 
 .status-badge.complete {
-    background: rgba(34, 197, 94, 0.15);
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+    border: 1px solid rgba(34, 197, 94, 0.4);
     color: #22c55e;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.2);
 }
 
 .status-badge.pending {
@@ -194,32 +253,49 @@ st.markdown("""
 
 /* KPI Cards */
 .kpi-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
-    border: 1px solid rgba(79, 143, 252, 0.25);
-    border-radius: 12px;
-    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(20, 35, 50, 0.9));
+    border: 1px solid rgba(79, 143, 252, 0.2);
+    border-radius: 16px;
+    padding: 1.5rem;
     text-align: center;
     transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #4f8ffc, #22c55e);
 }
 
 .kpi-card:hover {
-    border-color: rgba(79, 143, 252, 0.5);
-    box-shadow: 0 0 20px rgba(79, 143, 252, 0.1);
+    border-color: rgba(34, 197, 94, 0.4);
+    box-shadow:
+        0 0 20px rgba(79, 143, 252, 0.1),
+        0 0 30px rgba(34, 197, 94, 0.08);
 }
 
 .kpi-icon {
-    font-size: 1.75rem;
+    font-size: 2rem;
     margin-bottom: 0.5rem;
 }
 
 .kpi-value {
-    font-size: 1.5rem;
+    font-size: 1.75rem;
     font-weight: 800;
-    color: #4f8ffc;
+    background: linear-gradient(135deg, #4f8ffc, #22c55e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .kpi-label {
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -228,34 +304,59 @@ st.markdown("""
 
 .kpi-status {
     display: inline-block;
-    font-size: 0.6rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
+    font-size: 0.65rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
     margin-top: 0.5rem;
+    font-weight: 600;
 }
 
-.kpi-status.good { background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
-.kpi-status.warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
-.kpi-status.neutral { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
+.kpi-status.good {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.kpi-status.warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.kpi-status.neutral {
+    background: rgba(100, 116, 139, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+/* Clear Session Button */
+.clear-btn-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 1rem;
+}
 
 /* Footer */
 .footer {
     text-align: center;
-    padding: 2rem;
+    padding: 2.5rem;
     margin-top: 2rem;
-    border-top: 1px solid rgba(79, 143, 252, 0.15);
+    border-top: 2px solid;
+    border-image: linear-gradient(90deg, transparent, rgba(79, 143, 252, 0.3), rgba(34, 197, 94, 0.3), transparent) 1;
 }
 
 .footer-text {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     color: #475569;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
 }
 
 .footer-brand {
-    font-size: 0.85rem;
+    font-size: 1rem;
     font-weight: 700;
-    color: #4f8ffc;
+    background: linear-gradient(90deg, #4f8ffc, #22c55e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     margin-top: 0.5rem;
 }
 
@@ -303,11 +404,38 @@ def get_page_statuses() -> Dict[str, bool]:
         "selection": safe_check("selected_features") or safe_check("feature_importance"),
         "train": has_ml_results(),
         "results": has_ml_results() or safe_check("arima_mh_results") or safe_check("sarimax_results"),
-        "forecast": safe_check("forecast_generated") or has_ml_results(),
-        "staff": safe_check("staff_schedule_data") or safe_check("milp_solution"),
-        "supply": safe_check("inventory_data") or safe_check("inventory_optimization"),
-        "actions": safe_check("action_recommendations") or safe_check("ai_insights"),
+        "forecast": safe_check("forecast_generated") or safe_check("forecast_hub_demand") or safe_check("active_forecast"),
+        "staff": safe_check("staff_data_loaded") or safe_check("staff_optimization_results") or safe_check("milp_solution"),
+        "supply": safe_check("inventory_data_loaded") or safe_check("inventory_optimization_results"),
+        "actions": safe_check("staff_data_loaded") or safe_check("inventory_data_loaded"),
     }
+
+
+# =============================================================================
+# COMPREHENSIVE SESSION CLEAR FUNCTION
+# =============================================================================
+def clear_all_session_data():
+    """Clear ALL session data except authentication keys."""
+    # Keys to preserve (authentication only)
+    auth_keys = {
+        "authentication_status",
+        "username",
+        "name",
+        "logout",
+        "authenticator",
+        "FormSubmitter:login-Login",
+    }
+
+    # Get all current keys
+    all_keys = list(st.session_state.keys())
+
+    # Delete everything except auth keys
+    for key in all_keys:
+        if key not in auth_keys and not key.startswith("FormSubmitter"):
+            try:
+                del st.session_state[key]
+            except:
+                pass
 
 
 # =============================================================================
@@ -333,16 +461,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# CLEAR SESSION BUTTON
+# CLEAR SESSION BUTTON - ENHANCED
 # =============================================================================
-col_spacer, col_btn = st.columns([5, 1])
+col_spacer, col_btn = st.columns([4, 1])
 with col_btn:
-    if st.button("🗑️ Clear Session", key="clear_session", help="Reset all data and start fresh"):
-        # Keep only essential keys (authentication)
-        keys_to_keep = {"authentication_status", "username", "name", "logout"}
-        keys_to_delete = [k for k in st.session_state.keys() if k not in keys_to_keep]
-        for k in keys_to_delete:
-            del st.session_state[k]
+    if st.button("🗑️ Reset All Data", key="clear_session", help="Clear all session data and start fresh", type="secondary", use_container_width=True):
+        clear_all_session_data()
         st.rerun()
 
 # =============================================================================
@@ -617,7 +741,7 @@ with col2:
 # =============================================================================
 st.markdown("""
 <div class="footer">
-    <div class="footer-text">POWERED BY MACHINE LEARNING & OPERATIONS RESEARCH</div>
+    <div class="footer-text">Powered by Machine Learning & Operations Research</div>
     <div class="footer-brand">HealthForecast AI · Command Center</div>
 </div>
 """, unsafe_allow_html=True)
