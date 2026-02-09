@@ -175,7 +175,7 @@ class ANNPipeline:
         self.model = model
 
         print("=" * 70)
-        print("🏗️  ANN MODEL ARCHITECTURE")
+        print("[INFO] ANN MODEL ARCHITECTURE")
         print("=" * 70)
         model.summary()
         print("=" * 70)
