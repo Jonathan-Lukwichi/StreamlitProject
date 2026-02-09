@@ -2818,14 +2818,26 @@ def page_ml():
                 )
 
             if run_button:
-                # Clear previous "All Models" results to avoid confusion
+                # Clear previous "All Models" flag to avoid confusion
                 if "ml_all_models_trained" in st.session_state:
                     del st.session_state["ml_all_models_trained"]
-                # Clear old individual model results from "All Models" mode (using lowercase keys)
-                for old_model in ["xgboost", "lstm", "ann"]:
-                    old_key = f"ml_mh_results_{old_model}"
-                    if old_key in st.session_state:
-                        del st.session_state[old_key]
+
+                # Only clear the specific model being trained (preserve other models)
+                model_to_train = cfg['ml_choice'].lower()
+                model_key_to_clear = f"ml_mh_results_{model_to_train}"
+                if model_key_to_clear in st.session_state:
+                    del st.session_state[model_key_to_clear]
+
+                # Also clear residuals for this specific model (they'll be regenerated)
+                residuals_key_to_clear = f"stage1_residuals_{model_to_train}"
+                if residuals_key_to_clear in st.session_state:
+                    del st.session_state[residuals_key_to_clear]
+
+                # Clear generic ml_mh_results only if it belongs to this model
+                if "ml_mh_results" in st.session_state:
+                    existing_model = st.session_state["ml_mh_results"].get("model_type", "")
+                    if existing_model.lower() == model_to_train:
+                        del st.session_state["ml_mh_results"]
 
                 # Pass a copy of the config to prevent any potential state pollution between runs
                 current_run_config = cfg.copy()
