@@ -2944,10 +2944,10 @@ def page_ml():
                 # Clear previous single model results to avoid confusion
                 if "ml_mh_results" in st.session_state:
                     del st.session_state["ml_mh_results"]
-                # Clear old "All Models" flag and results
+                # Clear old "All Models" flag and results (using lowercase keys)
                 if "ml_all_models_trained" in st.session_state:
                     del st.session_state["ml_all_models_trained"]
-                for old_model in ["XGBoost", "LSTM", "ANN"]:
+                for old_model in ["xgboost", "lstm", "ann"]:
                     old_key = f"ml_mh_results_{old_model}"
                     if old_key in st.session_state:
                         del st.session_state[old_key]
