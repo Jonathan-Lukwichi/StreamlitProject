@@ -450,18 +450,11 @@ page_statuses = get_page_statuses()
 # =============================================================================
 # HERO HEADER
 # =============================================================================
-st.markdown("""
-<div class="hero-container">
-    <div class="hero-eyebrow">
-        <div class="status-dot"></div>
-        <span class="status-text">System Online</span>
-    </div>
-    <h1 class="hero-title">COMMAND CENTER</h1>
-    <p class="hero-subtitle">
-        Central navigation hub for HealthForecast AI. Access all modules from one place.
-    </p>
-</div>
-""", unsafe_allow_html=True)
+render_scifi_hero_header(
+    title="Command Center",
+    subtitle="Central navigation hub for HealthForecast AI. Access all modules from one place.",
+    status="SYSTEM ONLINE"
+)
 
 # =============================================================================
 # CLEAR SESSION BUTTON - ENHANCED
