@@ -382,7 +382,7 @@ def extract_ml_forecast_data(model_key: str) -> Optional[Dict[str, Any]]:
     Extract forecast data from ML model results in session state.
 
     Args:
-        model_key: Session state key (e.g., "ml_mh_results_XGBoost")
+        model_key: Session state key (e.g., "ml_mh_results_xgboost")
     """
     ml_results = st.session_state.get(model_key)
     if not ml_results or not isinstance(ml_results, dict):
