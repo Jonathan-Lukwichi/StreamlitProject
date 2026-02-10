@@ -1019,6 +1019,21 @@ def page_eda():
             )
             _render_donut_charts(dff)
 
+            # ===== Holiday & Weekend Impact Section =====
+            st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style='text-align: center; margin-bottom: 1.5rem;'>
+                  <span style='font-size: 2rem;'>🎄</span>
+                  <h3 class='hf-feature-title' style='font-size: 1.5rem; margin: 0.5rem 0;'>Holiday & Weekend Impact</h3>
+                  <p class='hf-feature-description'>How holidays and weekends affect patient arrival patterns</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            _render_holiday_weekend_impact(dff)
+
+            # ===== Weather Impact Analysis Section =====
             st.markdown("<div style='margin-top: 2.5rem;'></div>", unsafe_allow_html=True)
             st.markdown(
                 f"""
@@ -1030,6 +1045,14 @@ def page_eda():
                 """,
                 unsafe_allow_html=True,
             )
+
+            # Weather Trend Line Graphs (new)
+            _render_weather_line_graphs(dff)
+
+            st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+            st.markdown("#### 📊 Weather Distribution Analysis")
+            st.caption("Bar charts showing arrivals by binned weather categories")
+
             # Temp
             if "Average_Temp" in dff.columns:
                 bins = st.slider("Temperature bins", 5, 50, 15, key="temp_bins")
