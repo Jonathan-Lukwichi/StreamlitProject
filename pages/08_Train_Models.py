@@ -1411,69 +1411,59 @@ def save_hybrid_model_to_disk(
     artifact_dir: str = "pipeline_artifacts/hybrids"
 ) -> dict:
     """
-    Save trained hybrid model artifacts to disk for Cloud Sync.
+    Verify and report hybrid model artifacts saved during training.
+
+    The hybrid model classes (LSTMXGBHybrid, LSTMSARIMAXHybrid, LSTMANNHybrid)
+    save their models to disk during fit(). The HybridArtifacts object contains
+    paths to these saved files (stage1_path, stage2_path, scaler_path).
+
+    This function:
+    1. Verifies the files were saved correctly
+    2. Saves additional metadata (metrics.json) for Cloud Sync detection
 
     Args:
         hybrid_type: Type of hybrid ("lstm_xgb", "lstm_sarimax", "lstm_ann")
-        artifacts: Hybrid model artifacts from training (has stage1_model, stage2_model, metrics)
+        artifacts: HybridArtifacts from training (has stage1_path, stage2_path, metrics)
         config: Training configuration (optional)
-        artifact_dir: Base directory for saving artifacts
+        artifact_dir: Base directory (used for fallback metrics save)
 
     Returns:
         dict: Mapping of saved components to file paths
     """
     import os
     import json
+    import shutil
 
     saved_paths = {}
 
-    # Create hybrid-specific directory
+    # The hybrid model directory (where files were saved during training)
     model_dir = os.path.join(artifact_dir, hybrid_type.lower())
     os.makedirs(model_dir, exist_ok=True)
 
     try:
-        # 1. Save Stage 1 model (LSTM)
-        if hasattr(artifacts, 'stage1_model') and artifacts.stage1_model is not None:
-            stage1_path = os.path.join(model_dir, "stage1_lstm.keras")
-            try:
-                if hasattr(artifacts.stage1_model, 'model'):
-                    artifacts.stage1_model.model.save(stage1_path)
-                    saved_paths["stage1_lstm"] = stage1_path
-                    logger.info(f"Saved Stage 1 LSTM to {stage1_path}")
-            except Exception as e:
-                logger.warning(f"Could not save Stage 1 model: {e}")
+        # 1. Check Stage 1 model (LSTM) - already saved by hybrid class
+        if hasattr(artifacts, 'stage1_path') and artifacts.stage1_path:
+            if os.path.exists(artifacts.stage1_path):
+                saved_paths["stage1_lstm"] = artifacts.stage1_path
+                logger.info(f"Stage 1 LSTM found at {artifacts.stage1_path}")
+            else:
+                logger.warning(f"Stage 1 LSTM not found at {artifacts.stage1_path}")
 
-        # 2. Save Stage 2 model (XGBoost, SARIMAX, or ANN)
-        if hasattr(artifacts, 'stage2_model') and artifacts.stage2_model is not None:
-            if "xgb" in hybrid_type.lower():
-                stage2_path = os.path.join(model_dir, "stage2_xgboost.pkl")
-                try:
-                    joblib.dump(artifacts.stage2_model, stage2_path)
-                    saved_paths["stage2_xgboost"] = stage2_path
-                    logger.info(f"Saved Stage 2 XGBoost to {stage2_path}")
-                except Exception as e:
-                    logger.warning(f"Could not save Stage 2 XGBoost: {e}")
-            elif "sarimax" in hybrid_type.lower():
-                stage2_path = os.path.join(model_dir, "stage2_sarimax.pkl")
-                try:
-                    joblib.dump(artifacts.stage2_model, stage2_path)
-                    saved_paths["stage2_sarimax"] = stage2_path
-                    logger.info(f"Saved Stage 2 SARIMAX to {stage2_path}")
-                except Exception as e:
-                    logger.warning(f"Could not save Stage 2 SARIMAX: {e}")
-            elif "ann" in hybrid_type.lower():
-                stage2_path = os.path.join(model_dir, "stage2_ann.keras")
-                try:
-                    if hasattr(artifacts.stage2_model, 'model'):
-                        artifacts.stage2_model.model.save(stage2_path)
-                    else:
-                        artifacts.stage2_model.save(stage2_path)
-                    saved_paths["stage2_ann"] = stage2_path
-                    logger.info(f"Saved Stage 2 ANN to {stage2_path}")
-                except Exception as e:
-                    logger.warning(f"Could not save Stage 2 ANN: {e}")
+        # 2. Check Stage 2 model - already saved by hybrid class
+        if hasattr(artifacts, 'stage2_path') and artifacts.stage2_path:
+            if os.path.exists(artifacts.stage2_path):
+                saved_paths["stage2"] = artifacts.stage2_path
+                logger.info(f"Stage 2 model found at {artifacts.stage2_path}")
+            else:
+                logger.warning(f"Stage 2 model not found at {artifacts.stage2_path}")
 
-        # 3. Save metrics as JSON
+        # 3. Check scaler - already saved by hybrid class
+        if hasattr(artifacts, 'scaler_path') and artifacts.scaler_path:
+            if os.path.exists(artifacts.scaler_path):
+                saved_paths["scaler"] = artifacts.scaler_path
+                logger.info(f"Scaler found at {artifacts.scaler_path}")
+
+        # 4. Save metrics as JSON (for Cloud Sync detection)
         if hasattr(artifacts, 'metrics') and artifacts.metrics:
             metrics_path = os.path.join(model_dir, "metrics.json")
             try:
@@ -1484,7 +1474,7 @@ def save_hybrid_model_to_disk(
             except Exception as e:
                 logger.warning(f"Could not save metrics: {e}")
 
-        # 4. Save config if provided
+        # 5. Save config if provided
         if config:
             config_path = os.path.join(model_dir, "config.json")
             try:
@@ -1500,22 +1490,12 @@ def save_hybrid_model_to_disk(
                             clean_config[k] = v
                     json.dump(clean_config, f, indent=2, default=str)
                 saved_paths["config"] = config_path
+                logger.info(f"Saved config to {config_path}")
             except Exception as e:
                 logger.warning(f"Could not save config: {e}")
 
-        # 5. Save predictions if available
-        if hasattr(artifacts, 'predictions') and artifacts.predictions is not None:
-            predictions_path = os.path.join(model_dir, "predictions.csv")
-            try:
-                if hasattr(artifacts.predictions, 'to_csv'):
-                    artifacts.predictions.to_csv(predictions_path, index=False)
-                    saved_paths["predictions"] = predictions_path
-                    logger.info(f"Saved predictions to {predictions_path}")
-            except Exception as e:
-                logger.warning(f"Could not save predictions: {e}")
-
     except Exception as e:
-        logger.error(f"Error saving hybrid model {hybrid_type}: {e}")
+        logger.error(f"Error processing hybrid model {hybrid_type}: {e}")
 
     return saved_paths
 
