@@ -380,7 +380,7 @@ def _render_weather_line_graphs(dff):
 
 
 def _render_holiday_weekend_impact(dff):
-    """Render histograms for holiday and weekend impact analysis."""
+    """Render enhanced bar charts for holiday and weekend impact with value labels and % change."""
     c1, c2 = st.columns(2)
 
     # Holiday Impact Histogram
@@ -419,6 +419,18 @@ def _render_holiday_weekend_impact(dff):
 
             if holiday_data:
                 hol_df = pd.DataFrame(holiday_data)
+
+                # Calculate baseline and percentage change
+                baseline = hol_df.loc[hol_df["Category"] == "Normal Day", "Avg Arrivals"].values
+                baseline = baseline[0] if len(baseline) > 0 else hol_df["Avg Arrivals"].mean()
+
+                hol_df["Pct Change"] = ((hol_df["Avg Arrivals"] - baseline) / baseline * 100).round(1)
+                hol_df["Label"] = hol_df.apply(
+                    lambda r: f"{r['Avg Arrivals']:.0f}\n({'+' if r['Pct Change'] > 0 else ''}{r['Pct Change']:.0f}%)"
+                              if r["Category"] != "Normal Day" else f"{r['Avg Arrivals']:.0f}\n(baseline)",
+                    axis=1
+                )
+
                 fig = px.bar(hol_df, x="Category", y="Avg Arrivals",
                             color="Category",
                             color_discrete_map={
@@ -426,10 +438,25 @@ def _render_holiday_weekend_impact(dff):
                                 "Holiday": DANGER_COLOR,
                                 "Day Before Holiday": WARNING_COLOR
                             },
+                            text="Label",
                             title="Average Arrivals: Holiday Impact")
-                fig.update_layout(showlegend=False, height=400)
+
+                fig.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=11, color=TEXT_COLOR),
+                    marker_line_width=0
+                )
+
+                # Add baseline reference line
+                fig.add_hline(y=baseline, line_dash="dash",
+                             line_color="rgba(255,255,255,0.3)",
+                             annotation_text="Baseline",
+                             annotation_position="right",
+                             annotation_font_color=SUBTLE_TEXT)
+
+                fig.update_layout(showlegend=False, height=450)
                 fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
-                fig.update_xaxes(title_text="Category")
+                fig.update_xaxes(title_text="")
                 st.plotly_chart(add_grid(fig), use_container_width=True)
             else:
                 st.info("No valid holiday data for analysis.")
@@ -448,22 +475,22 @@ def _render_holiday_weekend_impact(dff):
             # Weekday (Tue-Thu, day_of_week 2-4) - excluding Monday and Friday
             weekday_avg = dff.loc[dff[dow_col].isin([2, 3, 4]), "Target_1"].mean()
             if pd.notna(weekday_avg):
-                weekend_data.append({"Category": "Mid-Week (Tue-Thu)", "Avg Arrivals": weekday_avg})
+                weekend_data.append({"Category": "Mid-Week", "Avg Arrivals": weekday_avg})
 
             # Friday (before weekend, day_of_week = 5)
             friday_avg = dff.loc[dff[dow_col] == 5, "Target_1"].mean()
             if pd.notna(friday_avg):
-                weekend_data.append({"Category": "Friday (Pre-Weekend)", "Avg Arrivals": friday_avg})
+                weekend_data.append({"Category": "Friday", "Avg Arrivals": friday_avg})
 
             # Weekend (Sat-Sun, day_of_week 6-7)
             weekend_avg = dff.loc[dff[dow_col].isin([6, 7]), "Target_1"].mean()
             if pd.notna(weekend_avg):
-                weekend_data.append({"Category": "Weekend (Sat-Sun)", "Avg Arrivals": weekend_avg})
+                weekend_data.append({"Category": "Weekend", "Avg Arrivals": weekend_avg})
 
             # Monday (after weekend, day_of_week = 1)
             monday_avg = dff.loc[dff[dow_col] == 1, "Target_1"].mean()
             if pd.notna(monday_avg):
-                weekend_data.append({"Category": "Monday (Post-Weekend)", "Avg Arrivals": monday_avg})
+                weekend_data.append({"Category": "Monday", "Avg Arrivals": monday_avg})
 
         elif weekend_col:
             # Fallback to simple weekday/weekend split
@@ -476,13 +503,46 @@ def _render_holiday_weekend_impact(dff):
 
         if weekend_data:
             wknd_df = pd.DataFrame(weekend_data)
+
+            # Calculate baseline (Mid-Week average) and percentage change
+            baseline_candidates = wknd_df.loc[wknd_df["Category"].isin(["Mid-Week", "Weekday"]), "Avg Arrivals"].values
+            baseline = baseline_candidates[0] if len(baseline_candidates) > 0 else wknd_df["Avg Arrivals"].mean()
+
+            wknd_df["Pct Change"] = ((wknd_df["Avg Arrivals"] - baseline) / baseline * 100).round(1)
+            wknd_df["Label"] = wknd_df.apply(
+                lambda r: f"{r['Avg Arrivals']:.0f}\n({'+' if r['Pct Change'] > 0 else ''}{r['Pct Change']:.0f}%)"
+                          if r["Category"] not in ["Mid-Week", "Weekday"] else f"{r['Avg Arrivals']:.0f}\n(baseline)",
+                axis=1
+            )
+
             fig = px.bar(wknd_df, x="Category", y="Avg Arrivals",
                         color="Category",
-                        color_discrete_sequence=[PRIMARY_COLOR, WARNING_COLOR, DANGER_COLOR, SECONDARY_COLOR],
+                        color_discrete_map={
+                            "Mid-Week": PRIMARY_COLOR,
+                            "Weekday": PRIMARY_COLOR,
+                            "Friday": WARNING_COLOR,
+                            "Weekend": DANGER_COLOR,
+                            "Monday": SECONDARY_COLOR
+                        },
+                        text="Label",
                         title="Average Arrivals: Weekend Impact")
-            fig.update_layout(showlegend=False, height=400)
+
+            fig.update_traces(
+                textposition='outside',
+                textfont=dict(size=11, color=TEXT_COLOR),
+                marker_line_width=0
+            )
+
+            # Add baseline reference line
+            fig.add_hline(y=baseline, line_dash="dash",
+                         line_color="rgba(255,255,255,0.3)",
+                         annotation_text="Baseline",
+                         annotation_position="right",
+                         annotation_font_color=SUBTLE_TEXT)
+
+            fig.update_layout(showlegend=False, height=450)
             fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
-            fig.update_xaxes(title_text="Category")
+            fig.update_xaxes(title_text="")
             st.plotly_chart(add_grid(fig), use_container_width=True)
         else:
             st.info("Weekend/day_of_week columns not found in data.")
