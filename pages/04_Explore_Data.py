@@ -323,7 +323,11 @@ def _render_weather_line_graphs(dff):
         if "Average_wind" in dff.columns:
             wind_data = dff.dropna(subset=["Average_wind", "Target_1"]).copy()
             if len(wind_data) > 0:
-                # Bin and aggregate
+                # ✅ Calculate correlation on RAW data (not binned - avoids ecological fallacy)
+                corr = wind_data["Average_wind"].corr(wind_data["Target_1"])
+                n_obs = len(wind_data)
+
+                # Bin and aggregate for VISUALIZATION only
                 wind_data["wind_bin"] = pd.cut(wind_data["Average_wind"], bins=12)
                 wind_agg = wind_data.groupby("wind_bin", observed=True).agg({
                     "Average_wind": "mean",
@@ -332,8 +336,6 @@ def _render_weather_line_graphs(dff):
                 wind_agg = wind_agg.sort_values("Average_wind")
 
                 if len(wind_agg) > 2:
-                    # Calculate correlation
-                    corr = wind_agg["Average_wind"].corr(wind_agg["Target_1"])
 
                     # Create figure with filled area
                     fig = go.Figure()
