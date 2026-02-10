@@ -880,12 +880,6 @@ def page_feature_engineering():
     with tab_fourier:
         render_tab_header("Fourier Features from FFT Analysis", "🌊")
 
-        st.info("""
-        **Why Fourier Features?** Fourier terms (sine/cosine pairs) capture periodic patterns
-        in time series data. They are especially effective for capturing seasonality that doesn't
-        align with calendar units (e.g., business cycles, bi-weekly patterns).
-        """)
-
         # Check for FFT data from EDA page
         fft_data = st.session_state.get("fft_dominant_cycles", {})
 
