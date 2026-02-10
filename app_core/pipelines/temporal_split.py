@@ -875,7 +875,10 @@ def visualize_cv_folds(
     title: str = "Time Series Cross-Validation Folds"
 ) -> "go.Figure":
     """
-    Create a Plotly visualization of CV fold splits.
+    Create a premium futuristic Plotly visualization of CV fold splits.
+
+    Features a fluorescent neon design with glowing effects and
+    professional sci-fi styling matching the HealthForecast AI theme.
 
     Parameters
     ----------
@@ -906,91 +909,238 @@ def visualize_cv_folds(
 
     min_date = df[date_col].min()
     max_date = df[date_col].max()
+    total_days = (max_date - min_date).days
 
     fig = go.Figure()
 
-    # Color scheme
-    train_color = "rgba(102, 126, 234, 0.7)"  # Blue
-    val_color = "rgba(237, 100, 166, 0.7)"     # Pink
-    gap_color = "rgba(128, 128, 128, 0.3)"     # Gray
+    # =========================================================================
+    # PREMIUM FLUORESCENT COLOR SCHEME
+    # =========================================================================
+    # Neon cyan for training (matches HealthForecast AI theme)
+    train_fill = "rgba(34, 211, 238, 0.75)"      # Cyan fluorescent
+    train_line = "rgba(34, 211, 238, 1)"         # Cyan glow border
+    train_glow = "rgba(34, 211, 238, 0.3)"       # Outer glow
+
+    # Neon magenta/pink for validation
+    val_fill = "rgba(236, 72, 153, 0.75)"        # Magenta fluorescent
+    val_line = "rgba(236, 72, 153, 1)"           # Magenta glow border
+    val_glow = "rgba(236, 72, 153, 0.3)"         # Outer glow
+
+    # Background grid lines
+    grid_color = "rgba(34, 211, 238, 0.1)"
+    axis_line_color = "rgba(34, 211, 238, 0.3)"
 
     for fold in folds:
-        y_pos = len(folds) - fold.fold_idx  # Reverse so fold 1 is at top
+        fold_label = f"FOLD {fold.fold_idx + 1}"
+        train_days = (fold.train_end - fold.train_start).days
+        val_days = (fold.val_end - fold.val_start).days
+        train_base = (fold.train_start - min_date).days
+        val_base = (fold.val_start - min_date).days
 
-        # Training bar
+        # -----------------------------------------------------------------
+        # TRAINING BAR - Neon Cyan with Glow Effect
+        # -----------------------------------------------------------------
+        # Outer glow layer (slightly larger, transparent)
         fig.add_trace(go.Bar(
-            x=[(fold.train_end - fold.train_start).days],
-            y=[f"Fold {fold.fold_idx + 1}"],
+            x=[train_days + 4],
+            y=[fold_label],
             orientation='h',
-            base=[(fold.train_start - min_date).days],
-            name=f"Train (Fold {fold.fold_idx + 1})",
-            marker=dict(color=train_color),
-            text=f"Train: {fold.n_train}",
+            base=[train_base - 2],
+            marker=dict(
+                color=train_glow,
+                line=dict(width=0)
+            ),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+
+        # Main training bar with gradient effect
+        fig.add_trace(go.Bar(
+            x=[train_days],
+            y=[fold_label],
+            orientation='h',
+            base=[train_base],
+            name="Training Set" if fold.fold_idx == 0 else None,
+            marker=dict(
+                color=train_fill,
+                line=dict(color=train_line, width=2),
+                pattern=dict(shape="", fillmode="replace")
+            ),
+            text=f"<b>{fold.n_train:,}</b> samples",
             textposition="inside",
+            textfont=dict(
+                color="white",
+                size=11,
+                family="Segoe UI, sans-serif"
+            ),
             showlegend=(fold.fold_idx == 0),
             legendgroup="train",
             hovertemplate=(
-                f"<b>Fold {fold.fold_idx + 1} - Training</b><br>"
-                f"Start: {fold.train_start.strftime('%Y-%m-%d')}<br>"
-                f"End: {fold.train_end.strftime('%Y-%m-%d')}<br>"
-                f"Samples: {fold.n_train}<extra></extra>"
+                f"<b style='color:#22d3ee'>▶ TRAINING SET</b><br>"
+                f"<b>Fold {fold.fold_idx + 1}</b><br><br>"
+                f"📅 Period: {fold.train_start.strftime('%b %d, %Y')} → {fold.train_end.strftime('%b %d, %Y')}<br>"
+                f"📊 Samples: <b>{fold.n_train:,}</b><br>"
+                f"⏱️ Duration: {train_days} days"
+                f"<extra></extra>"
             )
         ))
 
-        # Validation bar
+        # -----------------------------------------------------------------
+        # VALIDATION BAR - Neon Magenta with Glow Effect
+        # -----------------------------------------------------------------
+        # Outer glow layer
         fig.add_trace(go.Bar(
-            x=[(fold.val_end - fold.val_start).days],
-            y=[f"Fold {fold.fold_idx + 1}"],
+            x=[val_days + 4],
+            y=[fold_label],
             orientation='h',
-            base=[(fold.val_start - min_date).days],
-            name=f"Validation (Fold {fold.fold_idx + 1})",
-            marker=dict(color=val_color),
-            text=f"Val: {fold.n_val}",
+            base=[val_base - 2],
+            marker=dict(
+                color=val_glow,
+                line=dict(width=0)
+            ),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+
+        # Main validation bar
+        fig.add_trace(go.Bar(
+            x=[val_days],
+            y=[fold_label],
+            orientation='h',
+            base=[val_base],
+            name="Validation Set" if fold.fold_idx == 0 else None,
+            marker=dict(
+                color=val_fill,
+                line=dict(color=val_line, width=2)
+            ),
+            text=f"<b>{fold.n_val:,}</b>",
             textposition="inside",
+            textfont=dict(
+                color="white",
+                size=11,
+                family="Segoe UI, sans-serif"
+            ),
             showlegend=(fold.fold_idx == 0),
             legendgroup="val",
             hovertemplate=(
-                f"<b>Fold {fold.fold_idx + 1} - Validation</b><br>"
-                f"Start: {fold.val_start.strftime('%Y-%m-%d')}<br>"
-                f"End: {fold.val_end.strftime('%Y-%m-%d')}<br>"
-                f"Samples: {fold.n_val}<extra></extra>"
+                f"<b style='color:#ec4899'>▶ VALIDATION SET</b><br>"
+                f"<b>Fold {fold.fold_idx + 1}</b><br><br>"
+                f"📅 Period: {fold.val_start.strftime('%b %d, %Y')} → {fold.val_end.strftime('%b %d, %Y')}<br>"
+                f"📊 Samples: <b>{fold.n_val:,}</b><br>"
+                f"⏱️ Duration: {val_days} days"
+                f"<extra></extra>"
             )
         ))
 
-    # Update layout
+    # =========================================================================
+    # PREMIUM LAYOUT STYLING
+    # =========================================================================
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16)),
-        barmode='overlay',
-        xaxis=dict(
-            title="Days from Start",
-            showgrid=True,
-            gridcolor="rgba(128,128,128,0.2)"
+        title=dict(
+            text=f"<b>{title}</b>",
+            font=dict(
+                size=18,
+                color="#22d3ee",
+                family="Segoe UI, sans-serif"
+            ),
+            x=0.5,
+            xanchor="center"
         ),
+        barmode='overlay',
+
+        # X-Axis - Futuristic styling
+        xaxis=dict(
+            title=dict(
+                text="<b>TIMELINE (DAYS)</b>",
+                font=dict(size=11, color="#94a3b8")
+            ),
+            showgrid=True,
+            gridcolor=grid_color,
+            gridwidth=1,
+            zeroline=False,
+            showline=True,
+            linecolor=axis_line_color,
+            linewidth=1,
+            tickfont=dict(color="#94a3b8", size=10),
+            range=[-5, total_days + 20]
+        ),
+
+        # Y-Axis - Fold labels
         yaxis=dict(
             title="",
             categoryorder='array',
-            categoryarray=[f"Fold {i + 1}" for i in range(len(folds) - 1, -1, -1)]
+            categoryarray=[f"FOLD {i + 1}" for i in range(len(folds) - 1, -1, -1)],
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor=axis_line_color,
+            linewidth=1,
+            tickfont=dict(
+                color="#22d3ee",
+                size=12,
+                family="Segoe UI, sans-serif"
+            )
         ),
+
+        # Legend - Horizontal, top-aligned
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=1.08,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(color="#e2e8f0", size=11),
+            bgcolor="rgba(15, 23, 42, 0.8)",
+            bordercolor="rgba(34, 211, 238, 0.3)",
+            borderwidth=1
         ),
-        height=max(300, 60 * len(folds) + 100),
+
+        # Chart dimensions
+        height=max(350, 70 * len(folds) + 120),
+        margin=dict(l=80, r=40, t=80, b=80),
+
+        # Dark futuristic background
         template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(15, 23, 42, 0.95)",
+        plot_bgcolor="rgba(15, 23, 42, 0.8)",
+
+        # Hover styling
+        hoverlabel=dict(
+            bgcolor="rgba(15, 23, 42, 0.95)",
+            bordercolor="rgba(34, 211, 238, 0.5)",
+            font=dict(color="#e2e8f0", size=12)
+        )
     )
 
-    # Add annotation with date range
+    # =========================================================================
+    # ANNOTATIONS - Data Range & Stats
+    # =========================================================================
+    # Data range annotation (bottom)
     fig.add_annotation(
-        x=0.5, y=-0.15,
+        x=0.5, y=-0.18,
         xref="paper", yref="paper",
-        text=f"Data range: {min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}",
+        text=f"<b>DATA RANGE:</b> {min_date.strftime('%b %d, %Y')} → {max_date.strftime('%b %d, %Y')} · <b>{total_days:,} days</b>",
         showarrow=False,
-        font=dict(size=11, color="gray")
+        font=dict(size=11, color="#94a3b8")
+    )
+
+    # Expanding window indicator (top-right)
+    fig.add_annotation(
+        x=1.0, y=1.12,
+        xref="paper", yref="paper",
+        text="<b>◈ EXPANDING WINDOW CV</b>",
+        showarrow=False,
+        font=dict(size=10, color="#22d3ee"),
+        xanchor="right"
+    )
+
+    # Add vertical line at timeline start
+    fig.add_vline(
+        x=0,
+        line=dict(color="rgba(34, 211, 238, 0.4)", width=1, dash="dot"),
+        annotation_text="START",
+        annotation_font=dict(color="#22d3ee", size=9),
+        annotation_position="top"
     )
 
     return fig
