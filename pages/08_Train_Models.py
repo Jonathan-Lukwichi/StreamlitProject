@@ -1380,11 +1380,19 @@ def save_optimized_model_to_disk(
             if pipeline is None:
                 continue
 
-            filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
+            # Determine correct extension based on model type
+            # Keras models (LSTM, ANN) need .keras extension
+            # XGBoost/sklearn models need .pkl extension
+            model_name_lower = model_name.lower()
+            is_keras_model = ("lstm" in model_name_lower or "ann" in model_name_lower)
 
-            if hasattr(pipeline, 'save'):
+            if is_keras_model and hasattr(pipeline, 'save'):
+                # Keras models - use .keras extension
+                filepath = os.path.join(model_dir, f"horizon_{h}.keras")
                 pipeline.save(filepath)
             else:
+                # XGBoost/sklearn models - use .pkl extension
+                filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
                 joblib.dump(pipeline, filepath)
 
             saved_paths[f"horizon_{h}"] = filepath
