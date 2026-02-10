@@ -239,38 +239,75 @@ def _render_donut_charts(dff):
 
 
 def _render_weather_line_graphs(dff):
-    """Render clean line graphs for weather impact analysis with grid background."""
+    """Render enhanced line graphs for weather impact analysis with filled areas and trend lines."""
     st.markdown("#### 📈 Weather Trend Analysis")
-    st.caption("Clean line graphs showing how temperature and wind affect patient arrivals")
+    st.caption("Line graphs showing how temperature and wind correlate with patient arrivals")
 
     c1, c2 = st.columns(2)
 
     # Temperature vs Arrivals Line Graph
     with c1:
         if "Average_Temp" in dff.columns:
-            # Group by temperature bins and calculate mean arrivals
             temp_data = dff.dropna(subset=["Average_Temp", "Target_1"]).copy()
             if len(temp_data) > 0:
-                temp_data["temp_bin"] = pd.cut(temp_data["Average_Temp"], bins=15)
+                # Convert Kelvin to Celsius if needed (detect by range)
+                temp_values = temp_data["Average_Temp"]
+                if temp_values.mean() > 100:  # Likely Kelvin
+                    temp_data["temp_display"] = temp_data["Average_Temp"] - 273.15
+                    temp_unit = "°C"
+                else:
+                    temp_data["temp_display"] = temp_data["Average_Temp"]
+                    temp_unit = "°C"
+
+                # Bin and aggregate
+                temp_data["temp_bin"] = pd.cut(temp_data["temp_display"], bins=12)
                 temp_agg = temp_data.groupby("temp_bin", observed=True).agg({
-                    "Average_Temp": "mean",
+                    "temp_display": "mean",
                     "Target_1": "mean"
                 }).reset_index().dropna()
-                temp_agg = temp_agg.sort_values("Average_Temp")
+                temp_agg = temp_agg.sort_values("temp_display")
 
-                if len(temp_agg) > 0:
-                    fig = px.line(temp_agg, x="Average_Temp", y="Target_1",
-                                 markers=True,
-                                 title="Avg Arrivals by Temperature",
-                                 labels={"Average_Temp": "Average Temperature", "Target_1": "Average Arrivals"})
-                    fig.update_traces(
-                        line=dict(color=PRIMARY_COLOR, width=2.5),
-                        marker=dict(size=10, color=PRIMARY_COLOR, line=dict(width=2, color="white")),
-                        hovertemplate="<b>Temp: %{x:.1f}</b><br>Arrivals: %{y:.1f}<extra></extra>"
+                if len(temp_agg) > 2:
+                    # Calculate correlation
+                    corr = temp_agg["temp_display"].corr(temp_agg["Target_1"])
+
+                    # Create figure with filled area
+                    fig = go.Figure()
+
+                    # Add filled area trace
+                    fig.add_trace(go.Scatter(
+                        x=temp_agg["temp_display"],
+                        y=temp_agg["Target_1"],
+                        fill='tozeroy',
+                        fillcolor='rgba(59, 130, 246, 0.15)',
+                        line=dict(color=PRIMARY_COLOR, width=3),
+                        mode='lines+markers',
+                        marker=dict(size=10, color=PRIMARY_COLOR,
+                                   line=dict(width=2, color='white')),
+                        name='Arrivals',
+                        hovertemplate=f"<b>Temp: %{{x:.1f}}{temp_unit}</b><br>Arrivals: %{{y:.1f}}<extra></extra>"
+                    ))
+
+                    # Add trend line
+                    z = np.polyfit(temp_agg["temp_display"], temp_agg["Target_1"], 1)
+                    p = np.poly1d(z)
+                    fig.add_trace(go.Scatter(
+                        x=temp_agg["temp_display"],
+                        y=p(temp_agg["temp_display"]),
+                        mode='lines',
+                        line=dict(color='rgba(255,255,255,0.5)', width=2, dash='dash'),
+                        name='Trend',
+                        hoverinfo='skip'
+                    ))
+
+                    fig.update_layout(
+                        title=dict(text=f"Arrivals by Temperature (r = {corr:.2f})",
+                                  font=dict(size=14, color=TEXT_COLOR)),
+                        height=420,
+                        showlegend=False
                     )
-                    fig.update_xaxes(rangemode="tozero", title_text="Average Temperature")
-                    fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
-                    fig.update_layout(height=400)
+                    fig.update_xaxes(title_text=f"Temperature ({temp_unit})")
+                    fig.update_yaxes(title_text="Average Arrivals", rangemode="tozero")
                     st.plotly_chart(add_grid(fig), use_container_width=True)
                 else:
                     st.info("Not enough temperature data for trend analysis.")
@@ -284,26 +321,55 @@ def _render_weather_line_graphs(dff):
         if "Average_wind" in dff.columns:
             wind_data = dff.dropna(subset=["Average_wind", "Target_1"]).copy()
             if len(wind_data) > 0:
-                wind_data["wind_bin"] = pd.cut(wind_data["Average_wind"], bins=15)
+                # Bin and aggregate
+                wind_data["wind_bin"] = pd.cut(wind_data["Average_wind"], bins=12)
                 wind_agg = wind_data.groupby("wind_bin", observed=True).agg({
                     "Average_wind": "mean",
                     "Target_1": "mean"
                 }).reset_index().dropna()
                 wind_agg = wind_agg.sort_values("Average_wind")
 
-                if len(wind_agg) > 0:
-                    fig = px.line(wind_agg, x="Average_wind", y="Target_1",
-                                 markers=True,
-                                 title="Avg Arrivals by Wind Speed",
-                                 labels={"Average_wind": "Average Wind", "Target_1": "Average Arrivals"})
-                    fig.update_traces(
-                        line=dict(color=SECONDARY_COLOR, width=2.5),
-                        marker=dict(size=10, color=SECONDARY_COLOR, line=dict(width=2, color="white")),
-                        hovertemplate="<b>Wind: %{x:.1f}</b><br>Arrivals: %{y:.1f}<extra></extra>"
+                if len(wind_agg) > 2:
+                    # Calculate correlation
+                    corr = wind_agg["Average_wind"].corr(wind_agg["Target_1"])
+
+                    # Create figure with filled area
+                    fig = go.Figure()
+
+                    # Add filled area trace
+                    fig.add_trace(go.Scatter(
+                        x=wind_agg["Average_wind"],
+                        y=wind_agg["Target_1"],
+                        fill='tozeroy',
+                        fillcolor='rgba(34, 211, 238, 0.15)',
+                        line=dict(color=SECONDARY_COLOR, width=3),
+                        mode='lines+markers',
+                        marker=dict(size=10, color=SECONDARY_COLOR,
+                                   line=dict(width=2, color='white')),
+                        name='Arrivals',
+                        hovertemplate="<b>Wind: %{x:.1f} m/s</b><br>Arrivals: %{y:.1f}<extra></extra>"
+                    ))
+
+                    # Add trend line
+                    z = np.polyfit(wind_agg["Average_wind"], wind_agg["Target_1"], 1)
+                    p = np.poly1d(z)
+                    fig.add_trace(go.Scatter(
+                        x=wind_agg["Average_wind"],
+                        y=p(wind_agg["Average_wind"]),
+                        mode='lines',
+                        line=dict(color='rgba(255,255,255,0.5)', width=2, dash='dash'),
+                        name='Trend',
+                        hoverinfo='skip'
+                    ))
+
+                    fig.update_layout(
+                        title=dict(text=f"Arrivals by Wind Speed (r = {corr:.2f})",
+                                  font=dict(size=14, color=TEXT_COLOR)),
+                        height=420,
+                        showlegend=False
                     )
-                    fig.update_xaxes(rangemode="tozero", title_text="Average Wind Speed")
-                    fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
-                    fig.update_layout(height=400)
+                    fig.update_xaxes(title_text="Wind Speed (m/s)")
+                    fig.update_yaxes(title_text="Average Arrivals", rangemode="tozero")
                     st.plotly_chart(add_grid(fig), use_container_width=True)
                 else:
                     st.info("Not enough wind data for trend analysis.")
