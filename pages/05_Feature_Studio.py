@@ -763,14 +763,6 @@ def page_feature_engineering():
     with tab_cv:
         render_tab_header("Time Series Cross-Validation", "🔄")
 
-        st.info("""
-        **Why Time Series CV?** Standard k-fold CV randomly shuffles data, which causes
-        data leakage in time series. Time series CV uses expanding windows where training
-        data always precedes validation data, mimicking real-world forecasting.
-
-        *Reference: Bergmeir & Benítez (2012) - "On the use of cross-validation for time series predictor evaluation"*
-        """)
-
         if not CV_AVAILABLE:
             st.warning("⚠️ Cross-validation module not available. Please check installation.")
         else:
