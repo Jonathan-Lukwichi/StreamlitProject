@@ -233,16 +233,49 @@ def get_remote_path(local_path: str, model_type: str) -> str:
     """
     filename = os.path.basename(local_path)
 
-    # Feature Studio transformers → "transformers" folder
-    if model_type == "preprocessor" and any(
+    # === Preprocessors / Transformers ===
+    if model_type == "preprocessor" or any(
         x in filename.lower() for x in ["ohe_", "scaler_", "scale_cols_", "encoder_"]
     ):
         return f"transformers/{filename}"
 
-    # Feature Selection config → "feature_selection" folder
+    # === Feature Selection ===
     if model_type == "feature_selection":
         return f"feature_selection/{filename}"
 
+    # === Hybrid Models ===
+    if model_type == "hybrid_lstm_xgb":
+        return f"hybrids/lstm_xgb/{filename}"
+    elif model_type == "hybrid_lstm_sarimax":
+        return f"hybrids/lstm_sarimax/{filename}"
+    elif model_type == "hybrid_lstm_ann":
+        return f"hybrids/lstm_ann/{filename}"
+    elif model_type == "hybrid":
+        return f"hybrids/{filename}"
+
+    # === Optimized Models ===
+    if model_type == "xgboost_optimized":
+        return f"optimized/xgboost/{filename}"
+    elif model_type == "lstm_optimized":
+        return f"optimized/lstm/{filename}"
+    elif model_type == "ann_optimized":
+        return f"optimized/ann/{filename}"
+    elif model_type == "optimized":
+        return f"optimized/{filename}"
+
+    # === Standard ML Models ===
+    if model_type == "xgboost":
+        return f"xgboost/{filename}"
+    elif model_type == "lstm":
+        return f"lstm/{filename}"
+    elif model_type == "ann":
+        return f"ann/{filename}"
+    elif model_type == "arima":
+        return f"arima/{filename}"
+    elif model_type == "sarimax":
+        return f"sarimax/{filename}"
+
+    # === Fallback to pattern matching ===
     folder = MODEL_FILE_PATTERNS.get(model_type, {}).get("folder", "other")
     return f"{folder}/{filename}"
 
