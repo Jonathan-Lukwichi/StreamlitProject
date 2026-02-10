@@ -237,6 +237,191 @@ def _render_donut_charts(dff):
         else:
             st.info("Could not derive month names for pie chart.")
 
+
+def _render_weather_line_graphs(dff):
+    """Render clean line graphs for weather impact analysis with grid background."""
+    st.markdown("#### 📈 Weather Trend Analysis")
+    st.caption("Clean line graphs showing how temperature and wind affect patient arrivals")
+
+    c1, c2 = st.columns(2)
+
+    # Temperature vs Arrivals Line Graph
+    with c1:
+        if "Average_Temp" in dff.columns:
+            # Group by temperature bins and calculate mean arrivals
+            temp_data = dff.dropna(subset=["Average_Temp", "Target_1"]).copy()
+            if len(temp_data) > 0:
+                temp_data["temp_bin"] = pd.cut(temp_data["Average_Temp"], bins=15)
+                temp_agg = temp_data.groupby("temp_bin", observed=True).agg({
+                    "Average_Temp": "mean",
+                    "Target_1": "mean"
+                }).reset_index().dropna()
+                temp_agg = temp_agg.sort_values("Average_Temp")
+
+                if len(temp_agg) > 0:
+                    fig = px.line(temp_agg, x="Average_Temp", y="Target_1",
+                                 markers=True,
+                                 title="Avg Arrivals by Temperature",
+                                 labels={"Average_Temp": "Average Temperature", "Target_1": "Average Arrivals"})
+                    fig.update_traces(
+                        line=dict(color=PRIMARY_COLOR, width=2.5),
+                        marker=dict(size=10, color=PRIMARY_COLOR, line=dict(width=2, color="white")),
+                        hovertemplate="<b>Temp: %{x:.1f}</b><br>Arrivals: %{y:.1f}<extra></extra>"
+                    )
+                    fig.update_xaxes(rangemode="tozero", title_text="Average Temperature")
+                    fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
+                    fig.update_layout(height=400)
+                    st.plotly_chart(add_grid(fig), use_container_width=True)
+                else:
+                    st.info("Not enough temperature data for trend analysis.")
+            else:
+                st.info("No valid temperature data available.")
+        else:
+            st.info("Average_Temp column not found in data.")
+
+    # Wind vs Arrivals Line Graph
+    with c2:
+        if "Average_wind" in dff.columns:
+            wind_data = dff.dropna(subset=["Average_wind", "Target_1"]).copy()
+            if len(wind_data) > 0:
+                wind_data["wind_bin"] = pd.cut(wind_data["Average_wind"], bins=15)
+                wind_agg = wind_data.groupby("wind_bin", observed=True).agg({
+                    "Average_wind": "mean",
+                    "Target_1": "mean"
+                }).reset_index().dropna()
+                wind_agg = wind_agg.sort_values("Average_wind")
+
+                if len(wind_agg) > 0:
+                    fig = px.line(wind_agg, x="Average_wind", y="Target_1",
+                                 markers=True,
+                                 title="Avg Arrivals by Wind Speed",
+                                 labels={"Average_wind": "Average Wind", "Target_1": "Average Arrivals"})
+                    fig.update_traces(
+                        line=dict(color=SECONDARY_COLOR, width=2.5),
+                        marker=dict(size=10, color=SECONDARY_COLOR, line=dict(width=2, color="white")),
+                        hovertemplate="<b>Wind: %{x:.1f}</b><br>Arrivals: %{y:.1f}<extra></extra>"
+                    )
+                    fig.update_xaxes(rangemode="tozero", title_text="Average Wind Speed")
+                    fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
+                    fig.update_layout(height=400)
+                    st.plotly_chart(add_grid(fig), use_container_width=True)
+                else:
+                    st.info("Not enough wind data for trend analysis.")
+            else:
+                st.info("No valid wind data available.")
+        else:
+            st.info("Average_wind column not found in data.")
+
+
+def _render_holiday_weekend_impact(dff):
+    """Render histograms for holiday and weekend impact analysis."""
+    c1, c2 = st.columns(2)
+
+    # Holiday Impact Histogram
+    with c1:
+        st.markdown("##### 🎄 Holiday Impact on Arrivals")
+        holiday_data = []
+
+        # Check for holiday columns
+        holiday_col = None
+        if "is_holiday" in dff.columns:
+            holiday_col = "is_holiday"
+        elif "Holiday" in dff.columns:
+            holiday_col = "Holiday"
+
+        holiday_prev_col = "Holiday_prev" if "Holiday_prev" in dff.columns else None
+
+        if holiday_col:
+            # Normal days (not holiday, not holiday_prev)
+            normal_mask = dff[holiday_col] == 0
+            if holiday_prev_col:
+                normal_mask = normal_mask & (dff[holiday_prev_col] == 0)
+            normal_avg = dff.loc[normal_mask, "Target_1"].mean()
+            if pd.notna(normal_avg):
+                holiday_data.append({"Category": "Normal Day", "Avg Arrivals": normal_avg})
+
+            # Holiday days
+            holiday_avg = dff.loc[dff[holiday_col] == 1, "Target_1"].mean()
+            if pd.notna(holiday_avg):
+                holiday_data.append({"Category": "Holiday", "Avg Arrivals": holiday_avg})
+
+            # Day before holiday
+            if holiday_prev_col:
+                holiday_prev_avg = dff.loc[dff[holiday_prev_col] == 1, "Target_1"].mean()
+                if pd.notna(holiday_prev_avg):
+                    holiday_data.append({"Category": "Day Before Holiday", "Avg Arrivals": holiday_prev_avg})
+
+            if holiday_data:
+                hol_df = pd.DataFrame(holiday_data)
+                fig = px.bar(hol_df, x="Category", y="Avg Arrivals",
+                            color="Category",
+                            color_discrete_map={
+                                "Normal Day": PRIMARY_COLOR,
+                                "Holiday": DANGER_COLOR,
+                                "Day Before Holiday": WARNING_COLOR
+                            },
+                            title="Average Arrivals: Holiday Impact")
+                fig.update_layout(showlegend=False, height=400)
+                fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
+                fig.update_xaxes(title_text="Category")
+                st.plotly_chart(add_grid(fig), use_container_width=True)
+            else:
+                st.info("No valid holiday data for analysis.")
+        else:
+            st.info("Holiday columns (is_holiday/Holiday) not found in data.")
+
+    # Weekend Impact Histogram
+    with c2:
+        st.markdown("##### 📅 Weekend Impact on Arrivals")
+        weekend_data = []
+
+        dow_col = "day_of_week" if "day_of_week" in dff.columns else None
+        weekend_col = "is_weekend" if "is_weekend" in dff.columns else None
+
+        if dow_col:
+            # Weekday (Tue-Thu, day_of_week 2-4) - excluding Monday and Friday
+            weekday_avg = dff.loc[dff[dow_col].isin([2, 3, 4]), "Target_1"].mean()
+            if pd.notna(weekday_avg):
+                weekend_data.append({"Category": "Mid-Week (Tue-Thu)", "Avg Arrivals": weekday_avg})
+
+            # Friday (before weekend, day_of_week = 5)
+            friday_avg = dff.loc[dff[dow_col] == 5, "Target_1"].mean()
+            if pd.notna(friday_avg):
+                weekend_data.append({"Category": "Friday (Pre-Weekend)", "Avg Arrivals": friday_avg})
+
+            # Weekend (Sat-Sun, day_of_week 6-7)
+            weekend_avg = dff.loc[dff[dow_col].isin([6, 7]), "Target_1"].mean()
+            if pd.notna(weekend_avg):
+                weekend_data.append({"Category": "Weekend (Sat-Sun)", "Avg Arrivals": weekend_avg})
+
+            # Monday (after weekend, day_of_week = 1)
+            monday_avg = dff.loc[dff[dow_col] == 1, "Target_1"].mean()
+            if pd.notna(monday_avg):
+                weekend_data.append({"Category": "Monday (Post-Weekend)", "Avg Arrivals": monday_avg})
+
+        elif weekend_col:
+            # Fallback to simple weekday/weekend split
+            weekday_avg = dff.loc[dff[weekend_col] == 0, "Target_1"].mean()
+            weekend_avg = dff.loc[dff[weekend_col] == 1, "Target_1"].mean()
+            if pd.notna(weekday_avg):
+                weekend_data.append({"Category": "Weekday", "Avg Arrivals": weekday_avg})
+            if pd.notna(weekend_avg):
+                weekend_data.append({"Category": "Weekend", "Avg Arrivals": weekend_avg})
+
+        if weekend_data:
+            wknd_df = pd.DataFrame(weekend_data)
+            fig = px.bar(wknd_df, x="Category", y="Avg Arrivals",
+                        color="Category",
+                        color_discrete_sequence=[PRIMARY_COLOR, WARNING_COLOR, DANGER_COLOR, SECONDARY_COLOR],
+                        title="Average Arrivals: Weekend Impact")
+            fig.update_layout(showlegend=False, height=400)
+            fig.update_yaxes(rangemode="tozero", title_text="Average Arrivals")
+            fig.update_xaxes(title_text="Category")
+            st.plotly_chart(add_grid(fig), use_container_width=True)
+        else:
+            st.info("Weekend/day_of_week columns not found in data.")
+
+
 def _safe_get_decomp_xy(component):
     """Safely extract x (index) and y (values) from a decomposition component."""
     if component is None:
