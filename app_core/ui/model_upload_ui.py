@@ -222,8 +222,8 @@ def _detect_model_type_from_path(filepath: str) -> str:
     elif parent_folder == "sarimax":
         return "sarimax"
 
-    # Optimized models - check grandparent folder
-    elif parent_folder.startswith("xgboost_") or "xgboost" in parent_folder:
+    # Optimized models - require grandparent folder to be "optimized"
+    elif parent_folder.startswith("xgboost_") and grandparent_folder == "optimized":
         return "xgboost_optimized"
     elif parent_folder.startswith("lstm_") and grandparent_folder == "optimized":
         return "lstm_optimized"
