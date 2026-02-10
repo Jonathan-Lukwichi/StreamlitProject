@@ -1396,6 +1396,122 @@ def save_optimized_model_to_disk(
     return saved_paths
 
 
+def save_hybrid_model_to_disk(
+    hybrid_type: str,
+    artifacts: object,
+    config: dict = None,
+    artifact_dir: str = "pipeline_artifacts/hybrids"
+) -> dict:
+    """
+    Save trained hybrid model artifacts to disk for Cloud Sync.
+
+    Args:
+        hybrid_type: Type of hybrid ("lstm_xgb", "lstm_sarimax", "lstm_ann")
+        artifacts: Hybrid model artifacts from training (has stage1_model, stage2_model, metrics)
+        config: Training configuration (optional)
+        artifact_dir: Base directory for saving artifacts
+
+    Returns:
+        dict: Mapping of saved components to file paths
+    """
+    import os
+    import json
+
+    saved_paths = {}
+
+    # Create hybrid-specific directory
+    model_dir = os.path.join(artifact_dir, hybrid_type.lower())
+    os.makedirs(model_dir, exist_ok=True)
+
+    try:
+        # 1. Save Stage 1 model (LSTM)
+        if hasattr(artifacts, 'stage1_model') and artifacts.stage1_model is not None:
+            stage1_path = os.path.join(model_dir, "stage1_lstm.keras")
+            try:
+                if hasattr(artifacts.stage1_model, 'model'):
+                    artifacts.stage1_model.model.save(stage1_path)
+                    saved_paths["stage1_lstm"] = stage1_path
+                    logger.info(f"Saved Stage 1 LSTM to {stage1_path}")
+            except Exception as e:
+                logger.warning(f"Could not save Stage 1 model: {e}")
+
+        # 2. Save Stage 2 model (XGBoost, SARIMAX, or ANN)
+        if hasattr(artifacts, 'stage2_model') and artifacts.stage2_model is not None:
+            if "xgb" in hybrid_type.lower():
+                stage2_path = os.path.join(model_dir, "stage2_xgboost.pkl")
+                try:
+                    joblib.dump(artifacts.stage2_model, stage2_path)
+                    saved_paths["stage2_xgboost"] = stage2_path
+                    logger.info(f"Saved Stage 2 XGBoost to {stage2_path}")
+                except Exception as e:
+                    logger.warning(f"Could not save Stage 2 XGBoost: {e}")
+            elif "sarimax" in hybrid_type.lower():
+                stage2_path = os.path.join(model_dir, "stage2_sarimax.pkl")
+                try:
+                    joblib.dump(artifacts.stage2_model, stage2_path)
+                    saved_paths["stage2_sarimax"] = stage2_path
+                    logger.info(f"Saved Stage 2 SARIMAX to {stage2_path}")
+                except Exception as e:
+                    logger.warning(f"Could not save Stage 2 SARIMAX: {e}")
+            elif "ann" in hybrid_type.lower():
+                stage2_path = os.path.join(model_dir, "stage2_ann.keras")
+                try:
+                    if hasattr(artifacts.stage2_model, 'model'):
+                        artifacts.stage2_model.model.save(stage2_path)
+                    else:
+                        artifacts.stage2_model.save(stage2_path)
+                    saved_paths["stage2_ann"] = stage2_path
+                    logger.info(f"Saved Stage 2 ANN to {stage2_path}")
+                except Exception as e:
+                    logger.warning(f"Could not save Stage 2 ANN: {e}")
+
+        # 3. Save metrics as JSON
+        if hasattr(artifacts, 'metrics') and artifacts.metrics:
+            metrics_path = os.path.join(model_dir, "metrics.json")
+            try:
+                with open(metrics_path, 'w') as f:
+                    json.dump(artifacts.metrics, f, indent=2, default=str)
+                saved_paths["metrics"] = metrics_path
+                logger.info(f"Saved metrics to {metrics_path}")
+            except Exception as e:
+                logger.warning(f"Could not save metrics: {e}")
+
+        # 4. Save config if provided
+        if config:
+            config_path = os.path.join(model_dir, "config.json")
+            try:
+                with open(config_path, 'w') as f:
+                    # Convert numpy types to Python types for JSON serialization
+                    clean_config = {}
+                    for k, v in config.items():
+                        if hasattr(v, 'item'):  # numpy scalar
+                            clean_config[k] = v.item()
+                        elif isinstance(v, (list, tuple)):
+                            clean_config[k] = [x.item() if hasattr(x, 'item') else x for x in v]
+                        else:
+                            clean_config[k] = v
+                    json.dump(clean_config, f, indent=2, default=str)
+                saved_paths["config"] = config_path
+            except Exception as e:
+                logger.warning(f"Could not save config: {e}")
+
+        # 5. Save predictions if available
+        if hasattr(artifacts, 'predictions') and artifacts.predictions is not None:
+            predictions_path = os.path.join(model_dir, "predictions.csv")
+            try:
+                if hasattr(artifacts.predictions, 'to_csv'):
+                    artifacts.predictions.to_csv(predictions_path, index=False)
+                    saved_paths["predictions"] = predictions_path
+                    logger.info(f"Saved predictions to {predictions_path}")
+            except Exception as e:
+                logger.warning(f"Could not save predictions: {e}")
+
+    except Exception as e:
+        logger.error(f"Error saving hybrid model {hybrid_type}: {e}")
+
+    return saved_paths
+
+
 # =============================================================================
 # CLINICAL CATEGORY DETECTION & RESIDUAL CAPTURE
 # =============================================================================
