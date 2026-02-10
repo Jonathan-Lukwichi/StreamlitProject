@@ -10158,6 +10158,15 @@ def _page_hybrid_lstm_ann():
 
                 st.success("✅ **LSTM-ANN Hybrid trained successfully!**")
 
+                # ===== SAVE HYBRID MODEL TO DISK FOR CLOUD SYNC =====
+                try:
+                    saved_paths = save_hybrid_model_to_disk("lstm_ann", artifacts, config)
+                    if saved_paths:
+                        st.success(f"💾 Saved {len(saved_paths)} hybrid model file(s) to `pipeline_artifacts/hybrids/lstm_ann/`")
+                except Exception as save_err:
+                    st.warning(f"⚠️ Could not save hybrid model files: {save_err}")
+                # ====================================================
+
                 # Display Metrics
                 st.markdown("### 🏆 Hybrid Model Performance")
 
