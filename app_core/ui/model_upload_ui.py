@@ -363,29 +363,48 @@ def render_local_models_table():
 
         Train models first using the other tabs:
         - **Benchmarks Tab**: Quick model comparison
-        - **Machine Learning Tab**: XGBoost, LSTM, ANN
+        - **Machine Learning Tab**: XGBoost, LSTM, ANN (horizons 1-7)
         - **Hyperparameter Tab**: Optuna optimization
-        - **Hybrid Models Tab**: LSTM+XGBoost, LSTM+SARIMAX
+        - **Hybrid Models Tab**: LSTM+XGBoost, LSTM+SARIMAX, LSTM+ANN
 
         After training, model files will appear here for upload.
         """)
         return
 
+    # Count models by type
+    type_counts = {}
+    for m in models:
+        t = m["model_type"]
+        type_counts[t] = type_counts.get(t, 0) + 1
+
     st.markdown(f"**Found {len(models)} model file(s):**")
 
-    # Create a table
+    # Show summary by type
+    summary_parts = []
+    for model_type, count in sorted(type_counts.items()):
+        desc = MODEL_FILE_PATTERNS.get(model_type, {}).get("description", model_type)
+        summary_parts.append(f"{desc}: {count}")
+    if summary_parts:
+        st.caption(" | ".join(summary_parts))
+
+    # Create a table with better type descriptions and remote path preview
     import pandas as pd
-    df = pd.DataFrame(models)
-    df["size_mb"] = df["size_mb"].round(2)
-    df = df.rename(columns={
-        "filename": "Filename",
-        "model_type": "Type",
-        "size_mb": "Size (MB)",
-        "local_path": "Path"
-    })
+    table_data = []
+    for m in models:
+        model_type = m["model_type"]
+        desc = MODEL_FILE_PATTERNS.get(model_type, {}).get("description", model_type)
+        remote_path = get_remote_path(m["local_path"], model_type)
+        table_data.append({
+            "Filename": m["filename"],
+            "Type": desc,
+            "Size (MB)": round(m["size_mb"], 2),
+            "Remote Path": remote_path
+        })
+
+    df = pd.DataFrame(table_data)
 
     st.dataframe(
-        df[["Filename", "Type", "Size (MB)", "Path"]],
+        df[["Filename", "Type", "Size (MB)", "Remote Path"]],
         use_container_width=True,
         hide_index=True
     )
