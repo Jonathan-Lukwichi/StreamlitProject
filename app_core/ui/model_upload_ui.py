@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Model types and their expected file extensions
 MODEL_FILE_PATTERNS = {
+    # === ML Models ===
     "lstm": {
         "extensions": [".h5", ".keras"],
         "folder": "lstm",
@@ -38,6 +39,7 @@ MODEL_FILE_PATTERNS = {
         "folder": "ann",
         "description": "Artificial Neural Network"
     },
+    # === Statistical Models ===
     "arima": {
         "extensions": [".pkl"],
         "folder": "arima",
@@ -48,15 +50,59 @@ MODEL_FILE_PATTERNS = {
         "folder": "sarimax",
         "description": "SARIMAX Time Series"
     },
+    # === Hybrid Models ===
     "hybrid": {
         "extensions": [".h5", ".pkl", ".keras"],
         "folder": "hybrids",
-        "description": "Hybrid Models (LSTM+XGB, etc.)"
+        "description": "Hybrid Model"
     },
+    "hybrid_lstm_xgb": {
+        "extensions": [".h5", ".pkl", ".keras"],
+        "folder": "hybrids/lstm_xgb",
+        "description": "Hybrid: LSTM → XGBoost"
+    },
+    "hybrid_lstm_sarimax": {
+        "extensions": [".h5", ".pkl", ".keras"],
+        "folder": "hybrids/lstm_sarimax",
+        "description": "Hybrid: LSTM → SARIMAX"
+    },
+    "hybrid_lstm_ann": {
+        "extensions": [".h5", ".keras"],
+        "folder": "hybrids/lstm_ann",
+        "description": "Hybrid: LSTM → ANN"
+    },
+    # === Optimized Models ===
+    "optimized": {
+        "extensions": [".pkl", ".json"],
+        "folder": "optimized",
+        "description": "Optimized Model"
+    },
+    "xgboost_optimized": {
+        "extensions": [".pkl", ".json"],
+        "folder": "optimized/xgboost",
+        "description": "XGBoost (Tuned)"
+    },
+    "lstm_optimized": {
+        "extensions": [".h5", ".keras", ".json"],
+        "folder": "optimized/lstm",
+        "description": "LSTM (Tuned)"
+    },
+    "ann_optimized": {
+        "extensions": [".h5", ".keras", ".json"],
+        "folder": "optimized/ann",
+        "description": "ANN (Tuned)"
+    },
+    # === Preprocessors ===
     "preprocessor": {
         "extensions": [".pkl", ".joblib"],
-        "folder": "preprocessors",
+        "folder": "transformers",
         "description": "Scalers & Preprocessors"
+    },
+    # === Feature Selection ===
+    "feature_selection": {
+        "extensions": [".json", ".csv"],
+        "folder": "feature_selection",
+        "description": "Feature Selection Config"
     }
 }
 
