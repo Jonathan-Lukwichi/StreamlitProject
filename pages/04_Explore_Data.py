@@ -259,7 +259,11 @@ def _render_weather_line_graphs(dff):
                     temp_data["temp_display"] = temp_data["Average_Temp"]
                     temp_unit = "°C"
 
-                # Bin and aggregate
+                # ✅ Calculate correlation on RAW data (not binned - avoids ecological fallacy)
+                corr = temp_data["temp_display"].corr(temp_data["Target_1"])
+                n_obs = len(temp_data)
+
+                # Bin and aggregate for VISUALIZATION only
                 temp_data["temp_bin"] = pd.cut(temp_data["temp_display"], bins=12)
                 temp_agg = temp_data.groupby("temp_bin", observed=True).agg({
                     "temp_display": "mean",
@@ -268,8 +272,6 @@ def _render_weather_line_graphs(dff):
                 temp_agg = temp_agg.sort_values("temp_display")
 
                 if len(temp_agg) > 2:
-                    # Calculate correlation
-                    corr = temp_agg["temp_display"].corr(temp_agg["Target_1"])
 
                     # Create figure with filled area
                     fig = go.Figure()
