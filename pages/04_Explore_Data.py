@@ -367,7 +367,7 @@ def _render_weather_line_graphs(dff):
                     ))
 
                     fig.update_layout(
-                        title=dict(text=f"Arrivals by Wind Speed (r = {corr:.2f})",
+                        title=dict(text=f"Arrivals by Wind Speed (r = {corr:.2f}, n = {n_obs:,})",
                                   font=dict(size=14, color=TEXT_COLOR)),
                         height=420,
                         showlegend=False
