@@ -115,44 +115,109 @@ def find_local_models() -> List[Dict]:
                 if os.path.isfile(filepath):
                     _, ext = os.path.splitext(filename)
                     if ext.lower() in [".h5", ".keras", ".pkl", ".joblib", ".json", ".npy", ".npz", ".csv"]:
+                        # Pass full path to detect model type from parent folder
+                        model_type = _detect_model_type_from_path(filepath)
                         models.append({
                             "filename": filename,
                             "local_path": filepath,
                             "extension": ext.lower(),
                             "size_mb": os.path.getsize(filepath) / (1024 * 1024),
-                            "model_type": _detect_model_type(filename, ext)
+                            "model_type": model_type
                         })
 
     return models
 
 
-def _detect_model_type(filename: str, ext: str) -> str:
-    """Detect model type from filename."""
-    filename_lower = filename.lower()
+def _detect_model_type_from_path(filepath: str) -> str:
+    """
+    Detect model type from the full file path.
+    Uses parent folder name as primary detection method.
 
-    if "lstm_xgb" in filename_lower or "lstm-xgb" in filename_lower:
+    Args:
+        filepath: Full path to the model file
+
+    Returns:
+        Model type string (xgboost, lstm, ann, hybrid, etc.)
+    """
+    # Normalize path separators
+    filepath_normalized = filepath.replace("\\", "/").lower()
+    filename = os.path.basename(filepath).lower()
+    parent_folder = os.path.basename(os.path.dirname(filepath)).lower()
+    grandparent_folder = os.path.basename(os.path.dirname(os.path.dirname(filepath))).lower()
+
+    # === Priority 1: Check parent folder name (most reliable) ===
+
+    # Hybrid models - check for hybrid folder patterns
+    if parent_folder in ["lstm_xgb", "lstm-xgb", "lstm_xgboost"]:
+        return "hybrid_lstm_xgb"
+    elif parent_folder in ["lstm_sarimax", "lstm-sarimax"]:
+        return "hybrid_lstm_sarimax"
+    elif parent_folder in ["lstm_ann", "lstm-ann"]:
+        return "hybrid_lstm_ann"
+    elif parent_folder == "hybrids" or grandparent_folder == "hybrids":
+        # Check filename for specific hybrid type
+        if "lstm_xgb" in filename or "lstm-xgb" in filename:
+            return "hybrid_lstm_xgb"
+        elif "lstm_sarimax" in filename or "lstm-sarimax" in filename:
+            return "hybrid_lstm_sarimax"
+        elif "lstm_ann" in filename or "lstm-ann" in filename:
+            return "hybrid_lstm_ann"
         return "hybrid"
-    elif "lstm_sarimax" in filename_lower or "lstm-sarimax" in filename_lower:
-        return "hybrid"
-    elif "lstm_ann" in filename_lower or "lstm-ann" in filename_lower:
-        return "hybrid"
-    elif "lstm" in filename_lower:
-        return "lstm"
-    elif "xgb" in filename_lower or "xgboost" in filename_lower:
+
+    # ML models - check folder name
+    elif parent_folder == "xgboost":
         return "xgboost"
-    elif "ann" in filename_lower:
+    elif parent_folder == "lstm":
+        return "lstm"
+    elif parent_folder == "ann":
         return "ann"
-    elif "arima" in filename_lower:
+    elif parent_folder == "arima":
         return "arima"
-    elif "sarimax" in filename_lower:
+    elif parent_folder == "sarimax":
         return "sarimax"
-    elif any(x in filename_lower for x in ["scaler", "preprocessor", "ohe_", "scale_cols_", "encoder_"]):
-        return "preprocessor"
-    # Feature selection config files
-    elif "selected_features" in filename_lower or "selection_config" in filename_lower:
+
+    # Optimized models - check grandparent folder
+    elif parent_folder.startswith("xgboost_") or "xgboost" in parent_folder:
+        return "xgboost_optimized"
+    elif parent_folder.startswith("lstm_") and grandparent_folder == "optimized":
+        return "lstm_optimized"
+    elif parent_folder.startswith("ann_") and grandparent_folder == "optimized":
+        return "ann_optimized"
+    elif grandparent_folder == "optimized":
+        return "optimized"
+
+    # Feature selection
+    elif parent_folder == "feature_selection":
         return "feature_selection"
-    else:
-        return "unknown"
+
+    # Transformers/preprocessors
+    elif parent_folder == "saved_transformers" or "transformer" in parent_folder:
+        return "preprocessor"
+
+    # === Priority 2: Check filename patterns (fallback) ===
+
+    if "lstm_xgb" in filename or "lstm-xgb" in filename:
+        return "hybrid_lstm_xgb"
+    elif "lstm_sarimax" in filename or "lstm-sarimax" in filename:
+        return "hybrid_lstm_sarimax"
+    elif "lstm_ann" in filename or "lstm-ann" in filename:
+        return "hybrid_lstm_ann"
+    elif "xgboost" in filename or "xgb" in filename:
+        return "xgboost"
+    elif "lstm" in filename:
+        return "lstm"
+    elif "ann" in filename:
+        return "ann"
+    elif "arima" in filename:
+        return "arima"
+    elif "sarimax" in filename:
+        return "sarimax"
+    elif any(x in filename for x in ["scaler", "preprocessor", "ohe_", "scale_cols_", "encoder_"]):
+        return "preprocessor"
+    elif "selected_features" in filename or "selection_config" in filename:
+        return "feature_selection"
+
+    return "unknown"
 
 
 def get_remote_path(local_path: str, model_type: str) -> str:
