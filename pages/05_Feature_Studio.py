@@ -720,13 +720,6 @@ def page_feature_engineering():
     with tab_split:
         render_tab_header("Configure Train/Validation/Test Split", "📊")
 
-        st.info("""
-        **3-Way Temporal Split:** Proper ML workflow requires separate validation and test sets.
-        - **Train (70%)**: Model learns patterns
-        - **Validation (15%)**: Hyperparameter tuning & early stopping
-        - **Test (15%)**: Final unbiased performance evaluation
-        """)
-
         # 3-way split configuration
         split_col1, split_col2 = st.columns(2)
 
