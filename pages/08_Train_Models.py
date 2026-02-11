@@ -4147,19 +4147,16 @@ def page_hyperparameter_tuning():
             st.metric("Features", len(cfg.get('ml_feature_cols', [])))
 
     # Model Selection
-        st.markdown("### 🤖 Model Selection")
-        from app_core.ui.ml_components import MLUIComponents
-        selected_model_opt = st.selectbox(
-            "Select model to optimize",
-            options=["XGBoost", "LSTM", "ANN"],
-            index=["XGBoost", "LSTM", "ANN"].index(cfg.get("opt_model_choice", "XGBoost")),
-            help="Choose which ML model to optimize",
-            key="opt_model_select"
-        )
-        cfg["opt_model_choice"] = selected_model_opt
-    else:
-        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be optimized sequentially")
-        selected_model_opt = None
+    st.markdown("### 🤖 Model Selection")
+    from app_core.ui.ml_components import MLUIComponents
+    selected_model_opt = st.selectbox(
+        "Select model to optimize",
+        options=["XGBoost", "LSTM", "ANN"],
+        index=["XGBoost", "LSTM", "ANN"].index(cfg.get("opt_model_choice", "XGBoost")),
+        help="Choose which ML model to optimize",
+        key="opt_model_select"
+    )
+    cfg["opt_model_choice"] = selected_model_opt
 
     # 2. Optimization Settings
     st.markdown("### ⚙️ Optimization Settings")
