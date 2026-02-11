@@ -750,12 +750,6 @@ def page_data_preparation_studio():
     add_logout_button()
     render_cache_management()
 
-    # Results Storage Panel (Supabase persistence)
-    render_results_storage_panel(page_key="Prepare Data")
-
-    # Auto-load saved results if available
-    auto_load_if_available("Prepare Data")
-
     # Apply fluorescent effects + Custom Tab Styling
     st.markdown(f"""
     <style>
