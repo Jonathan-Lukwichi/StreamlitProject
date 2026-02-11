@@ -2852,33 +2852,32 @@ def page_ml():
     st.markdown("---")
 
 
-    # 4. Manual Configuration - Only show for Single Model mode
-    if training_mode == "Single Model":
-        st.markdown(
-            f"""
-            <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
-                        border-left: 4px solid {PRIMARY_COLOR};
-                        padding: 1.5rem;
-                        border-radius: 12px;
-                        margin: 2rem 0 1.5rem 0;
-                        box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
-                <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
-                           text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
-                    ⚙️ Model Configuration
-                </h3>
-                <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
-                    Configure hyperparameters manually. For automated optimization, use the <strong>Hyperparameter Tuning</strong> tab.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    # 4. Manual Configuration
+    st.markdown(
+        f"""
+        <div style='background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
+                    border-left: 4px solid {PRIMARY_COLOR};
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    margin: 2rem 0 1.5rem 0;
+                    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);'>
+            <h3 style='color: {PRIMARY_COLOR}; margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;
+                       text-shadow: 0 0 15px rgba(59, 130, 246, 0.5);'>
+                ⚙️ Model Configuration
+            </h3>
+            <p style='margin: 0; color: {SUBTLE_TEXT}; font-size: 0.9rem;'>
+                Configure hyperparameters manually. For automated optimization, use the <strong>Hyperparameter Tuning</strong> tab.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-        # Manual params (model-specific, but rendered generically)
-        manual_params = MLUIComponents.render_manual_params(selected_model, cfg)
-        cfg.update(manual_params)
+    # Manual params (model-specific, but rendered generically)
+    manual_params = MLUIComponents.render_manual_params(selected_model, cfg)
+    cfg.update(manual_params)
 
-        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
 
     # 5. Train/test split ratio - Full width with better styling
     st.markdown(
