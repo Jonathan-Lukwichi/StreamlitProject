@@ -717,12 +717,6 @@ def page_eda():
     inject_sidebar_style()
     render_sidebar_brand()
 
-    # Auto-load saved results from cloud storage
-    auto_load_if_available("Explore Data")
-
-    # Cloud storage panel in sidebar
-    render_results_storage_panel(page_key="Explore Data")
-
     # Apply fluorescent effects
     st.markdown("""
     <style>
