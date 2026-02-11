@@ -81,12 +81,6 @@ render_sidebar_brand()
 add_logout_button()
 render_cache_management()
 
-# Results Storage Panel (Supabase persistence)
-render_results_storage_panel(page_key="Modelling Studio")
-
-# Auto-load saved results if available
-auto_load_if_available("Modelling Studio")
-
 # Fluorescent effects + Custom Tab Styling
 st.markdown(f"""
 <style>
