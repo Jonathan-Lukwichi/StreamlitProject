@@ -3069,30 +3069,6 @@ def page_ml():
                                 dates=future_forecast_dates,
                                 title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
                             )
-                    del st.session_state["ml_mh_results"]
-                # Clear old "All Models" flag and results (using lowercase keys)
-                if "ml_all_models_trained" in st.session_state:
-                    del st.session_state["ml_all_models_trained"]
-                for old_model in ["xgboost", "lstm", "ann"]:
-                    # Clear model results
-                    old_key = f"ml_mh_results_{old_model}"
-                    if old_key in st.session_state:
-                        del st.session_state[old_key]
-                    # Also clear corresponding residuals (they'll be regenerated)
-                    residuals_key = f"stage1_residuals_{old_model}"
-                    if residuals_key in st.session_state:
-                        del st.session_state[residuals_key]
-
-                # CRITICAL: Clear TensorFlow session and free memory before training
-                try:
-                    import keras.backend as K
-                    K.clear_session()
-                except Exception:
-                    pass
-                gc.collect()
-
-                all_models = ["XGBoost", "LSTM", "ANN"]
-                all_results = {}
 
                 # Pre-populate config with optimized defaults for cloud training
                 # These are used since manual config UI is not shown in "All Models" mode
