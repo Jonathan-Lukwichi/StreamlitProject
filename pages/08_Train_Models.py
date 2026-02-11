@@ -2717,31 +2717,16 @@ def page_ml():
         unsafe_allow_html=True
     )
 
-    # Training mode selection
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        training_mode = st.radio(
-            "Training Mode",
-            options=["Single Model", "All Models (XGBoost + LSTM + ANN)"],
-            index=0 if cfg.get("ml_training_mode", "Single Model") == "Single Model" else 1,
-            horizontal=True,
-            help="Choose to train a single model or all three models at once"
-        )
-        cfg["ml_training_mode"] = training_mode
-
     # Get training status for all models
     training_status = get_ml_training_status()
 
-    # Only show model selector if training single model
-    if training_mode == "Single Model":
-        selected_model = MLUIComponents.render_model_selector(
-            cfg.get("ml_choice", "XGBoost"),
-            training_status=training_status
-        )
-        cfg["ml_choice"] = selected_model
-    else:
-        st.info("🚀 **All Models Mode**: XGBoost, LSTM, and ANN will be trained sequentially using optimized defaults (XGBoost: 200 trees, LSTM: 30 epochs, ANN: 20 epochs with early stopping).")
-        selected_model = None  # Not needed for all models mode
+    # Model selector
+    selected_model = MLUIComponents.render_model_selector(
+        cfg.get("ml_choice", "XGBoost"),
+        training_status=training_status
+    )
+    cfg["ml_choice"] = selected_model
+    cfg["ml_training_mode"] = "Single Model"  # Single model mode only
 
     # Show training status summary
     trained_count = sum(training_status.values())
