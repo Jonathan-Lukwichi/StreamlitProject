@@ -20,7 +20,6 @@ from app_core.ui.theme import (
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.page_navigation import render_page_navigation
 from app_core.ui.components import render_scifi_hero_header
-from app_core.ui.results_storage_ui import render_results_storage_panel, auto_load_if_available
 
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
