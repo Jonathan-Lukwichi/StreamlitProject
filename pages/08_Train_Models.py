@@ -1555,15 +1555,23 @@ def capture_residuals_from_results(results: dict, df: pd.DataFrame, feature_cols
     if not per_h or not successful:
         return {}
 
-    # Get split index
+    # Get split indices (70/15/15 Train/Val/Test from Feature Studio)
     fe = st.session_state.get("feature_engineering", {})
     train_idx = fe.get("train_idx")
+    cal_idx = fe.get("cal_idx")  # Validation set for early stopping
     test_idx = fe.get("test_idx")
 
     use_fe_split = (
         train_idx is not None and test_idx is not None and
         isinstance(train_idx, np.ndarray) and isinstance(test_idx, np.ndarray) and
         len(train_idx) > 0 and len(test_idx) > 0
+    )
+
+    # Check if proper 3-way split is available
+    use_cal_idx = (
+        cal_idx is not None and
+        isinstance(cal_idx, np.ndarray) and
+        len(cal_idx) > 0
     )
 
     residuals = {
