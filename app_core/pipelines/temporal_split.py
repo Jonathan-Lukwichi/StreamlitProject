@@ -1039,12 +1039,14 @@ def visualize_cv_folds(
         title=dict(
             text=f"<b>{title}</b>",
             font=dict(
-                size=18,
+                size=16,
                 color="#22d3ee",
                 family="Segoe UI, sans-serif"
             ),
-            x=0.5,
-            xanchor="center"
+            x=0.02,
+            xanchor="left",
+            y=0.98,
+            yanchor="top"
         ),
         barmode='overlay',
 
@@ -1052,7 +1054,7 @@ def visualize_cv_folds(
         xaxis=dict(
             title=dict(
                 text="<b>TIMELINE (DAYS)</b>",
-                font=dict(size=11, color="#94a3b8")
+                font=dict(size=10, color="#64748b")
             ),
             showgrid=True,
             gridcolor=grid_color,
@@ -1062,7 +1064,7 @@ def visualize_cv_folds(
             linecolor=axis_line_color,
             linewidth=1,
             tickfont=dict(color="#94a3b8", size=10),
-            range=[-5, total_days + 20]
+            range=[-10, total_days + 50]
         ),
 
         # Y-Axis - Fold labels
@@ -1077,27 +1079,28 @@ def visualize_cv_folds(
             linewidth=1,
             tickfont=dict(
                 color="#22d3ee",
-                size=12,
+                size=13,
                 family="Segoe UI, sans-serif"
             )
         ),
 
-        # Legend - Horizontal, top-aligned
+        # Legend - Top right corner, compact
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.08,
-            xanchor="center",
-            x=0.5,
-            font=dict(color="#e2e8f0", size=11),
-            bgcolor="rgba(15, 23, 42, 0.8)",
-            bordercolor="rgba(34, 211, 238, 0.3)",
-            borderwidth=1
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            font=dict(color="#e2e8f0", size=12),
+            bgcolor="rgba(15, 23, 42, 0.9)",
+            bordercolor="rgba(34, 211, 238, 0.4)",
+            borderwidth=1,
+            itemsizing="constant"
         ),
 
-        # Chart dimensions
-        height=max(350, 70 * len(folds) + 120),
-        margin=dict(l=80, r=40, t=80, b=80),
+        # Chart dimensions - taller bars
+        height=max(400, 80 * len(folds) + 100),
+        margin=dict(l=90, r=50, t=50, b=70),
 
         # Dark futuristic background
         template="plotly_dark",
@@ -1109,7 +1112,10 @@ def visualize_cv_folds(
             bgcolor="rgba(15, 23, 42, 0.95)",
             bordercolor="rgba(34, 211, 238, 0.5)",
             font=dict(color="#e2e8f0", size=12)
-        )
+        ),
+
+        # Uniform bar gap for thicker bars
+        bargap=0.3
     )
 
     # =========================================================================
