@@ -3069,16 +3069,6 @@ def page_ml():
                                 dates=future_forecast_dates,
                                 title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
                             )
-        else:
-            # All Models Training
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                run_all_button = st.button(
-                    "🚀 Train All Models (XGBoost + LSTM + ANN)",
-                    type="primary",
-                    use_container_width=True,
-                    help=f"Train all three models for {cfg.get('ml_horizons', 7)} horizons each"
-                )
 
             if run_all_button:
                 # Clear previous single model results to avoid confusion
