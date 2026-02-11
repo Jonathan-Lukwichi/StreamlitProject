@@ -1097,8 +1097,8 @@ def visualize_cv_folds(
         ),
 
         # Chart dimensions - taller bars
-        height=max(400, 80 * len(folds) + 100),
-        margin=dict(l=90, r=50, t=50, b=70),
+        height=max(380, 75 * len(folds) + 80),
+        margin=dict(l=90, r=50, t=50, b=40),
 
         # Dark futuristic background
         template="plotly_dark",
