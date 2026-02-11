@@ -1268,14 +1268,6 @@ def page_data_preparation_studio():
             st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
 
             with st.expander("📈 Advanced Temporal Features (Lag & Rolling Window)", expanded=True):
-                st.info("""
-                **Why Temporal Features?** Time series forecasting benefits from:
-                - **Lag features**: Capture autocorrelation patterns (yesterday's value predicts today's)
-                - **Rolling statistics**: Capture trends, volatility, and momentum
-
-                *Reference: Hyndman & Athanasopoulos (2021) - Forecasting: Principles and Practice*
-                """)
-
                 enable_temporal = st.checkbox(
                     "Enable Advanced Temporal Features",
                     value=True,
