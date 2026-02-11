@@ -1050,12 +1050,9 @@ def visualize_cv_folds(
         ),
         barmode='overlay',
 
-        # X-Axis - Futuristic styling
+        # X-Axis - Futuristic styling (no title to avoid overlap)
         xaxis=dict(
-            title=dict(
-                text="<b>TIMELINE (DAYS)</b>",
-                font=dict(size=10, color="#64748b")
-            ),
+            title=None,
             showgrid=True,
             gridcolor=grid_color,
             gridwidth=1,
@@ -1064,6 +1061,7 @@ def visualize_cv_folds(
             linecolor=axis_line_color,
             linewidth=1,
             tickfont=dict(color="#94a3b8", size=10),
+            ticksuffix=" days",
             range=[-10, total_days + 50]
         ),
 
