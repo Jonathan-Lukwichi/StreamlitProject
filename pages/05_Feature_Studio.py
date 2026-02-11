@@ -718,24 +718,43 @@ def page_feature_engineering():
     ])
 
     with tab_split:
-        render_tab_header("Configure Train/Test Split", "📊")
+        render_tab_header("Configure Train/Validation/Test Split", "📊")
 
         st.info("""
-        **Data Leakage Prevention:** Scalers and encoders are fitted on training data ONLY,
-        then applied to test data. This ensures no information from the test set leaks into training.
+        **3-Way Temporal Split:** Proper ML workflow requires separate validation and test sets.
+        - **Train (70%)**: Model learns patterns
+        - **Validation (15%)**: Hyperparameter tuning & early stopping
+        - **Test (15%)**: Final unbiased performance evaluation
         """)
 
-        # Simple 80/20 split
-        train_ratio = st.slider(
-            "Training Set Ratio",
-            min_value=0.60,
-            max_value=0.90,
-            value=0.80,
-            step=0.05,
-            help="Proportion of data for training (recommended: 80%)"
-        )
+        # 3-way split configuration
+        split_col1, split_col2 = st.columns(2)
 
-        test_ratio = 1.0 - train_ratio
+        with split_col1:
+            train_ratio = st.slider(
+                "Training Set Ratio",
+                min_value=0.50,
+                max_value=0.80,
+                value=0.70,
+                step=0.05,
+                help="Proportion of data for training (recommended: 70%)"
+            )
+
+        with split_col2:
+            val_ratio = st.slider(
+                "Validation Set Ratio",
+                min_value=0.10,
+                max_value=0.20,
+                value=0.15,
+                step=0.05,
+                help="Proportion of data for validation/calibration (recommended: 15%)"
+            )
+
+        test_ratio = round(1.0 - train_ratio - val_ratio, 2)
+
+        # Validate ratios
+        if test_ratio < 0.05:
+            st.warning(f"⚠️ Test set too small ({test_ratio:.0%}). Reduce train or validation ratio.")
 
         # Show split preview
         min_date = base[date_col].min()
@@ -744,17 +763,20 @@ def page_feature_engineering():
 
         from datetime import timedelta
         train_end = min_date + timedelta(days=int(total_days * train_ratio))
+        val_end = train_end + timedelta(days=int(total_days * val_ratio))
 
-        col_prev1, col_prev2 = st.columns(2)
+        col_prev1, col_prev2, col_prev3 = st.columns(3)
         with col_prev1:
             st.metric("Train", f"{train_ratio:.0%}", f"{min_date.strftime('%Y-%m-%d')} → {train_end.strftime('%Y-%m-%d')}")
         with col_prev2:
-            st.metric("Test", f"{test_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
+            st.metric("Validation", f"{val_ratio:.0%}", f"{train_end.strftime('%Y-%m-%d')} → {val_end.strftime('%Y-%m-%d')}")
+        with col_prev3:
+            st.metric("Test", f"{test_ratio:.0%}", f"{val_end.strftime('%Y-%m-%d')} → {max_date.strftime('%Y-%m-%d')}")
 
-        # Compute simple 2-way split (no calibration set)
-        train_idx, test_idx = _split_indices_legacy(base, date_col, train_ratio)
-        cal_idx = np.array([], dtype=int)  # No calibration set
-        split_result = None
+        # Compute proper 3-way temporal split
+        train_idx, cal_idx, test_idx, split_result = _get_temporal_split(
+            base, date_col, train_ratio=train_ratio, cal_ratio=val_ratio
+        )
 
     # =========================================================================
     # CROSS-VALIDATION TAB
