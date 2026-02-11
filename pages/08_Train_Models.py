@@ -4132,40 +4132,21 @@ def page_hyperparameter_tuning():
         st.info("👈 Navigate to the **🧮 Machine Learning** tab to complete the configuration.")
         return
 
-    # 1. Optimization Mode Selection (Single Model / All Models)
-    st.markdown("### 🎯 Optimization Mode")
-
-    opt_mode = st.radio(
-        "Training Mode",
-        options=["Single Model", "All Models (XGBoost + LSTM + ANN)"],
-        index=0 if cfg.get("opt_training_mode", "Single Model") == "Single Model" else 1,
-        horizontal=True,
-        help="Single Model: Optimize one model with full visualization | All Models: Optimize all three with metrics comparison only",
-        key="opt_mode_radio"
-    )
+    # Single model optimization mode
+    opt_mode = "Single Model"
     cfg["opt_training_mode"] = opt_mode
 
     # Display current configuration summary
     with st.expander("📋 Current Configuration", expanded=False):
-        if opt_mode == "Single Model":
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Mode", "Single Model")
-            with col2:
-                st.metric("Dataset", cfg.get("selected_dataset", "N/A"))
-            with col3:
-                st.metric("Features", len(cfg.get('ml_feature_cols', [])))
-        else:
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Mode", "All Models")
-            with col2:
-                st.metric("Models", "XGBoost + LSTM + ANN")
-            with col3:
-                st.metric("Features", len(cfg.get('ml_feature_cols', [])))
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Mode", "Single Model")
+        with col2:
+            st.metric("Dataset", cfg.get("selected_dataset", "N/A"))
+        with col3:
+            st.metric("Features", len(cfg.get('ml_feature_cols', [])))
 
-    # Model Selection for Single Model mode
-    if opt_mode == "Single Model":
+    # Model Selection
         st.markdown("### 🤖 Model Selection")
         from app_core.ui.ml_components import MLUIComponents
         selected_model_opt = st.selectbox(
