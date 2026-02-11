@@ -1719,12 +1719,6 @@ def page_benchmarks():
     render_sidebar_brand()
     init_state()
 
-    # Auto-load saved results from cloud storage
-    auto_load_if_available("Baseline Models")
-
-    # Cloud storage panel in sidebar
-    render_results_storage_panel(page_key="Baseline Models")
-
     # Fluorescent effects + Custom Tab Styling
     st.markdown(f"""
     <style>
