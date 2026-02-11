@@ -1119,34 +1119,15 @@ def visualize_cv_folds(
     )
 
     # =========================================================================
-    # ANNOTATIONS - Data Range & Stats
+    # ANNOTATIONS - Data Range (clean, minimal)
     # =========================================================================
-    # Data range annotation (bottom)
+    # Data range annotation (bottom center)
     fig.add_annotation(
-        x=0.5, y=-0.18,
+        x=0.5, y=-0.12,
         xref="paper", yref="paper",
-        text=f"<b>DATA RANGE:</b> {min_date.strftime('%b %d, %Y')} → {max_date.strftime('%b %d, %Y')} · <b>{total_days:,} days</b>",
+        text=f"Data: {min_date.strftime('%b %Y')} → {max_date.strftime('%b %Y')} ({total_days:,} days)",
         showarrow=False,
-        font=dict(size=11, color="#94a3b8")
-    )
-
-    # Expanding window indicator (top-right)
-    fig.add_annotation(
-        x=1.0, y=1.12,
-        xref="paper", yref="paper",
-        text="<b>◈ EXPANDING WINDOW CV</b>",
-        showarrow=False,
-        font=dict(size=10, color="#22d3ee"),
-        xanchor="right"
-    )
-
-    # Add vertical line at timeline start
-    fig.add_vline(
-        x=0,
-        line=dict(color="rgba(34, 211, 238, 0.4)", width=1, dash="dot"),
-        annotation_text="START",
-        annotation_font=dict(color="#22d3ee", size=9),
-        annotation_position="top"
+        font=dict(size=10, color="#64748b")
     )
 
     return fig
