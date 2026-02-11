@@ -1608,9 +1608,17 @@ def capture_residuals_from_results(results: dict, df: pd.DataFrame, feature_cols
     if use_fe_split:
         X = df[numeric_feature_cols].values.astype(np.float64)
         residuals["feature_data"]["X_train"] = X[train_idx]
-        residuals["feature_data"]["X_val"] = X[test_idx]
         residuals["feature_data"]["train_idx"] = train_idx
         residuals["feature_data"]["test_idx"] = test_idx
+
+        if use_cal_idx:
+            # Proper 3-way split: use cal_idx for validation
+            residuals["feature_data"]["X_val"] = X[cal_idx]
+            residuals["feature_data"]["X_test"] = X[test_idx]
+            residuals["feature_data"]["cal_idx"] = cal_idx
+        else:
+            # Legacy 2-way split: use test_idx as validation
+            residuals["feature_data"]["X_val"] = X[test_idx]
     else:
         split_idx = int(len(df) * split_ratio)
         X = df[numeric_feature_cols].values.astype(np.float64)
