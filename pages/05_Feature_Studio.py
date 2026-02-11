@@ -1162,7 +1162,7 @@ def page_feature_engineering():
                         st.warning(warning)
 
         # =========================================================================
-        # STORE IN SESSION STATE (Simple 80/20 split for Train Models page)
+        # STORE IN SESSION STATE (70/15/15 Train/Val/Test split)
         # =========================================================================
         st.session_state["feature_engineering"] = {
             "summary": {
@@ -1170,8 +1170,10 @@ def page_feature_engineering():
                 "apply_scaling": apply_scaling,
                 "skip_engineering": skip_engineering,
                 "train_size": len(train_idx),
+                "val_size": len(cal_idx),
                 "test_size": len(test_idx),
                 "train_ratio": train_ratio,
+                "val_ratio": val_ratio,
                 "test_ratio": test_ratio,
                 "transformers_saved": save_transformers and not skip_engineering,
                 "fourier_enabled": fourier_info is not None,
@@ -1183,7 +1185,7 @@ def page_feature_engineering():
             "A": A_full,
             "B": B_full,
             "train_idx": train_idx,
-            "cal_idx": cal_idx,    # Empty array (no calibration set)
+            "cal_idx": cal_idx,    # Validation/calibration set for early stopping
             "test_idx": test_idx,
             "split_result": split_result,
             "fourier_info": fourier_info,
