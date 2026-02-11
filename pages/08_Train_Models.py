@@ -3070,52 +3070,6 @@ def page_ml():
                                 title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
                             )
 
-                # Pre-populate config with optimized defaults for cloud training
-                # These are used since manual config UI is not shown in "All Models" mode
-                cfg.setdefault("xgb_n_estimators", 200)  # Fast XGBoost
-                cfg.setdefault("xgb_max_depth", 5)
-                cfg.setdefault("xgb_eta", 0.1)
-                cfg.setdefault("xgb_min_child_weight", 1)
-                cfg.setdefault("lstm_epochs", 15)  # Reduced for speed + early stopping
-                cfg.setdefault("lstm_hidden_units", 64)
-                cfg.setdefault("lstm_layers", 2)
-                cfg.setdefault("lookback_window", 14)
-                cfg.setdefault("lstm_lr", 0.001)
-                cfg.setdefault("batch_size", 32)
-                cfg.setdefault("ann_epochs", 10)  # Reduced for speed + early stopping
-                cfg.setdefault("ann_hidden_layers", 2)
-                cfg.setdefault("ann_neurons", 64)
-                cfg.setdefault("ann_activation", "relu")
-                cfg.setdefault("dropout", 0.2)
-
-                # Progress tracking
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-
-                all_category_results = {}  # Track category results for all models
-
-                for idx, model_name in enumerate(all_models):
-                    status_text.markdown(f"**Training {idx+1}/3: {model_name} (including clinical categories)...**")
-                    progress_bar.progress((idx) / len(all_models))
-
-                    with st.spinner(f"Training {model_name} for {cfg.get('ml_horizons', 7)} horizons..."):
-                        try:
-                            # Pass a copy of the config to prevent any potential state pollution between runs
-                            current_run_config = cfg.copy()
-
-                            # Use new function that trains on total + categories and captures residuals
-                            full_results = run_ml_with_categories(
-                                model_type=model_name,
-                                config=current_run_config,
-                                df=selected_df,
-                                feature_cols=current_run_config['ml_feature_cols'],
-                                split_ratio=current_run_config.get('split_ratio', 0.8),
-                                horizons=current_run_config.get('ml_horizons', 7),
-                            )
-
-                            # Extract total results for backward compatibility
-                            results = full_results.get("total_results", {})
-
                             # Store results for each model (using lowercase keys for consistency)
                             all_results[model_name] = results
                             st.session_state[f"ml_mh_results_{model_name.lower()}"] = results
