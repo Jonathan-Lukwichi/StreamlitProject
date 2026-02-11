@@ -960,17 +960,17 @@ def visualize_cv_folds(
             y=[fold_label],
             orientation='h',
             base=[train_base],
-            name="Training Set" if fold.fold_idx == 0 else None,
+            name="◼ Train" if fold.fold_idx == 0 else None,
             marker=dict(
                 color=train_fill,
                 line=dict(color=train_line, width=2),
                 pattern=dict(shape="", fillmode="replace")
             ),
-            text=f"<b>{fold.n_train:,}</b> samples",
+            text=f"<b>{fold.n_train:,}</b>",
             textposition="inside",
             textfont=dict(
-                color="white",
-                size=11,
+                color="#0f172a",  # Dark text for better contrast on cyan
+                size=13,
                 family="Segoe UI, sans-serif"
             ),
             showlegend=(fold.fold_idx == 0),
