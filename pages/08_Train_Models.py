@@ -1904,10 +1904,11 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
         y = pd.to_numeric(df[target_col], errors='coerce').values.astype(np.float64)
 
         # =====================================================================
-        # Check for Feature Engineering split indices (80/20 split from Feature Studio)
+        # Check for Feature Engineering split indices (70/15/15 Train/Val/Test split)
         # =====================================================================
         fe = st.session_state.get("feature_engineering", {})
         train_idx = fe.get("train_idx")
+        cal_idx = fe.get("cal_idx")  # Validation set for early stopping
         test_idx = fe.get("test_idx")
 
         # Check if Feature Studio split is available and valid for this dataframe
@@ -1922,16 +1923,36 @@ def run_ml_model(model_type: str, config: dict, df: pd.DataFrame,
                 test_idx.max() if len(test_idx) > 0 else 0) < len(df)
         )
 
-        if use_fe_split:
-            # Use Feature Studio split (80/20 by default)
-            X_train, y_train = X[train_idx], y[train_idx]
-            X_val, y_val = X[test_idx], y[test_idx]
+        # Check if proper 3-way split is available (cal_idx for validation)
+        use_cal_idx = (
+            cal_idx is not None and
+            isinstance(cal_idx, np.ndarray) and
+            len(cal_idx) > 0
+        )
 
-            # Extract datetime values
-            if datetime_col:
-                val_datetime = df[datetime_col].iloc[test_idx].values
+        if use_fe_split:
+            # Use Feature Studio split
+            X_train, y_train = X[train_idx], y[train_idx]
+
+            if use_cal_idx:
+                # Proper 3-way split: use cal_idx for validation (early stopping)
+                X_val, y_val = X[cal_idx], y[cal_idx]
+                X_test, y_test = X[test_idx], y[test_idx]
+                if datetime_col:
+                    val_datetime = df[datetime_col].iloc[cal_idx].values
+                    test_datetime = df[datetime_col].iloc[test_idx].values
+                else:
+                    val_datetime = cal_idx.tolist()
+                    test_datetime = test_idx.tolist()
             else:
-                val_datetime = test_idx.tolist()
+                # Legacy 2-way split: use test_idx as validation
+                X_val, y_val = X[test_idx], y[test_idx]
+                X_test, y_test = None, None
+                if datetime_col:
+                    val_datetime = df[datetime_col].iloc[test_idx].values
+                else:
+                    val_datetime = test_idx.tolist()
+                test_datetime = None
 
         else:
             # Fallback to slider-based split (if Feature Studio not run)
