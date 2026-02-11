@@ -2923,10 +2923,8 @@ def page_ml():
     ])
 
     if can_run:
-        # Different button based on training mode
-        if training_mode == "Single Model":
-            # Single Model Training
-            col1, col2, col3 = st.columns([1, 1, 1])
+        # Single Model Training
+        col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
                 run_button = st.button(
                     f"🚀 Train Multi-Horizon {cfg['ml_choice']}",
