@@ -3070,41 +3070,6 @@ def page_ml():
                                 title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
                             )
 
-                            # Store results for each model (using lowercase keys for consistency)
-                            all_results[model_name] = results
-                            st.session_state[f"ml_mh_results_{model_name.lower()}"] = results
-
-                            # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
-                            try:
-                                saved_paths = save_ml_models_to_disk(model_name, results)
-                                if saved_paths:
-                                    logger.info(f"Saved {len(saved_paths)} {model_name} model files to disk")
-                            except Exception as save_err:
-                                logger.warning(f"Could not save {model_name} model files: {save_err}")
-
-                            # Store residuals for hybrid models (Stage 1 → Stage 2)
-                            total_residuals = full_results.get("total_residuals", {})
-                            if total_residuals:
-                                store_stage1_residuals(model_name, total_residuals)
-
-                            # Track category results
-                            category_results = full_results.get("category_results", {})
-                            if category_results:
-                                all_category_results[model_name] = {
-                                    "categories": category_results,
-                                    "categories_detected": full_results.get("categories_detected", []),
-                                }
-
-                        except Exception as e:
-                            st.error(f"❌ **{model_name} training failed:**\n\n```\n{str(e)}\n```")
-                            import traceback
-                            st.code(traceback.format_exc())
-                            all_results[model_name] = None
-
-                # Complete progress
-                progress_bar.progress(1.0)
-                status_text.markdown("✅ **All models training completed!**")
-
                 # Store category results from all models for Patient Forecast page
                 if all_category_results:
                     st.session_state["ml_all_category_results"] = all_category_results
