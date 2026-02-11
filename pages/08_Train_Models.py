@@ -2959,81 +2959,81 @@ def page_ml():
             current_run_config = cfg.copy()
             model_name = current_run_config['ml_choice']
             with st.spinner(f"Training {model_name} for {current_run_config.get('ml_horizons', 7)} horizons (including clinical categories)..."):
+                try:
+                    # Use new function that trains on total + categories and captures residuals
+                    full_results = run_ml_with_categories(
+                        model_type=model_name,
+                        config=current_run_config,
+                        df=selected_df,
+                        feature_cols=current_run_config['ml_feature_cols'],
+                        split_ratio=current_run_config.get('split_ratio', 0.8),
+                        horizons=current_run_config.get('ml_horizons', 7),
+                    )
+
+                    # Extract total results for backward compatibility
+                    results = full_results.get("total_results", {})
+
+                    # Add model identifier to results (fixes bug: wrong model name on display)
+                    results["model_type"] = model_name
+
+                    # Store total results in session state (backward compatible)
+                    st.session_state["ml_mh_results"] = results
+
+                    # Also save to individual model key for hybrid model detection
+                    model_key = f"ml_mh_results_{model_name.lower()}"
+                    st.session_state[model_key] = results
+
+                    # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
                     try:
-                        # Use new function that trains on total + categories and captures residuals
-                        full_results = run_ml_with_categories(
-                            model_type=model_name,
-                            config=current_run_config,
-                            df=selected_df,
-                            feature_cols=current_run_config['ml_feature_cols'],
-                            split_ratio=current_run_config.get('split_ratio', 0.8),
-                            horizons=current_run_config.get('ml_horizons', 7),
-                        )
+                        saved_paths = save_ml_models_to_disk(model_name, results)
+                        if saved_paths:
+                            st.success(f"💾 Saved {len(saved_paths)} model file(s) to `pipeline_artifacts/{model_name.lower()}/`")
+                    except Exception as save_err:
+                        st.warning(f"⚠️ Could not save model files: {save_err}")
+                    # ================================================
 
-                        # Extract total results for backward compatibility
-                        results = full_results.get("total_results", {})
+                    # Store residuals for hybrid models (Stage 1 → Stage 2)
+                    total_residuals = full_results.get("total_residuals", {})
+                    if total_residuals:
+                        store_stage1_residuals(model_name, total_residuals)
+                        st.success(f"✅ Residuals captured for {model_name} (ready for hybrid models)")
 
-                        # Add model identifier to results (fixes bug: wrong model name on display)
-                        results["model_type"] = model_name
+                    # Store category results for Patient Forecast page
+                    category_results = full_results.get("category_results", {})
+                    if category_results:
+                        st.session_state["ml_category_results"] = {
+                            "model_name": model_name,
+                            "categories": category_results,
+                            "categories_detected": full_results.get("categories_detected", []),
+                            "trained_at": full_results.get("trained_at"),
+                        }
+                        detected = full_results.get("categories_detected", [])
+                        if detected:
+                            st.info(f"📊 Category predictions captured: {', '.join(detected)}")
 
-                        # Store total results in session state (backward compatible)
-                        st.session_state["ml_mh_results"] = results
+                    # Auto-save to cache for persistence
+                    try:
+                        cache_mgr = get_cache_manager()
+                        proc_df = st.session_state.get("processed_df")
+                        data_hash = cache_mgr._compute_data_hash(proc_df) if proc_df is not None else None
+                        save_to_cache("ml_mh_results", results, data_hash)
+                    except Exception:
+                        pass  # Cache save is optional
+                except Exception as e:
+                    st.error(f"❌ **Training failed with error:**\n\n```\n{str(e)}\n```")
+                    import traceback
+                    st.code(traceback.format_exc())
 
-                        # Also save to individual model key for hybrid model detection
-                        model_key = f"ml_mh_results_{model_name.lower()}"
-                        st.session_state[model_key] = results
+        # Display results if available (only show if results match selected model)
+        if "ml_mh_results" in st.session_state:
+            stored_results = st.session_state["ml_mh_results"]
+            stored_model = stored_results.get("model_type", "")
+            selected_model = cfg.get('ml_choice', '')
 
-                        # ===== SAVE MODELS TO DISK FOR CLOUD SYNC =====
-                        try:
-                            saved_paths = save_ml_models_to_disk(model_name, results)
-                            if saved_paths:
-                                st.success(f"💾 Saved {len(saved_paths)} model file(s) to `pipeline_artifacts/{model_name.lower()}/`")
-                        except Exception as save_err:
-                            st.warning(f"⚠️ Could not save model files: {save_err}")
-                        # ================================================
-
-                        # Store residuals for hybrid models (Stage 1 → Stage 2)
-                        total_residuals = full_results.get("total_residuals", {})
-                        if total_residuals:
-                            store_stage1_residuals(model_name, total_residuals)
-                            st.success(f"✅ Residuals captured for {model_name} (ready for hybrid models)")
-
-                        # Store category results for Patient Forecast page
-                        category_results = full_results.get("category_results", {})
-                        if category_results:
-                            st.session_state["ml_category_results"] = {
-                                "model_name": model_name,
-                                "categories": category_results,
-                                "categories_detected": full_results.get("categories_detected", []),
-                                "trained_at": full_results.get("trained_at"),
-                            }
-                            detected = full_results.get("categories_detected", [])
-                            if detected:
-                                st.info(f"📊 Category predictions captured: {', '.join(detected)}")
-
-                        # Auto-save to cache for persistence
-                        try:
-                            cache_mgr = get_cache_manager()
-                            proc_df = st.session_state.get("processed_df")
-                            data_hash = cache_mgr._compute_data_hash(proc_df) if proc_df is not None else None
-                            save_to_cache("ml_mh_results", results, data_hash)
-                        except Exception:
-                            pass  # Cache save is optional
-                    except Exception as e:
-                        st.error(f"❌ **Training failed with error:**\n\n```\n{str(e)}\n```")
-                        import traceback
-                        st.code(traceback.format_exc())
-
-            # Display results if available (only show if results match selected model)
-            if "ml_mh_results" in st.session_state:
-                stored_results = st.session_state["ml_mh_results"]
-                stored_model = stored_results.get("model_type", "")
-                selected_model = cfg.get('ml_choice', '')
-
-                # Only display if results belong to the currently selected model
-                if stored_model.lower() == selected_model.lower():
-                    st.divider()
-                    render_ml_multihorizon_results(stored_results, cfg['ml_choice'])
+            # Only display if results belong to the currently selected model
+            if stored_model.lower() == selected_model.lower():
+                st.divider()
+                render_ml_multihorizon_results(stored_results, cfg['ml_choice'])
 
                     # Add seasonal category forecast section (only for matching model)
                     ml_results = st.session_state["ml_mh_results"]
