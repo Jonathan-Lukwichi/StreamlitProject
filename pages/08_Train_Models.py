@@ -3035,37 +3035,37 @@ def page_ml():
                 st.divider()
                 render_ml_multihorizon_results(stored_results, cfg['ml_choice'])
 
-                    # Add seasonal category forecast section (only for matching model)
-                    ml_results = st.session_state["ml_mh_results"]
-                    per_h = ml_results.get("per_h", {})
-                    successful = ml_results.get("successful", [])
+                # Add seasonal category forecast section (only for matching model)
+                ml_results = st.session_state["ml_mh_results"]
+                per_h = ml_results.get("per_h", {})
+                successful = ml_results.get("successful", [])
 
-                    if per_h and successful:
-                        # Construct a proper 7-day forecast from the multi-horizon results
-                        future_forecast_values = []
-                        future_forecast_dates = []
-                        for h in range(1, 8):  # We want a 7-day forecast
-                            if h in per_h:
-                                h_data = per_h.get(h, {})
-                                forecast_series = h_data.get("forecast")
-                                datetime_series = h_data.get("datetime")
-                                if forecast_series is not None and len(forecast_series) > 0:
-                                    future_forecast_values.append(forecast_series[0])
-                                    future_forecast_dates.append(datetime_series[0])
+                if per_h and successful:
+                    # Construct a proper 7-day forecast from the multi-horizon results
+                    future_forecast_values = []
+                    future_forecast_dates = []
+                    for h in range(1, 8):  # We want a 7-day forecast
+                        if h in per_h:
+                            h_data = per_h.get(h, {})
+                            forecast_series = h_data.get("forecast")
+                            datetime_series = h_data.get("datetime")
+                            if forecast_series is not None and len(forecast_series) > 0:
+                                future_forecast_values.append(forecast_series[0])
+                                future_forecast_dates.append(datetime_series[0])
+                        else:
+                            future_forecast_values.append(np.nan)
+                            if future_forecast_dates:
+                                future_forecast_dates.append(future_forecast_dates[-1] + pd.Timedelta(days=1))
                             else:
-                                future_forecast_values.append(np.nan)
-                                if future_forecast_dates:
-                                    future_forecast_dates.append(future_forecast_dates[-1] + pd.Timedelta(days=1))
-                                else:
-                                    future_forecast_dates.append(pd.NaT)
+                                future_forecast_dates.append(pd.NaT)
 
-                        if future_forecast_values:
-                            st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
-                            _render_seasonal_category_forecast(
-                                predictions=future_forecast_values,
-                                dates=future_forecast_dates,
-                                title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
-                            )
+                    if future_forecast_values:
+                        st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
+                        _render_seasonal_category_forecast(
+                            predictions=future_forecast_values,
+                            dates=future_forecast_dates,
+                            title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
+                        )
     else:
         st.warning(
             "⚠️ **Cannot run model**\n\n"
