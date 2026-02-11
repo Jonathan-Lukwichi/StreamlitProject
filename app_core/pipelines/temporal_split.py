@@ -1008,7 +1008,7 @@ def visualize_cv_folds(
             y=[fold_label],
             orientation='h',
             base=[val_base],
-            name="Validation Set" if fold.fold_idx == 0 else None,
+            name="◼ Validation" if fold.fold_idx == 0 else None,
             marker=dict(
                 color=val_fill,
                 line=dict(color=val_line, width=2)
@@ -1016,8 +1016,8 @@ def visualize_cv_folds(
             text=f"<b>{fold.n_val:,}</b>",
             textposition="inside",
             textfont=dict(
-                color="white",
-                size=11,
+                color="#ffffff",  # White text on magenta
+                size=13,
                 family="Segoe UI, sans-serif"
             ),
             showlegend=(fold.fold_idx == 0),
