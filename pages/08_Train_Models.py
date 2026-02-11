@@ -3069,8 +3069,6 @@ def page_ml():
                                 dates=future_forecast_dates,
                                 title=f"{cfg['ml_choice']} - Clinical Category Forecast (Seasonal Distribution)"
                             )
-                # Clear previous single model results to avoid confusion
-                if "ml_mh_results" in st.session_state:
                     del st.session_state["ml_mh_results"]
                 # Clear old "All Models" flag and results (using lowercase keys)
                 if "ml_all_models_trained" in st.session_state:
