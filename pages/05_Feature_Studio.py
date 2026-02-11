@@ -1306,14 +1306,6 @@ def main():
     render_sidebar_brand()
     init_state()
 
-    # Results Storage Panel (Supabase persistence)
-    render_results_storage_panel(
-        page_key="Feature Studio",
-    )
-
-    # Auto-load saved results if available
-    auto_load_if_available("Feature Studio")
-
     # Fluorescent effects
     st.markdown("""
     <style>
