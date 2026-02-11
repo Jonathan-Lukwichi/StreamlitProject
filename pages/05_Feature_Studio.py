@@ -1263,32 +1263,48 @@ def page_feature_engineering():
             st.dataframe(B_full.head(20), use_container_width=True)
             st.download_button("⬇️ Download Variant B", B_full.to_csv(index=False).encode(), "variant_B.csv", "text/csv")
         with result_tab3:
-            st.markdown("#### Train/Test Split Summary")
+            st.markdown("#### Train/Validation/Test Split Summary")
 
             # Get date boundaries
             train_dates = base.iloc[train_idx][date_col]
+            val_dates = base.iloc[cal_idx][date_col] if len(cal_idx) > 0 else pd.Series()
             test_dates = base.iloc[test_idx][date_col]
 
-            st.json({
+            split_summary = {
                 "date_column": date_col,
                 "train_start": str(train_dates.min()),
                 "train_end": str(train_dates.max()),
+                "train_records": len(train_idx),
+                "train_ratio": f"{train_ratio:.0%}",
+            }
+
+            if len(cal_idx) > 0:
+                split_summary.update({
+                    "val_start": str(val_dates.min()),
+                    "val_end": str(val_dates.max()),
+                    "val_records": len(cal_idx),
+                    "val_ratio": f"{val_ratio:.0%}",
+                })
+
+            split_summary.update({
                 "test_start": str(test_dates.min()),
                 "test_end": str(test_dates.max()),
-                "train_records": len(train_idx),
                 "test_records": len(test_idx),
-                "train_ratio": f"{train_ratio:.0%}",
                 "test_ratio": f"{test_ratio:.0%}",
             })
+
+            st.json(split_summary)
 
             st.markdown("---")
             st.markdown("#### Data Leakage Prevention")
             st.success("""
-            ✅ **Scalers fitted on TRAIN data only** → Applied to both train and test
+            ✅ **Scalers fitted on TRAIN data only** → Applied to validation and test
 
-            ✅ **Encoders fitted on TRAIN data only** → Applied to both train and test
+            ✅ **Encoders fitted on TRAIN data only** → Applied to validation and test
 
-            ✅ **No future information leaked** → Test data is strictly after train data
+            ✅ **Validation set for early stopping** → Prevents overfitting during training
+
+            ✅ **Test set untouched until final evaluation** → Unbiased performance estimate
             """)
 
 # === ENTRYPOINT ===============================================================
