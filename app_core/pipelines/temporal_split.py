@@ -1116,19 +1116,6 @@ def visualize_cv_folds(
         bargap=0.3
     )
 
-    # =========================================================================
-    # ANNOTATIONS - Data Range (clean, minimal)
-    # =========================================================================
-    # Data range annotation (bottom right, below the chart)
-    fig.add_annotation(
-        x=1.0, y=-0.08,
-        xref="paper", yref="paper",
-        text=f"{min_date.strftime('%b %Y')} → {max_date.strftime('%b %Y')}",
-        showarrow=False,
-        font=dict(size=9, color="#64748b"),
-        xanchor="right"
-    )
-
     return fig
 
 
