@@ -2925,15 +2925,15 @@ def page_ml():
     if can_run:
         # Single Model Training
         col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                run_button = st.button(
-                    f"🚀 Train Multi-Horizon {cfg['ml_choice']}",
-                    type="primary",
-                    use_container_width=True,
-                    help=f"Train {cfg.get('ml_horizons', 7)} models for horizons 1-{cfg.get('ml_horizons', 7)}"
-                )
+        with col2:
+            run_button = st.button(
+                f"🚀 Train Multi-Horizon {cfg['ml_choice']}",
+                type="primary",
+                use_container_width=True,
+                help=f"Train {cfg.get('ml_horizons', 7)} models for horizons 1-{cfg.get('ml_horizons', 7)}"
+            )
 
-            if run_button:
+        if run_button:
                 # Clear previous "All Models" flag to avoid confusion
                 if "ml_all_models_trained" in st.session_state:
                     del st.session_state["ml_all_models_trained"]
