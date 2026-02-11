@@ -1197,19 +1197,21 @@ def page_feature_engineering():
         # =========================================================================
         st.success(f"✅ Dataset ready: {variant_used}")
 
-        # Show split summary
+        # Show split summary (Train/Val/Test + optional Fourier)
         if fourier_info:
-            col_sum1, col_sum2, col_sum3 = st.columns(3)
+            col_sum1, col_sum2, col_sum3, col_sum4 = st.columns(4)
         else:
-            col_sum1, col_sum2 = st.columns(2)
-            col_sum3 = None
+            col_sum1, col_sum2, col_sum3 = st.columns(3)
+            col_sum4 = None
 
         with col_sum1:
             st.metric("Train Records", f"{len(train_idx):,}", f"{len(train_idx)/len(base)*100:.1f}%")
         with col_sum2:
+            st.metric("Validation Records", f"{len(cal_idx):,}", f"{len(cal_idx)/len(base)*100:.1f}%")
+        with col_sum3:
             st.metric("Test Records", f"{len(test_idx):,}", f"{len(test_idx)/len(base)*100:.1f}%")
-        if col_sum3 and fourier_info:
-            with col_sum3:
+        if col_sum4 and fourier_info:
+            with col_sum4:
                 st.metric("Fourier Features", f"{fourier_info['total_features']}", f"{len(fourier_info['periods_used'])} periods")
 
         if save_transformers and not skip_engineering:
