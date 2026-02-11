@@ -1073,14 +1073,6 @@ def main():
     inject_sidebar_style()
     render_sidebar_brand()
 
-    # Results Storage Panel (Supabase persistence)
-    render_results_storage_panel(
-        page_key="Feature Selection",
-    )
-
-    # Auto-load saved results if available
-    auto_load_if_available("Feature Selection")
-
     # Fluorescent effects
     st.markdown("""
     <style>
