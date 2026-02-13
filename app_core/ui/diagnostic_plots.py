@@ -619,12 +619,12 @@ def create_skill_score_gauge(
         interpretation = "Worse than Baseline"
 
     fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
+        mode="gauge+number",
         value=skill_score * 100,
-        number={"suffix": "%", "font": {"size": 36, "color": TEXT_COLOR}},
-        title={"text": f"{model_name} vs {baseline_name}<br><span style='font-size:12px;color:{SUBTLE_TEXT}'>{interpretation}</span>"},
+        number={"suffix": "%", "font": {"size": 28, "color": TEXT_COLOR}},
+        title={"text": f"{model_name} vs {baseline_name}<br><span style='font-size:11px;color:{SUBTLE_TEXT}'>{interpretation}</span>", "font": {"size": 13}},
         gauge={
-            "axis": {"range": [-50, 100], "tickcolor": SUBTLE_TEXT},
+            "axis": {"range": [-50, 100], "tickcolor": SUBTLE_TEXT, "tickfont": {"size": 10}},
             "bar": {"color": bar_color},
             "bgcolor": "rgba(0,0,0,0)",
             "borderwidth": 2,
@@ -646,7 +646,8 @@ def create_skill_score_gauge(
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         font={"color": TEXT_COLOR},
-        height=250
+        height=220,
+        margin=dict(t=80, b=20, l=30, r=30)
     )
 
     return fig
