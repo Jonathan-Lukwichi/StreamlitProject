@@ -1574,6 +1574,33 @@ def save_hybrid_model_to_disk(
             except Exception as e:
                 logger.warning(f"Could not save config: {e}")
 
+        # 6. Save results metadata for ModelStorageService discovery
+        from datetime import datetime
+        session_key = f"{hybrid_type}_results"
+
+        # Extract metrics summary
+        metrics_summary = {}
+        if hasattr(artifacts, 'metrics') and artifacts.metrics:
+            metrics_summary = artifacts.metrics
+
+        metadata = {
+            "model_type": hybrid_type.upper().replace("_", "-"),
+            "horizons": [],  # Hybrids typically work across all horizons
+            "saved_at": datetime.now().isoformat(),
+            "config": config if config else {},
+            "metrics": metrics_summary,
+            "session_state_key": session_key,
+            "file_manifest": {str(k): str(v) for k, v in saved_paths.items()},
+        }
+        try:
+            metadata_path = os.path.join(model_dir, "results_metadata.json")
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2, default=str)
+            saved_paths["metadata"] = metadata_path
+            logger.info(f"Saved hybrid {hybrid_type} metadata to {metadata_path}")
+        except Exception as e:
+            logger.warning(f"Could not save hybrid {hybrid_type} metadata: {e}")
+
     except Exception as e:
         logger.error(f"Error processing hybrid model {hybrid_type}: {e}")
 
