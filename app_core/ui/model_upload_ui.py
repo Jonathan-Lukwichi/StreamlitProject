@@ -433,13 +433,34 @@ def render_upload_section():
 
     # Select models to upload
     model_options = {m["filename"]: m for m in models}
+    all_model_keys = list(model_options.keys())
+
+    # Initialize session state for selection if not already present
+    if "model_selection_keys" not in st.session_state:
+        st.session_state.model_selection_keys = all_model_keys # Default to all selected
+
+    # Add Select All / Clear All buttons
+    col_sel_all, col_clear_all = st.columns([1, 6])
+    with col_sel_all:
+        if st.button("Select All", use_container_width=True):
+            st.session_state.model_selection_keys = all_model_keys
+            st.rerun()
+    with col_clear_all:
+        if st.button("Clear All", use_container_width=False):
+            st.session_state.model_selection_keys = []
+            st.rerun()
 
     selected = st.multiselect(
         "Select models to upload:",
-        options=list(model_options.keys()),
-        default=list(model_options.keys()),
+        options=all_model_keys,
+        default=st.session_state.model_selection_keys,
         help="Select which model files to upload to Supabase Storage"
     )
+
+    # Update session state if multiselect changes (e.g., user deselects some)
+    # This ensures consistency when the page reruns
+    if selected != st.session_state.model_selection_keys:
+        st.session_state.model_selection_keys = selected
 
     if selected:
         # Show what will be uploaded

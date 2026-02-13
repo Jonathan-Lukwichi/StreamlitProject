@@ -203,17 +203,18 @@ def diebold_mariano_test(
 
 
 def diebold_mariano_matrix(
-    errors_dict: Dict[str, np.ndarray],
+    model_data: Dict[str, Dict], # Renamed from errors_dict for clarity, expects {'model_name': {'y_true': array, 'residuals': array}}
     h: int = 1,
     loss_type: str = "squared"
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Compute pairwise Diebold-Mariano test matrix for multiple models.
 
     Parameters:
     -----------
-    errors_dict : Dict[str, np.ndarray]
-        Dictionary mapping model names to their error arrays
+    model_data : Dict[str, Dict]
+        Dictionary mapping model names to their prediction data:
+        e.g., {'Model Name': {'y_true': np.array, 'residuals': np.array}}
     h : int
         Forecast horizon
     loss_type : str
@@ -221,10 +222,29 @@ def diebold_mariano_matrix(
 
     Returns:
     --------
-    DataFrame with p-values for all pairwise comparisons
+    Tuple of (DataFrame with p-values, DataFrame with significance levels)
     """
-    model_names = list(errors_dict.keys())
+    model_names = list(model_data.keys())
     n_models = len(model_names)
+
+    if n_models < 2:
+        return pd.DataFrame(index=model_names, columns=model_names), pd.DataFrame(index=model_names, columns=model_names)
+
+    # Find the common observation period for all models' y_true
+    y_true_arrays = {name: data['y_true'] for name, data in model_data.items()}
+    
+    # Determine the minimum length among all y_true arrays
+    min_common_length = min(len(arr) for arr in y_true_arrays.values()) if y_true_arrays else 0
+
+    if min_common_length == 0:
+        return pd.DataFrame(index=model_names, columns=model_names), pd.DataFrame(index=model_names, columns=model_names)
+
+    # Now, trim all residuals to this minimum common length
+    # This also re-aligns them implicitly because they correspond to the same y_true prefix
+    aligned_residuals = {
+        name: data['residuals'][:min_common_length]
+        for name, data in model_data.items()
+    }
 
     # Initialize matrix
     p_matrix = pd.DataFrame(
@@ -238,20 +258,38 @@ def diebold_mariano_matrix(
         dtype=str
     )
 
-    for i, m1 in enumerate(model_names):
-        for j, m2 in enumerate(model_names):
+    for i, m1_name in enumerate(model_names):
+        for j, m2_name in enumerate(model_names):
             if i == j:
-                p_matrix.loc[m1, m2] = np.nan
-                sig_matrix.loc[m1, m2] = "—"
+                p_matrix.loc[m1_name, m2_name] = np.nan
+                sig_matrix.loc[m1_name, m2_name] = "—"
             else:
-                result = diebold_mariano_test(
-                    errors_dict[m1],
-                    errors_dict[m2],
-                    h=h,
-                    loss_type=loss_type
-                )
-                p_matrix.loc[m1, m2] = result.p_value
-                sig_matrix.loc[m1, m2] = result.significance_level
+                # Use the aligned residuals
+                e1_aligned = aligned_residuals[m1_name]
+                e2_aligned = aligned_residuals[m2_name]
+
+                # If after alignment, any array is too short, skip comparison
+                if len(e1_aligned) < h or len(e2_aligned) < h: # DM test needs at least h observations
+                    p_matrix.loc[m1_name, m2_name] = np.nan
+                    sig_matrix.loc[m1_name, m2_name] = "N/A (data too short)"
+                    continue
+
+                try:
+                    # Pass default model names to DM test, it's just for internal conclusion string
+                    result = diebold_mariano_test(
+                        e1_aligned,
+                        e2_aligned,
+                        h=h,
+                        loss_type=loss_type,
+                        model_1_name=m1_name, # Pass model names
+                        model_2_name=m2_name  # Pass model names
+                    )
+                    p_matrix.loc[m1_name, m2_name] = result.p_value
+                    sig_matrix.loc[m1_name, m2_name] = result.significance_level
+                except Exception as e:
+                    # Catch any other exceptions from DM test, e.g., zero variance
+                    p_matrix.loc[m1_name, m2_name] = np.nan
+                    sig_matrix.loc[m1_name, m2_name] = f"Error: {str(e)[:15]}..." # Truncate error message
 
     return p_matrix, sig_matrix
 

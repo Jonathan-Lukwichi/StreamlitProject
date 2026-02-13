@@ -605,9 +605,9 @@ def run_arima_pipeline(
         "stationarity": stationarity,
         "residuals": resid_series,
         "ljung_box": ljung_box,
-        "fitted_values": results.fittedvalues if hasattr(results, "fittedvalues") else None,
         "seasonal_proportions": None,
         "category_forecasts": None,
+        "fitted_model": results,
     }
 
 

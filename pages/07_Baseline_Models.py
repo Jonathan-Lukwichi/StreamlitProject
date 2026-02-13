@@ -1428,7 +1428,7 @@ def run_arima_multihorizon(
             "forecast": fc, "ci_lo": lo, "ci_hi": hi,
             "order": info.get("order", order if order else "auto"),
             "sorder": None,
-            "res": out.get("fit_results") or out.get("model") or None,
+            "res": out.get("fitted_model"),
         }
         ok.append(h)
 

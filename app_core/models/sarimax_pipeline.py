@@ -1362,6 +1362,7 @@ def run_sarimax_single(
         },
         "residuals": pd.Series(fit.resid, index=y_tr.index).dropna(),
         "fitted_values": fitted,
+        "fitted_model": fit,
     }
 
 # ---------- multi-horizon SARIMAX (h = 1..H) ----------
@@ -1647,6 +1648,7 @@ def run_sarimax_multihorizon(
             "fitted": fitted, "forecast": mean,
             "ci_lo": ci.iloc[:, 0], "ci_hi": ci.iloc[:, 1],
             "order": use_order, "sorder": use_sorder,
+            "fitted_model": fit,
         }
         ok.append(h)
 
