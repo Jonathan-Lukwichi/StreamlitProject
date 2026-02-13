@@ -3879,10 +3879,26 @@ def run_7day_backtesting(model_type: str, best_params: dict, X, y, dates,
                 wrapper.fit(X_train, y_train)
                 y_pred = wrapper.predict(X_test)
 
-            # Calculate metrics for this window
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            mae = mean_absolute_error(y_test, y_pred)
-            mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1e-10))) * 100
+            # Calculate metrics for this window (filter out NaN values)
+            y_test_arr = np.array(y_test)
+            y_pred_arr = np.array(y_pred)
+
+            # Create mask for valid (non-NaN) predictions
+            valid_mask = ~np.isnan(y_pred_arr) & ~np.isnan(y_test_arr)
+
+            if not valid_mask.any():
+                failed_windows.append({
+                    'window': window_idx + 1,
+                    'reason': 'No valid predictions (all NaN after filtering)'
+                })
+                continue
+
+            y_test_valid = y_test_arr[valid_mask]
+            y_pred_valid = y_pred_arr[valid_mask]
+
+            rmse = np.sqrt(mean_squared_error(y_test_valid, y_pred_valid))
+            mae = mean_absolute_error(y_test_valid, y_pred_valid)
+            mape = np.mean(np.abs((y_test_valid - y_pred_valid) / (y_test_valid + 1e-10))) * 100
             accuracy = 100 - mape
 
             window_results.append({
@@ -3890,18 +3906,19 @@ def run_7day_backtesting(model_type: str, best_params: dict, X, y, dates,
                 'cutoff_idx': cutoff_idx,
                 'train_size': len(X_train),
                 'test_size': len(X_test),
+                'valid_predictions': int(valid_mask.sum()),
                 'RMSE': rmse,
                 'MAE': mae,
                 'MAPE': mape,
                 'Accuracy': accuracy,
-                'y_true': y_test,
-                'y_pred': y_pred,
+                'y_true': y_test_valid,
+                'y_pred': y_pred_valid,
                 'dates': dates[cutoff_idx:cutoff_idx + horizon] if dates is not None else None
             })
 
             # Collect all predictions for aggregate metrics
-            all_y_true.extend(y_test)
-            all_y_pred.extend(y_pred)
+            all_y_true.extend(y_test_valid)
+            all_y_pred.extend(y_pred_valid)
 
         except Exception as e:
             # Capture error details for debugging
