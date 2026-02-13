@@ -16,6 +16,9 @@ from datetime import datetime
 import joblib
 import gc
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app_core.ui.theme import apply_css
 from app_core.ui.theme import (
