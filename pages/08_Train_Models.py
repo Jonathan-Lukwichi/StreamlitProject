@@ -1382,10 +1382,24 @@ def save_optimized_model_to_disk(
             model_name_lower = model_name.lower()
             is_keras_model = ("lstm" in model_name_lower or "ann" in model_name_lower)
 
-            if is_keras_model and hasattr(pipeline, 'save'):
-                # Keras models - use .keras extension
+            if is_keras_model:
+                # Keras models - need to save the actual Keras model, not the wrapper
                 filepath = os.path.join(model_dir, f"horizon_{h}.keras")
-                pipeline.save(filepath)
+
+                # Pipeline could be a wrapper class with .model attribute
+                if hasattr(pipeline, 'model') and pipeline.model is not None:
+                    pipeline.model.save(filepath)
+                    # Also save scaler if available
+                    if hasattr(pipeline, 'scaler_X') and pipeline.scaler_X is not None:
+                        scaler_path = os.path.join(model_dir, f"scaler_{h}.pkl")
+                        joblib.dump(pipeline.scaler_X, scaler_path)
+                        saved_paths[f"scaler_{h}"] = scaler_path
+                elif hasattr(pipeline, 'save'):
+                    # Direct Keras model
+                    pipeline.save(filepath)
+                else:
+                    logger.warning(f"Keras pipeline for horizon {h} has no model to save")
+                    continue
             else:
                 # XGBoost/sklearn models - use .pkl extension
                 filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
