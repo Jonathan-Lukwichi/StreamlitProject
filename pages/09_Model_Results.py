@@ -1835,16 +1835,15 @@ render_scifi_hero_header(
 # =============================================================================
 if MODEL_STORAGE_AVAILABLE:
     storage_service = ModelStorageService()
-    available_models = storage_service.list_available_models()
+    available_models = storage_service.list_available_models()  # Returns List[ModelArtifactMetadata]
 
-    if available_models.success and available_models.data:
-        saved_models = available_models.data
-
+    if available_models:  # List is not empty
         # Check which models are NOT already in session state
         models_to_load = []
-        for model_info in saved_models:
-            model_type = model_info.get("model_type", "")
-            session_key = model_info.get("session_state_key", "")
+        for model_info in available_models:
+            # model_info is a ModelArtifactMetadata dataclass
+            model_type = model_info.model_type
+            session_key = model_info.session_state_key
 
             # Check if this model is already loaded in session state
             if session_key and st.session_state.get(session_key) is None:
@@ -1861,10 +1860,10 @@ if MODEL_STORAGE_AVAILABLE:
                 load_data = []
                 for m in models_to_load:
                     load_data.append({
-                        "Model": m.get("model_type", "Unknown"),
-                        "Horizons": str(m.get("horizons", [])),
-                        "Saved At": m.get("saved_at", "Unknown"),
-                        "Session Key": m.get("session_state_key", ""),
+                        "Model": m.model_type,
+                        "Horizons": str(m.horizons),
+                        "Saved At": m.saved_at,
+                        "Session Key": m.session_state_key,
                     })
 
                 if load_data:
@@ -1875,15 +1874,15 @@ if MODEL_STORAGE_AVAILABLE:
                 with col_load:
                     model_to_load = st.selectbox(
                         "Select model to load:",
-                        options=[m.get("model_type", "Unknown") for m in models_to_load],
+                        options=[m.model_type for m in models_to_load],
                         key="model_to_load_select"
                     )
 
                     if st.button("📥 Load Selected Model", key="load_single_model_btn"):
                         # Find the model info
                         for m in models_to_load:
-                            if m.get("model_type") == model_to_load:
-                                result = storage_service.restore_to_session_state(m.get("model_type", ""))
+                            if m.model_type == model_to_load:
+                                result = storage_service.restore_to_session_state(m.model_type)
                                 if result.success:
                                     st.success(f"✅ Loaded {model_to_load} into session state!")
                                     st.rerun()
@@ -1897,7 +1896,7 @@ if MODEL_STORAGE_AVAILABLE:
                     if st.button("📥 Load All Saved Models", key="load_all_models_btn", type="primary"):
                         result = storage_service.restore_all_available()
                         if result.success:
-                            loaded_count = result.data.get("loaded_count", 0)
+                            loaded_count = result.data.get("loaded_count", 0) if result.data else 0
                             st.success(f"✅ Successfully loaded {loaded_count} model(s) from disk!")
                             st.rerun()
                         else:
