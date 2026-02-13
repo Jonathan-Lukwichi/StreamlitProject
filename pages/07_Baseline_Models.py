@@ -220,6 +220,36 @@ def save_baseline_model_to_disk(
         except Exception as e:
             logger.warning(f"Could not save {model_type} metrics: {e}")
 
+    # 4. Save results metadata for ModelStorageService discovery
+    from datetime import datetime
+    session_key = "arima_mh_results" if model_type.upper() == "ARIMA" else "sarimax_results"
+    horizons = list(per_h.keys()) if per_h else results.get("horizons", [])
+
+    # Extract summary metrics from results_df
+    metrics_summary = {}
+    if results_df is not None and not results_df.empty:
+        for col in ["Test_MAE", "Test_RMSE", "Test_MAPE", "Test_Acc"]:
+            if col in results_df.columns:
+                metrics_summary[col.replace("Test_", "")] = float(results_df[col].mean())
+
+    metadata = {
+        "model_type": model_type,
+        "horizons": [int(h) for h in horizons] if horizons else [],
+        "saved_at": datetime.now().isoformat(),
+        "config": config_to_save,
+        "metrics": metrics_summary,
+        "session_state_key": session_key,
+        "file_manifest": saved_paths,
+    }
+    try:
+        metadata_path = os.path.join(model_dir, "results_metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2, default=str)
+        saved_paths["metadata"] = metadata_path
+        logger.info(f"Saved {model_type} metadata to {metadata_path}")
+    except Exception as e:
+        logger.warning(f"Could not save {model_type} metadata: {e}")
+
     return saved_paths
 
 # ---------------------------- Local fallback plotters (ARIMA single) ----------------------------
