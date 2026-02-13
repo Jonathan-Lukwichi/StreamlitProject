@@ -1830,6 +1830,79 @@ render_scifi_hero_header(
     status="SYSTEM ONLINE"
 )
 
+# =============================================================================
+# LOAD SAVED MODELS FROM DISK (if ModelStorageService available)
+# =============================================================================
+if MODEL_STORAGE_AVAILABLE:
+    storage_service = ModelStorageService()
+    available_models = storage_service.list_available_models()
+
+    if available_models.success and available_models.data:
+        saved_models = available_models.data
+
+        # Check which models are NOT already in session state
+        models_to_load = []
+        for model_info in saved_models:
+            model_type = model_info.get("model_type", "")
+            session_key = model_info.get("session_state_key", "")
+
+            # Check if this model is already loaded in session state
+            if session_key and st.session_state.get(session_key) is None:
+                models_to_load.append(model_info)
+
+        if models_to_load:
+            with st.expander(f"📂 **{len(models_to_load)} Saved Model(s) Available on Disk** — Click to Load", expanded=False):
+                st.info(
+                    "🔄 These models were trained previously and saved to disk. "
+                    "Load them to avoid re-training."
+                )
+
+                # Create a table of available models
+                load_data = []
+                for m in models_to_load:
+                    load_data.append({
+                        "Model": m.get("model_type", "Unknown"),
+                        "Horizons": str(m.get("horizons", [])),
+                        "Saved At": m.get("saved_at", "Unknown"),
+                        "Session Key": m.get("session_state_key", ""),
+                    })
+
+                if load_data:
+                    st.dataframe(pd.DataFrame(load_data), use_container_width=True, hide_index=True)
+
+                col_load, col_all = st.columns(2)
+
+                with col_load:
+                    model_to_load = st.selectbox(
+                        "Select model to load:",
+                        options=[m.get("model_type", "Unknown") for m in models_to_load],
+                        key="model_to_load_select"
+                    )
+
+                    if st.button("📥 Load Selected Model", key="load_single_model_btn"):
+                        # Find the model info
+                        for m in models_to_load:
+                            if m.get("model_type") == model_to_load:
+                                result = storage_service.restore_to_session_state(m.get("model_type", ""))
+                                if result.success:
+                                    st.success(f"✅ Loaded {model_to_load} into session state!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to load: {result.error}")
+                                break
+
+                with col_all:
+                    st.write("")  # Spacer
+                    st.write("")  # Align with selectbox
+                    if st.button("📥 Load All Saved Models", key="load_all_models_btn", type="primary"):
+                        result = storage_service.restore_all_available()
+                        if result.success:
+                            loaded_count = result.data.get("loaded_count", 0)
+                            st.success(f"✅ Successfully loaded {loaded_count} model(s) from disk!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error loading models: {result.error}")
+
 # Aggregate all results
 all_models_df = aggregate_all_model_results()
 
