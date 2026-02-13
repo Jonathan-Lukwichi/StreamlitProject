@@ -1458,6 +1458,29 @@ def save_optimized_model_to_disk(
             logger.warning(f"Could not save optimized {model_name} horizon {h}: {e}")
             continue
 
+    # Save results metadata for ModelStorageService discovery
+    from datetime import datetime
+    session_key = f"opt_results_{model_name.lower().replace(' ', '_').replace('_optimized', '')}"
+    horizons = list(pipelines.keys()) if pipelines else []
+
+    metadata = {
+        "model_type": f"{model_name}_Optimized",
+        "horizons": [int(h) for h in horizons] if horizons else [],
+        "saved_at": datetime.now().isoformat(),
+        "config": {"best_params": best_params},
+        "metrics": metrics_to_save,
+        "session_state_key": session_key,
+        "file_manifest": {str(k): str(v) for k, v in saved_paths.items()},
+    }
+    try:
+        metadata_path = os.path.join(model_dir, "results_metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2, default=str)
+        saved_paths["metadata"] = metadata_path
+        logger.info(f"Saved optimized {model_name} metadata to {metadata_path}")
+    except Exception as e:
+        logger.warning(f"Could not save optimized {model_name} metadata: {e}")
+
     return saved_paths
 
 
