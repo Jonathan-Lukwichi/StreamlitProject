@@ -199,8 +199,8 @@ def save_baseline_model_to_disk(
     per_h = results.get("per_h", {})
     for h, h_data in per_h.items():
         try:
-            # Get the fitted model
-            fitted_model = h_data.get("model") or h_data.get("fitted_model")
+            # Get the fitted model (ARIMA uses "res", SARIMAX uses "fitted_model")
+            fitted_model = h_data.get("model") or h_data.get("fitted_model") or h_data.get("res")
             if fitted_model is not None:
                 model_path = os.path.join(model_dir, f"horizon_{h}.pkl")
                 joblib.dump(fitted_model, model_path)
