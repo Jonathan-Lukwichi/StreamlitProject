@@ -1481,13 +1481,7 @@ The **{best_model}** model demonstrated superior performance based on a weighted
 | MAPE (Mean Absolute Percentage Error) | {metrics.get('MAPE_%', 'N/A'):.2f}% | #{analysis.get('ranks', {}).get('MAPE_Rank', 'N/A')} |
 | Accuracy | {metrics.get('Accuracy_%', 'N/A'):.2f}% | #{analysis.get('ranks', {}).get('Acc_Rank', 'N/A')} |
 
-#### Ranking Methodology
-
-The composite ranking was computed using a weighted scoring system:
-- RMSE: 35% weight (primary accuracy measure for healthcare forecasting)
-- MAE: 30% weight (robust to outliers, interpretable in original units)
-- MAPE: 20% weight (relative error, useful for comparing across different scales)
-- Accuracy: 15% weight (overall prediction accuracy)
+`
 
 """
 
@@ -1635,13 +1629,7 @@ All models were evaluated using standard forecasting metrics:
 3. **MAPE (Mean Absolute Percentage Error)**: Scale-independent relative error
 4. **Accuracy**: Percentage of predictions within acceptable tolerance
 
-### 2.3 Ranking Methodology
-
-Composite rankings were computed using weighted scoring:
-- RMSE: 35% weight (primary metric for healthcare forecasting)
-- MAE: 30% weight (clinical interpretability)
-- MAPE: 20% weight (relative performance)
-- Accuracy: 15% weight (overall precision)
+`
 
 ---
 
