@@ -1250,6 +1250,48 @@ def save_ml_models_to_disk(
             print(f"Warning: Could not save {model_type} horizon {h}: {e}")
             continue
 
+    # Save metrics CSV
+    results_df = ml_results.get("results_df")
+    if results_df is not None:
+        try:
+            metrics_path = os.path.join(model_dir, "metrics.csv")
+            results_df.to_csv(metrics_path, index=False)
+            saved_paths["metrics"] = metrics_path
+        except Exception as e:
+            print(f"Warning: Could not save {model_type} metrics: {e}")
+
+    # Save results metadata for ModelStorageService discovery
+    import json
+    from datetime import datetime
+
+    session_key = f"ml_mh_results_{model_type.lower()}"
+    horizons = list(pipelines.keys()) if pipelines else []
+
+    # Extract summary metrics from results_df
+    metrics_summary = {}
+    if results_df is not None and not results_df.empty:
+        for col in ["Test_MAE", "Test_RMSE", "Test_MAPE", "Test_Acc"]:
+            if col in results_df.columns:
+                metrics_summary[col.replace("Test_", "")] = float(results_df[col].mean())
+
+    metadata = {
+        "model_type": model_type,
+        "horizons": [int(h) for h in horizons] if horizons else [],
+        "saved_at": datetime.now().isoformat(),
+        "config": {},
+        "metrics": metrics_summary,
+        "session_state_key": session_key,
+        "file_manifest": {str(k): str(v) for k, v in saved_paths.items()},
+    }
+    try:
+        metadata_path = os.path.join(model_dir, "results_metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2, default=str)
+        saved_paths["metadata"] = metadata_path
+        logger.info(f"Saved {model_type} metadata to {metadata_path}")
+    except Exception as e:
+        print(f"Warning: Could not save {model_type} metadata: {e}")
+
     return saved_paths
 
 
