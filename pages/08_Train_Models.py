@@ -3840,10 +3840,37 @@ def run_7day_backtesting(model_type: str, best_params: dict, X, y, dates,
 
             elif model_type == "LSTM":
                 # Use the LSTM wrapper
+                # LSTM needs lookback rows to create sequences for prediction
+                lookback = best_params.get('lookback_window', 7)
+
+                # Check if we have enough data before cutoff for lookback
+                if cutoff_idx < lookback:
+                    failed_windows.append({
+                        'window': window_idx + 1,
+                        'reason': f'Not enough data for LSTM lookback: cutoff={cutoff_idx} < lookback={lookback}'
+                    })
+                    continue
+
                 wrapper = create_sklearn_lstm_wrapper()
                 wrapper.set_params(**best_params)
                 wrapper.fit(X_train, y_train)
-                y_pred = wrapper.predict(X_test)
+
+                # Include lookback rows before test window for sequence creation
+                X_test_with_context = X[cutoff_idx - lookback:cutoff_idx + horizon]
+                y_pred_full = wrapper.predict(X_test_with_context)
+
+                # Extract only the predictions for the actual test period
+                # LSTM predict returns NaN for first `lookback` positions, then predictions
+                # We want predictions starting from index `lookback` (which corresponds to cutoff_idx)
+                y_pred = y_pred_full[lookback:lookback + horizon]
+
+                # Handle case where predictions might still have NaN
+                if np.isnan(y_pred).all():
+                    failed_windows.append({
+                        'window': window_idx + 1,
+                        'reason': f'LSTM returned all NaN predictions'
+                    })
+                    continue
 
             elif model_type == "ANN":
                 # Use the ANN wrapper
