@@ -2307,9 +2307,8 @@ with tab_validation:
         residuals_data = collect_model_residuals(horizon=horizon_select)
 
         if len(residuals_data) >= 2:
-            # Compute DM test matrix
-            errors_dict = {name: data["residuals"] for name, data in residuals_data.items()}
-            p_matrix, sig_matrix = diebold_mariano_matrix(errors_dict, h=horizon_select)
+            # Compute DM test matrix - pass full residuals_data with y_true and residuals
+            p_matrix, sig_matrix = diebold_mariano_matrix(residuals_data, h=horizon_select)
 
             # Display heatmap
             if DIAGNOSTIC_PLOTS_AVAILABLE:
