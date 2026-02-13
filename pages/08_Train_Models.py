@@ -1235,6 +1235,11 @@ def save_ml_models_to_disk(
                 if hasattr(pipeline, 'model') and pipeline.model is not None:
                     pipeline.model.save(filepath)
                     saved_paths[h] = filepath
+                    # Also save scaler if available
+                    if hasattr(pipeline, 'scaler_X') and pipeline.scaler_X is not None:
+                        scaler_path = os.path.join(model_dir, f"scaler_{h}.pkl")
+                        joblib.dump(pipeline.scaler_X, scaler_path)
+                        saved_paths[f"scaler_{h}"] = scaler_path
             else:
                 # XGBoost and other sklearn-compatible models use joblib
                 filepath = os.path.join(model_dir, f"horizon_{h}.pkl")
