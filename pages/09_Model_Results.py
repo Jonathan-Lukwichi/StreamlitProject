@@ -98,6 +98,16 @@ from app_core.data.experiment_results_service import (
     get_model_category,
 )
 
+# Model storage service for loading saved models from disk
+try:
+    from app_core.services.model_storage_service import (
+        ModelStorageService,
+        ModelArtifactMetadata,
+    )
+    MODEL_STORAGE_AVAILABLE = True
+except ImportError:
+    MODEL_STORAGE_AVAILABLE = False
+
 # ============================================================================
 # AUTHENTICATION CHECK - ADMIN ONLY
 # ============================================================================
