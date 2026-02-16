@@ -3106,6 +3106,16 @@ def page_ml():
                         st.warning(f"⚠️ Could not save model files: {save_err}")
                     # ================================================
 
+                    # ===== SAVE TO SUPABASE FOR CLOUD PERSISTENCE =====
+                    try:
+                        from app_core.data.cloud_model_sync import save_model_to_supabase
+                        cloud_success, cloud_msg = save_model_to_supabase(model_key)
+                        if cloud_success:
+                            st.toast(f"☁️ Saved to cloud: {model_name}")
+                    except Exception as cloud_err:
+                        pass  # Cloud save is optional, don't fail training
+                    # ==================================================
+
                     # Store residuals for hybrid models (Stage 1 → Stage 2)
                     total_residuals = full_results.get("total_residuals", {})
                     if total_residuals:
