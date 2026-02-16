@@ -505,6 +505,11 @@ def get_forecast_data() -> Dict[str, Any]:
         "category_forecasts": None,  # NEW: Category-level forecasts
     }
 
+    # Helper to generate dates
+    def _generate_dates(horizon: int) -> List[str]:
+        today = datetime.now().date()
+        return [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, horizon + 1)]
+
     # Priority 1: forecast_hub_demand (direct sync with Page 10)
     if "forecast_hub_demand" in st.session_state and st.session_state.forecast_hub_demand:
         hub_data = st.session_state.forecast_hub_demand
@@ -516,6 +521,7 @@ def get_forecast_data() -> Dict[str, Any]:
             result["accuracy"] = hub_data.get("accuracy")
             result["synced_with_page10"] = True
             result["category_forecasts"] = hub_data.get("category_forecasts")
+            result["dates"] = _generate_dates(result["horizon"])
             return result
 
     # Priority 2: active_forecast
@@ -528,6 +534,7 @@ def get_forecast_data() -> Dict[str, Any]:
             result["horizon"] = len(result["forecasts"])
             result["accuracy"] = af.get("accuracy")
             result["synced_with_page10"] = True
+            result["dates"] = _generate_dates(result["horizon"])
             return result
 
     # Priority 3: ML model results (using lowercase keys)
@@ -544,6 +551,7 @@ def get_forecast_data() -> Dict[str, Any]:
                         result["source"] = f"{model_key.split('_')[-1]} (H={best_h})"
                         result["forecasts"] = list(h_data["forecast"])
                         result["horizon"] = len(result["forecasts"])
+                        result["dates"] = _generate_dates(result["horizon"])
                         return result
 
     # Priority 4: ARIMA results
@@ -559,12 +567,8 @@ def get_forecast_data() -> Dict[str, Any]:
                     result["source"] = f"ARIMA (H={best_h})"
                     result["forecasts"] = list(h_data["forecast"])
                     result["horizon"] = len(result["forecasts"])
+                    result["dates"] = _generate_dates(result["horizon"])
                     return result
-
-    # Generate dates
-    today = datetime.now().date()
-    if result["has_forecast"]:
-        result["dates"] = [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, result["horizon"] + 1)]
 
     return result
 
