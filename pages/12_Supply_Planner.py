@@ -1165,9 +1165,9 @@ with tab4:
         stockout_risk_optimized = (100 - results['service_level'])
         stockout_risk_reduction = stockout_risk_current - stockout_risk_optimized
 
-        # Calculate days of supply continuity gained
-        # Higher service level = more safety stock = more buffer days
-        buffer_days_gained = max(0, service_level_improvement * 0.3)  # Approx 0.3 days per % SL
+        # Calculate lead time reduction from better safety stock positioning
+        # Higher safety stock = less emergency orders = shorter effective lead time
+        lead_time_reduction = max(0, service_level_improvement * 0.2)  # ~0.2 days per % SL improvement
 
         # Emergency procurement costs avoided (rough estimate)
         # Stockouts often cost 2-3x regular procurement
