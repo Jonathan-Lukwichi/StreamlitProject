@@ -860,9 +860,18 @@ with tab1:
                 render_kpi_card("Avg Meds/Day", f"{stats['avg_meds_daily']:.1f}", "inventory", "blue")
             with kpi_cols[3]:
                 sl = stats.get('avg_service_level', 95)
-                sl_class = "success" if sl >= 95 else "warning" if sl >= 90 else "danger"
-                sl_color = "green" if sl >= 95 else "yellow" if sl >= 90 else "red"
-                render_kpi_card("Service Level", f"{sl:.1f}%", sl_class, sl_color)
+                sl_valid = stats.get('service_level_data_valid', True)
+                if sl_valid:
+                    sl_class = "success" if sl >= 95 else "warning" if sl >= 90 else "danger"
+                    sl_color = "green" if sl >= 95 else "yellow" if sl >= 90 else "red"
+                    render_kpi_card("Service Level", f"{sl:.1f}%", sl_class, sl_color)
+                else:
+                    # Invalid data - show warning with asterisk
+                    render_kpi_card("Service Level*", f"{sl:.1f}%", "warning", "yellow")
+
+            # Show warning banner if service level data is invalid
+            if not stats.get('service_level_data_valid', True):
+                st.warning("⚠️ Service Level data appears invalid (outside 0-100% range). Value has been clamped. Check data quality.")
 
             # Show demand statistics for safety stock calculation
             st.markdown('<div class="subsection-header">📊 Demand Variability (for Safety Stock)</div>', unsafe_allow_html=True)
