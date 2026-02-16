@@ -832,7 +832,7 @@ def calculate_optimization_heuristic(
         )
 
         schedules.append({
-            "date": forecast_data["dates"][i],
+            "date": dates[i],
             "patients": patients,
             "doctors": int(doctors),
             "nurses": int(nurses),
