@@ -3473,17 +3473,27 @@ def run_random_search_optimization(model_type: str, X_train, y_train, n_splits: 
     from sklearn.metrics import mean_squared_error, mean_absolute_error, make_scorer
     import numpy as np
 
-    # Define custom scorers (same as Grid Search)
+    # Define custom scorers (with NaN handling for LSTM/ANN lookback padding)
     def mape_scorer(y_true, y_pred):
-        mask = y_true != 0
+        """Mean Absolute Percentage Error - handles NaN from LSTM lookback"""
+        mask = ~np.isnan(y_pred) & ~np.isnan(y_true) & (y_true != 0)
+        if mask.sum() == 0:
+            return np.nan
         return np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
 
     def accuracy_scorer(y_true, y_pred):
+        """Accuracy = 100 - MAPE - handles NaN from LSTM lookback"""
         mape = mape_scorer(y_true, y_pred)
+        if np.isnan(mape):
+            return np.nan
         return 100 - mape
 
     def rmse_scorer(y_true, y_pred):
-        return np.sqrt(mean_squared_error(y_true, y_pred))
+        """Root Mean Square Error - handles NaN from LSTM lookback"""
+        mask = ~np.isnan(y_pred) & ~np.isnan(y_true)
+        if mask.sum() == 0:
+            return np.nan
+        return np.sqrt(mean_squared_error(y_true[mask], y_pred[mask]))
 
     scoring = {
         'RMSE': make_scorer(rmse_scorer, greater_is_better=False),
