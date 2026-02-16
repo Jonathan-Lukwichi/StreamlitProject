@@ -1085,8 +1085,11 @@ with tab4:
             render_kpi_card("Optimized Weekly", f"${results['optimized_weekly_cost']:,.0f}", "success", "green")
         with impact_cols[2]:
             savings = results['weekly_savings']
-            savings_class = "success" if savings > 0 else "danger"
-            render_kpi_card("Weekly Savings", f"${savings:,.0f}", savings_class, "green" if savings > 0 else "red")
+            if savings >= 0:
+                render_kpi_card("Weekly Savings", f"${savings:,.0f}", "success", "green")
+            else:
+                investment = abs(savings)
+                render_kpi_card("Weekly Investment", f"${investment:,.0f}", "linked", "purple")
         with impact_cols[3]:
             render_kpi_card("Service Level", f"{results['service_level']:.1f}%", "success", "green")
 
