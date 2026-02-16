@@ -3721,7 +3721,10 @@ def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
         'Accuracy': make_scorer(accuracy_scorer, greater_is_better=True),
     }
 
-    cv_results = cross_validate(final_model, X_train, y_train, cv=tscv, scoring=all_scorers, return_train_score=False)
+    # Use n_jobs=1 for Keras models (LSTM, ANN) - they cannot be pickled for multiprocessing
+    is_keras_model = model_type.upper() in ["LSTM", "ANN"]
+    n_jobs_final = 1 if is_keras_model else -1
+    cv_results = cross_validate(final_model, X_train, y_train, cv=tscv, scoring=all_scorers, return_train_score=False, n_jobs=n_jobs_final)
 
     return {
         'best_params': best_params,
