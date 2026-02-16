@@ -803,6 +803,13 @@ def calculate_optimization_heuristic(
     constraints = st.session_state.staff_constraint_config
     staffing_ratios = constraints.staffing_ratios
 
+    # Ensure dates are available (defensive check)
+    horizon = len(forecast_data["forecasts"])
+    dates = forecast_data.get("dates", [])
+    if not dates or len(dates) < horizon:
+        today = datetime.now().date()
+        dates = [(today + timedelta(days=i+1)).strftime("%a %m/%d") for i in range(horizon)]
+
     for i, patients in enumerate(forecast_data["forecasts"]):
         # Get category-level patients for this day
         patients_by_cat = {cat: category_demand[cat][i] for cat in CLINICAL_CATEGORIES}
