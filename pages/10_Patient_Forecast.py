@@ -1866,8 +1866,29 @@ with tab_forecast:
 
         st.plotly_chart(fig, use_container_width=True)
 
+        # Convert category_forecasts_by_horizon from {horizon: {cat: val}} to {cat: [vals]}
+        # This format is easier for downstream pages (Staff Planner, Supply Planner)
+        category_forecasts_for_session = None
+        if category_forecasts_by_horizon:
+            category_forecasts_for_session = {}
+            # Get all categories from the first horizon
+            first_horizon = list(category_forecasts_by_horizon.keys())[0]
+            all_categories = list(category_forecasts_by_horizon[first_horizon].keys())
+
+            for cat in all_categories:
+                category_forecasts_for_session[cat] = []
+                for h in sorted(category_forecasts_by_horizon.keys()):
+                    val = category_forecasts_by_horizon[h].get(cat, 0)
+                    category_forecasts_for_session[cat].append(val)
+
         # Save to session state for staff scheduling, inventory, and command center
-        save_forecast_to_session(forecast_data, selected_model_name, horizons=horizons, forecast_days=forecast_days)
+        save_forecast_to_session(
+            forecast_data,
+            selected_model_name,
+            horizons=horizons,
+            forecast_days=forecast_days,
+            category_forecasts=category_forecasts_for_session
+        )
 
 # =============================================================================
 # TAB 3: MODEL COMPARISON
