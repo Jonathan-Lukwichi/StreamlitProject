@@ -10192,6 +10192,16 @@ def _page_hybrid_lstm_ann():
                     st.warning(f"⚠️ Could not save hybrid model files: {save_err}")
                 # ====================================================
 
+                # ===== SAVE TO SUPABASE FOR CLOUD PERSISTENCE =====
+                try:
+                    from app_core.data.cloud_model_sync import save_model_to_supabase
+                    cloud_success, cloud_msg = save_model_to_supabase("lstm_ann_results")
+                    if cloud_success:
+                        st.toast("☁️ Saved LSTM-ANN to cloud")
+                except Exception:
+                    pass  # Cloud save is optional
+                # ==================================================
+
                 # Display Metrics
                 st.markdown("### 🏆 Hybrid Model Performance")
 
