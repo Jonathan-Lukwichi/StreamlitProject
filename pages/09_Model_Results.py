@@ -1894,13 +1894,19 @@ if MODEL_STORAGE_AVAILABLE:
                     st.write("")  # Spacer
                     st.write("")  # Align with selectbox
                     if st.button("📥 Load All Saved Models", key="load_all_models_btn", type="primary"):
-                        result = storage_service.restore_all_available()
-                        if result.success:
-                            loaded_count = result.data.get("loaded_count", 0) if result.data else 0
+                        results = storage_service.restore_all_available()
+                        # results is Dict[str, ServiceResult]
+                        loaded_count = sum(1 for r in results.values() if r.success)
+                        failed = [k for k, r in results.items() if not r.success]
+                        if loaded_count > 0:
                             st.success(f"✅ Successfully loaded {loaded_count} model(s) from disk!")
+                            if failed:
+                                st.warning(f"⚠️ Failed to load: {', '.join(failed)}")
                             st.rerun()
+                        elif failed:
+                            st.error(f"❌ Failed to load models: {', '.join(failed)}")
                         else:
-                            st.error(f"❌ Error loading models: {result.error}")
+                            st.info("ℹ️ No saved models found to load.")
 
 # Aggregate all results
 all_models_df = aggregate_all_model_results()
