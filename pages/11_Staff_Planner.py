@@ -1220,9 +1220,13 @@ with tab3:
 
             with opt_cols[3]:
                 savings = results['weekly_savings']
-                savings_class = "success" if savings > 0 else "danger"
-                savings_color = "green" if savings > 0 else "red"
-                render_kpi_card("Weekly Savings", f"${savings:,.0f}", savings_class, savings_color)
+                if savings >= 0:
+                    # Cost reduction scenario
+                    render_kpi_card("Potential Savings", f"${savings:,.0f}", "success", "green")
+                else:
+                    # Additional investment needed - reframe positively
+                    investment = abs(savings)
+                    render_kpi_card("Investment Required", f"${investment:,.0f}", "linked", "purple")
 
             # Schedule table
             st.markdown('<div class="subsection-header">📅 Optimized Schedule</div>', unsafe_allow_html=True)
