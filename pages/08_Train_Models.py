@@ -10244,6 +10244,68 @@ def _page_hybrid_lstm_ann():
 
 
 # -----------------------------------------------------------------------------
+# Cloud Model Loading (for Streamlit Cloud deployment)
+# -----------------------------------------------------------------------------
+try:
+    from app_core.data.cloud_model_sync import (
+        load_all_models_from_supabase,
+        list_cloud_models,
+        get_cloud_model_status,
+        save_all_models_to_supabase,
+    )
+    CLOUD_SYNC_AVAILABLE = True
+except ImportError:
+    CLOUD_SYNC_AVAILABLE = False
+
+if CLOUD_SYNC_AVAILABLE:
+    with st.expander("☁️ **Cloud Model Storage** — Load previously trained models from Supabase", expanded=False):
+        st.caption("For Streamlit Cloud: Load models saved from previous sessions")
+
+        col_status, col_actions = st.columns([2, 1])
+
+        with col_status:
+            cloud_models = list_cloud_models()
+            if cloud_models:
+                st.success(f"**{len(cloud_models)} model(s)** available in cloud storage")
+
+                # Show quick status
+                status = get_cloud_model_status()
+                in_session = sum(1 for s in status.values() if s["in_session"])
+                st.caption(f"Currently loaded in session: {in_session} models")
+            else:
+                st.info("No models saved to cloud yet. Train models and they'll be auto-saved.")
+
+        with col_actions:
+            if cloud_models:
+                if st.button("📥 Load All from Cloud", type="primary", use_container_width=True, key="load_cloud_models_btn"):
+                    with st.spinner("Loading models from Supabase..."):
+                        loaded, keys = load_all_models_from_supabase()
+                    if loaded > 0:
+                        st.success(f"Loaded {loaded} models!")
+                        st.toast(f"☁️ Loaded: {', '.join(keys[:3])}{'...' if len(keys) > 3 else ''}")
+                        st.rerun()
+                    else:
+                        st.warning("No models found to load")
+
+            # Save all button
+            session_models = sum(1 for key in ["ml_mh_results_xgboost", "ml_mh_results_lstm", "ml_mh_results_ann",
+                                                "arima_mh_results", "sarimax_results", "lstm_xgb_results",
+                                                "lstm_sarimax_results", "lstm_ann_results"]
+                                 if st.session_state.get(key) is not None)
+            if session_models > 0:
+                if st.button(f"📤 Save All to Cloud ({session_models})", use_container_width=True, key="save_cloud_models_btn"):
+                    with st.spinner("Saving models to Supabase..."):
+                        saved, total, errors = save_all_models_to_supabase()
+                    if saved > 0:
+                        st.success(f"Saved {saved}/{total} models to cloud!")
+                        st.toast(f"☁️ Saved {saved} models to Supabase")
+                    if errors:
+                        for err in errors[:3]:
+                            st.warning(err)
+
+    st.markdown("---")
+
+# -----------------------------------------------------------------------------
 # Tab Navigation
 # -----------------------------------------------------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
