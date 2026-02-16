@@ -380,7 +380,7 @@ def load_inventory_data() -> Dict[str, Any]:
             result["error"] = "Supabase not connected"
             return result
 
-        df = service.fetch_inventory_data()
+        df = service.fetch_all()  # Use fetch_all() instead of fetch_inventory_data()
         if df.empty:
             result["error"] = "No inventory data found"
             return result
@@ -388,19 +388,34 @@ def load_inventory_data() -> Dict[str, Any]:
         result["success"] = True
         result["data"] = df
 
-        # Calculate statistics
+        # Calculate statistics (handle different column name variations)
+        # Columns might be "Inventory_Used_Gloves" or "Gloves_Used"
+        gloves_col = "Inventory_Used_Gloves" if "Inventory_Used_Gloves" in df.columns else "Gloves_Used"
+        ppe_col = "Inventory_Used_PPE_Sets" if "Inventory_Used_PPE_Sets" in df.columns else "PPE_Sets_Used"
+        meds_col = "Inventory_Used_Medications" if "Inventory_Used_Medications" in df.columns else "Medications_Used"
+
+        # For stockout, might be "Restock_Event" or "Stockout_Event"
+        stockout_col = "Restock_Event" if "Restock_Event" in df.columns else "Stockout_Event"
+
+        # Service level might be "Stockout_Risk_Score" (inverted) or "Service_Level"
+        has_service_level = "Service_Level" in df.columns
+        has_stockout_risk = "Stockout_Risk_Score" in df.columns
+
         result["stats"] = {
             "total_records": len(df),
             "date_start": df["Date"].min() if "Date" in df.columns else None,
             "date_end": df["Date"].max() if "Date" in df.columns else None,
-            "avg_gloves_daily": df["Gloves_Used"].mean() if "Gloves_Used" in df.columns else 0,
-            "avg_ppe_daily": df["PPE_Sets_Used"].mean() if "PPE_Sets_Used" in df.columns else 0,
-            "avg_meds_daily": df["Medications_Used"].mean() if "Medications_Used" in df.columns else 0,
-            "std_gloves": df["Gloves_Used"].std() if "Gloves_Used" in df.columns else 0,
-            "std_ppe": df["PPE_Sets_Used"].std() if "PPE_Sets_Used" in df.columns else 0,
-            "std_meds": df["Medications_Used"].std() if "Medications_Used" in df.columns else 0,
-            "stockout_events": df["Stockout_Event"].sum() if "Stockout_Event" in df.columns else 0,
-            "avg_service_level": df["Service_Level"].mean() * 100 if "Service_Level" in df.columns else 95,
+            "avg_gloves_daily": df[gloves_col].mean() if gloves_col in df.columns else 0,
+            "avg_ppe_daily": df[ppe_col].mean() if ppe_col in df.columns else 0,
+            "avg_meds_daily": df[meds_col].mean() if meds_col in df.columns else 0,
+            "std_gloves": df[gloves_col].std() if gloves_col in df.columns else 0,
+            "std_ppe": df[ppe_col].std() if ppe_col in df.columns else 0,
+            "std_meds": df[meds_col].std() if meds_col in df.columns else 0,
+            "stockout_events": df[stockout_col].sum() if stockout_col in df.columns else 0,
+            "avg_service_level": (
+                df["Service_Level"].mean() * 100 if has_service_level else
+                (100 - df["Stockout_Risk_Score"].mean() * 100) if has_stockout_risk else 95
+            ),
         }
 
         return result
