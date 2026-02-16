@@ -1364,7 +1364,8 @@ with tab3:
                 if results["success"]:
                     st.session_state.inv_optimization_done = True
                     st.session_state.inv_optimized_results = results
-                    st.success(f"✅ Optimization complete! Service Level: {results['service_level']:.1f}%")
+                    cat_mode = "🏥 Category-Weighted" if results.get("using_category_weights") else "📊 Flat Rate"
+                    st.success(f"✅ Optimization complete! Service Level: {results['service_level']:.1f}% | Mode: {cat_mode}")
                 else:
                     st.error(f"❌ {results.get('error', 'Unknown error')}")
 
