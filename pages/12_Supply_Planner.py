@@ -1161,27 +1161,28 @@ with tab4:
                 api_key = st.text_input("API Key", type="password", key="supply_api_key_input")
                 st.session_state.supply_llm_api_key = api_key
 
-        # Build insight data
-        before_data = {
+        # Build insight data - use correct parameter names for the function
+        before_stats = {
             "weekly_cost": results['current_weekly_cost'],
             "service_level": 95.0,  # Old assumed service level
             "stockout_risk": 5.0,  # Estimated stockout risk with 10% safety stock
             "safety_stock_method": "Fixed 10%",
         }
 
-        after_data = {
+        optimization_results = {
             "weekly_cost": results['optimized_weekly_cost'],
             "service_level": results['service_level'],
+            "weekly_savings": results['weekly_savings'],
             "stockout_risk": (1 - results['service_level'] / 100) * 100,
             "safety_stock_method": f"Statistical (Z={results['safety_factor_z']:.2f})",
         }
 
         render_supply_optimization_insights(
-            before_data=before_data,
-            after_data=after_data,
+            before_stats=before_stats,
+            optimization_results=optimization_results,
+            cost_params=st.session_state.inv_cost_params,
             mode=st.session_state.supply_insight_mode,
-            api_key=st.session_state.supply_llm_api_key,
-            provider=st.session_state.supply_api_provider
+            api_key=st.session_state.supply_llm_api_key
         )
 
 
