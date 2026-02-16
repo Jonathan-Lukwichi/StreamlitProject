@@ -4753,6 +4753,16 @@ def page_hyperparameter_tuning():
                             except Exception as save_err:
                                 st.warning(f"⚠️ Could not save optimized params: {save_err}")
 
+                            # ===== SAVE TO SUPABASE FOR CLOUD PERSISTENCE =====
+                            try:
+                                from app_core.data.cloud_model_sync import save_model_to_supabase
+                                cloud_success, _ = save_model_to_supabase(f"opt_results_{selected_model_opt}")
+                                if cloud_success:
+                                    st.toast(f"☁️ Saved {selected_model_opt} (Random) to cloud")
+                            except Exception:
+                                pass
+                            # ==================================================
+
                             # Run 7-day backtesting if enabled
                             if cfg.get("enable_backtesting", False):
                                 n_backtest_windows = cfg.get("backtest_n_windows", 5)
