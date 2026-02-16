@@ -806,14 +806,26 @@ def calculate_inventory_optimization(
     inventory_stats: Dict,
     cost_params: Dict,
     constraints: InventoryConstraintConfig,
+    use_category_weights: bool = True,
 ) -> Dict[str, Any]:
     """
     Calculate optimized inventory using EOQ and statistical safety stock.
 
-    Enhancements over old version:
-    1. Statistical safety stock: SS = Z × σ × √L
-    2. EOQ calculation: √((2 × D × S) / H)
-    3. Configurable service levels
+    ENHANCED: Now uses category-weighted demand calculations!
+
+    Enhancements:
+    1. Category-weighted demand: Different clinical categories use supplies differently
+       (e.g., TRAUMA patients use 3x more bandages than RESPIRATORY patients)
+    2. Statistical safety stock: SS = Z × σ × √L
+    3. EOQ calculation: √((2 × D × S) / H)
+    4. Configurable service levels
+
+    Args:
+        forecast_data: Forecast data from get_forecast_data()
+        inventory_stats: Historical inventory statistics
+        cost_params: Cost parameters (holding, ordering, stockout)
+        constraints: Inventory constraint configuration
+        use_category_weights: If True, use CATEGORY_ITEM_USAGE matrix for demand calculation
     """
     if not forecast_data["has_forecast"]:
         return {"success": False, "error": "No forecast available"}
@@ -826,15 +838,51 @@ def calculate_inventory_optimization(
     ordering_cost = cost_params.get("ordering_cost", 50.0)
     service_level = constraints.target_service_level
 
+    # NEW: Get category distribution for category-weighted calculations
+    category_distribution = None
+    using_category_weights = False
+
+    if use_category_weights:
+        prepared_data = st.session_state.get("prepared_data")
+        category_distribution = get_category_distribution(forecast_data, prepared_data)
+        if category_distribution:
+            using_category_weights = True
+
     item_results = {}
     total_ordering_cost = 0
     total_holding_cost = 0
     total_purchase_cost = 0
 
+    # Track category contributions for reporting
+    category_contributions = {cat: {} for cat in CLINICAL_CATEGORIES}
+
     for item_id, item_config in DEFAULT_INVENTORY_CONFIG.items():
         # Calculate demand based on patient forecast
-        usage_rate = item_config["usage_per_patient"]
-        daily_demands = [max(0, p) * usage_rate for p in patient_forecast]
+        # NEW: Use category-weighted demand if available
+        if using_category_weights and item_id in CATEGORY_ITEM_USAGE:
+            # Calculate demand using category-specific usage rates
+            daily_demands = []
+            for day_idx in range(horizon):
+                day_demand = 0
+                for cat in CLINICAL_CATEGORIES:
+                    cat_patients = category_distribution.get(cat, [0] * horizon)
+                    if day_idx < len(cat_patients):
+                        patients_in_cat = max(0, cat_patients[day_idx])
+                        usage_for_cat = CATEGORY_ITEM_USAGE[item_id].get(cat, 1.0)
+                        cat_demand = patients_in_cat * usage_for_cat
+                        day_demand += cat_demand
+
+                        # Track contribution
+                        if item_id not in category_contributions[cat]:
+                            category_contributions[cat][item_id] = 0
+                        category_contributions[cat][item_id] += cat_demand
+
+                daily_demands.append(day_demand)
+        else:
+            # Fallback: Use flat usage rate (old method)
+            usage_rate = item_config["usage_per_patient"]
+            daily_demands = [max(0, p) * usage_rate for p in patient_forecast]
+
         total_demand = sum(daily_demands)
         avg_daily_demand = np.mean(daily_demands) if daily_demands else 0
 
@@ -891,6 +939,17 @@ def calculate_inventory_optimization(
         total_holding_cost += item_holding_cost
         total_purchase_cost += item_purchase_cost
 
+        # Calculate top category drivers for this item
+        top_categories = []
+        if using_category_weights:
+            cat_totals = []
+            for cat in CLINICAL_CATEGORIES:
+                cat_contrib = category_contributions[cat].get(item_id, 0)
+                if cat_contrib > 0:
+                    cat_totals.append((cat, cat_contrib))
+            cat_totals.sort(key=lambda x: x[1], reverse=True)
+            top_categories = cat_totals[:3]  # Top 3 contributors
+
         item_results[item_id] = {
             "name": item_config["name"],
             "forecast_demand": total_demand,
@@ -906,11 +965,14 @@ def calculate_inventory_optimization(
             "holding_cost": item_holding_cost,
             "purchase_cost": item_purchase_cost,
             "service_level": service_level,
+            # NEW: Category attribution
+            "using_category_weights": using_category_weights,
+            "top_category_drivers": top_categories,
         }
 
     total_cost = total_ordering_cost + total_holding_cost + total_purchase_cost
 
-    # Calculate current costs for comparison (from old method)
+    # Calculate current costs for comparison (from old method - flat rate)
     current_daily_cost = 0
     for item_id, item_config in DEFAULT_INVENTORY_CONFIG.items():
         unit_cost = item_config["unit_cost"]
@@ -944,6 +1006,9 @@ def calculate_inventory_optimization(
         "patient_forecast": patient_forecast,
         "service_level": service_level * 100,
         "safety_factor_z": constraints.safety_factor,
+        # NEW: Category integration info
+        "using_category_weights": using_category_weights,
+        "category_distribution": category_distribution if using_category_weights else None,
     }
 
 
