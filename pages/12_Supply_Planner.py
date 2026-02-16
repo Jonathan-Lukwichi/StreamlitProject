@@ -401,6 +401,50 @@ def load_inventory_data() -> Dict[str, Any]:
         has_service_level = "Service_Level" in df.columns
         has_stockout_risk = "Stockout_Risk_Score" in df.columns
 
+        # Calculate service level with proper format detection and validation
+        def calculate_service_level() -> Tuple[float, bool]:
+            """
+            Calculate service level with format detection and validation.
+            Returns: (service_level_percentage, is_data_valid)
+            """
+            raw_value = None
+
+            if has_service_level:
+                raw_value = df["Service_Level"].mean()
+            elif has_stockout_risk:
+                stockout_risk = df["Stockout_Risk_Score"].mean()
+                # Detect if stockout risk is decimal (0-1) or percentage (0-100)
+                if stockout_risk <= 1.0:
+                    raw_value = 1.0 - stockout_risk  # Convert to service level decimal
+                else:
+                    raw_value = (100 - stockout_risk) / 100  # Already percentage, convert
+            else:
+                return 95.0, True  # Default fallback
+
+            if raw_value is None or np.isnan(raw_value):
+                return 95.0, True  # Default if no data
+
+            # Detect format: decimal (0-1) vs percentage (0-100+)
+            if raw_value <= 1.0:
+                # Likely decimal format (e.g., 0.95 = 95%)
+                service_level = raw_value * 100
+            elif raw_value <= 100:
+                # Already percentage format (e.g., 95.0 = 95%)
+                service_level = raw_value
+            else:
+                # Invalid: value > 100, likely double-converted or bad data
+                service_level = raw_value
+
+            # Validate: service level should be 0-100%
+            is_valid = 0 <= service_level <= 100
+
+            # Clamp to valid range
+            clamped_value = max(0.0, min(100.0, service_level))
+
+            return clamped_value, is_valid
+
+        service_level, service_level_valid = calculate_service_level()
+
         result["stats"] = {
             "total_records": len(df),
             "date_start": df["Date"].min() if "Date" in df.columns else None,
@@ -412,10 +456,8 @@ def load_inventory_data() -> Dict[str, Any]:
             "std_ppe": df[ppe_col].std() if ppe_col in df.columns else 0,
             "std_meds": df[meds_col].std() if meds_col in df.columns else 0,
             "stockout_events": df[stockout_col].sum() if stockout_col in df.columns else 0,
-            "avg_service_level": (
-                df["Service_Level"].mean() * 100 if has_service_level else
-                (100 - df["Stockout_Risk_Score"].mean() * 100) if has_stockout_risk else 95
-            ),
+            "avg_service_level": service_level,
+            "service_level_data_valid": service_level_valid,
         }
 
         return result
