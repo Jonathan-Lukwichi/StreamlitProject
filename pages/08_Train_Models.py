@@ -5051,6 +5051,16 @@ def page_hyperparameter_tuning():
                             all_model_results[model_type] = results
                             st.session_state[f"opt_results_{model_type}"] = results
 
+                            # ===== SAVE TO SUPABASE FOR CLOUD PERSISTENCE =====
+                            try:
+                                from app_core.data.cloud_model_sync import save_model_to_supabase
+                                cloud_success, _ = save_model_to_supabase(f"opt_results_{model_type}")
+                                if cloud_success:
+                                    st.toast(f"☁️ Saved {model_type} to cloud")
+                            except Exception:
+                                pass
+                            # ==================================================
+
                             status_text.markdown(f"**✅ {model_type} optimization completed!**")
 
                         except Exception as e:
