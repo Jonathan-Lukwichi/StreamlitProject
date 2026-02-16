@@ -5057,34 +5057,62 @@ def page_hyperparameter_tuning():
 
             with col2:
                 st.markdown("#### 📈 Performance Metrics")
-                all_scores = opt_results['all_scores']
+                all_scores = opt_results.get('all_scores', {})
 
-                # Display as KPI cards
+                # Helper function to safely get metric value
+                def safe_metric(value):
+                    """Return value if valid, else None for display"""
+                    if value is None:
+                        return None
+                    try:
+                        if np.isnan(value):
+                            return None
+                    except (TypeError, ValueError):
+                        pass
+                    return value
+
+                # Display as KPI cards with NaN handling
                 metric_cols = st.columns(4)
                 with metric_cols[0]:
-                    st.plotly_chart(
-                        _create_kpi_indicator("RMSE", all_scores['RMSE'], "", PRIMARY_COLOR),
-                        use_container_width=True,
-                        key=f"opt_rmse_{selected_model_opt}"
-                    )
+                    rmse_val = safe_metric(all_scores.get('RMSE'))
+                    if rmse_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("RMSE", rmse_val, "", PRIMARY_COLOR),
+                            use_container_width=True,
+                            key=f"opt_rmse_{selected_model_opt}"
+                        )
+                    else:
+                        st.metric("RMSE", "N/A")
                 with metric_cols[1]:
-                    st.plotly_chart(
-                        _create_kpi_indicator("MAE", all_scores['MAE'], "", SECONDARY_COLOR),
-                        use_container_width=True,
-                        key=f"opt_mae_{selected_model_opt}"
-                    )
+                    mae_val = safe_metric(all_scores.get('MAE'))
+                    if mae_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAE", mae_val, "", SECONDARY_COLOR),
+                            use_container_width=True,
+                            key=f"opt_mae_{selected_model_opt}"
+                        )
+                    else:
+                        st.metric("MAE", "N/A")
                 with metric_cols[2]:
-                    st.plotly_chart(
-                        _create_kpi_indicator("MAPE", all_scores['MAPE'], "%", WARNING_COLOR),
-                        use_container_width=True,
-                        key=f"opt_mape_{selected_model_opt}"
-                    )
+                    mape_val = safe_metric(all_scores.get('MAPE'))
+                    if mape_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("MAPE", mape_val, "%", WARNING_COLOR),
+                            use_container_width=True,
+                            key=f"opt_mape_{selected_model_opt}"
+                        )
+                    else:
+                        st.metric("MAPE", "N/A")
                 with metric_cols[3]:
-                    st.plotly_chart(
-                        _create_kpi_indicator("Accuracy", all_scores['Accuracy'], "%", SUCCESS_COLOR),
-                        use_container_width=True,
-                        key=f"opt_acc_{selected_model_opt}"
-                    )
+                    acc_val = safe_metric(all_scores.get('Accuracy'))
+                    if acc_val is not None:
+                        st.plotly_chart(
+                            _create_kpi_indicator("Accuracy", acc_val, "%", SUCCESS_COLOR),
+                            use_container_width=True,
+                            key=f"opt_acc_{selected_model_opt}"
+                        )
+                    else:
+                        st.metric("Accuracy", "N/A")
 
             # CV Results Table (handle both Grid/Random Search and Bayesian Optimization)
             with st.expander("📋 All Parameter Combinations (CV Results)", expanded=False):
