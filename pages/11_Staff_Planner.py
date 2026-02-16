@@ -1293,11 +1293,17 @@ with tab4:
             render_kpi_card("Optimized Weekly", f"${results['optimized_weekly_cost']:,.0f}", "success", "green")
         with impact_cols[2]:
             savings = results['weekly_savings']
-            savings_class = "success" if savings > 0 else "danger"
-            render_kpi_card("Weekly Savings", f"${savings:,.0f}", savings_class, "green" if savings > 0 else "red")
+            if savings >= 0:
+                render_kpi_card("Weekly Savings", f"${savings:,.0f}", "success", "green")
+            else:
+                investment = abs(savings)
+                render_kpi_card("Weekly Investment", f"${investment:,.0f}", "linked", "purple")
         with impact_cols[3]:
-            monthly = savings * 4.33
-            render_kpi_card("Monthly Savings", f"${monthly:,.0f}", "success" if savings > 0 else "danger", "green" if savings > 0 else "red")
+            monthly = abs(savings) * 4.33
+            if savings >= 0:
+                render_kpi_card("Monthly Savings", f"${monthly:,.0f}", "success", "green")
+            else:
+                render_kpi_card("Monthly Investment", f"${monthly:,.0f}", "linked", "purple")
 
         # Comparison charts
         col_chart1, col_chart2 = st.columns(2)
