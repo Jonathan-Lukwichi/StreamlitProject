@@ -1187,6 +1187,7 @@ with tab4:
             render_kpi_card("Wait Time Reduced", f"-{lead_time_reduction:.1f} days", "success", "cyan")
 
         # Investment justification message
+        savings = results['weekly_savings']
         if savings < 0:
             st.info(f"""
             **Why invest ${abs(savings):,.0f}/week?**
