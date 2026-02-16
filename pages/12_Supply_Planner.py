@@ -1445,6 +1445,71 @@ with tab3:
                 )
                 st.plotly_chart(fig_ss, use_container_width=True)
 
+            # NEW: Category Attribution Section
+            if results.get("using_category_weights"):
+                st.markdown('<div class="subsection-header">🏥 Category-Weighted Demand Attribution</div>', unsafe_allow_html=True)
+
+                st.markdown("""
+                <div style='font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem;'>
+                    Demand for each item is calculated based on the clinical category mix.
+                    Different categories have different supply usage patterns.
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Show top category drivers for each item
+                cat_attribution_data = []
+                category_icons = {
+                    "RESPIRATORY": "🫁", "CARDIAC": "❤️", "TRAUMA": "🩹",
+                    "GASTROINTESTINAL": "🤢", "INFECTIOUS": "🦠", "NEUROLOGICAL": "🧠", "OTHER": "📋"
+                }
+
+                for item_id, item_data in results["item_results"].items():
+                    top_cats = item_data.get("top_category_drivers", [])
+                    if top_cats:
+                        total_demand = item_data["forecast_demand"]
+                        drivers_str = ""
+                        for i, (cat, contrib) in enumerate(top_cats[:3]):
+                            pct = (contrib / total_demand * 100) if total_demand > 0 else 0
+                            icon = category_icons.get(cat, "📋")
+                            drivers_str += f"{icon} {cat[:4]}: {pct:.0f}%  "
+
+                        cat_attribution_data.append({
+                            "Item": item_data["name"][:20],
+                            "Total Demand": f"{total_demand:.0f}",
+                            "Top Category Drivers": drivers_str.strip(),
+                        })
+
+                if cat_attribution_data:
+                    cat_df = pd.DataFrame(cat_attribution_data)
+                    st.dataframe(cat_df, hide_index=True, use_container_width=True)
+
+                # Expander with detailed category usage rates
+                with st.expander("📊 View Category Usage Matrix", expanded=False):
+                    st.markdown("""
+                    **Usage rates per patient by clinical category:**
+
+                    This matrix shows how many units of each supply item are used per patient in each clinical category.
+                    """)
+
+                    # Create usage matrix display
+                    usage_display = []
+                    for item_id in CATEGORY_ITEM_USAGE:
+                        row = {"Item": item_id}
+                        for cat in CLINICAL_CATEGORIES:
+                            usage = CATEGORY_ITEM_USAGE[item_id].get(cat, 1.0)
+                            row[f"{category_icons.get(cat, '')} {cat[:4]}"] = f"{usage:.1f}"
+                        usage_display.append(row)
+
+                    usage_df = pd.DataFrame(usage_display)
+                    st.dataframe(usage_df, hide_index=True, use_container_width=True)
+
+                    st.info("""
+                    **Interpretation:**
+                    - Values > 1.0: Higher than average usage (e.g., TRAUMA uses 3.0× bandages)
+                    - Values < 1.0: Lower than average usage (e.g., RESPIRATORY uses 0.3× bandages)
+                    - Values = 1.0: Average/baseline usage
+                    """)
+
 
 # =============================================================================
 # TAB 4: BEFORE VS AFTER COMPARISON
