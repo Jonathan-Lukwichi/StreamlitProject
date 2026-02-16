@@ -842,7 +842,7 @@ def calculate_optimization_heuristic(
         })
         total_cost += daily_cost
 
-    horizon = forecast_data["horizon"]
+    # horizon already defined at the top of the function
 
     current_daily_cost = (
         staff_stats.get("avg_doctors", 0) * cost_params["doctor_hourly"] * cost_params["shift_hours"] +
