@@ -132,3 +132,6 @@ site/
 pip-log.txt
 pip-delete-this-directory.txt
 .mcp.json
+
+# Model Artifacts (large files, saved locally)
+pipeline_artifacts/
