@@ -985,12 +985,26 @@ def get_metrics_from_df(metrics_df: pd.DataFrame, horizon: int) -> Dict[str, flo
     return {}
 
 
-def save_forecast_to_session(forecast_data: Dict, model_name: str, horizons: List[int] = None, forecast_days: int = 7):
+def save_forecast_to_session(
+    forecast_data: Dict,
+    model_name: str,
+    horizons: List[int] = None,
+    forecast_days: int = 7,
+    category_forecasts: Dict[str, List[float]] = None
+):
     """
     Save comprehensive forecast data to session state for use by Staff Scheduling,
     Inventory Management, and Decision Command Center.
 
     This is the SINGLE SOURCE OF TRUTH for forecast data across all pages.
+
+    Args:
+        forecast_data: Dictionary containing F, L, U matrices and test_eval
+        model_name: Name of the model
+        horizons: List of horizon numbers
+        forecast_days: Number of forecast days
+        category_forecasts: Dict mapping category -> list of daily forecasts
+                           e.g., {"RESPIRATORY": [45, 48, 42, ...], "CARDIAC": [32, 35, 30, ...]}
     """
     if not forecast_data:
         return
