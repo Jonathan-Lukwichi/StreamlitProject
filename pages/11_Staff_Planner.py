@@ -1368,8 +1368,8 @@ with tab4:
                 api_key = st.text_input("API Key", type="password", key="staff_api_key_input")
                 st.session_state.staff_llm_api_key = api_key
 
-        # Render insights
-        before_data = {
+        # Render insights - use correct parameter names for the function
+        before_stats = {
             "avg_doctors": stats['avg_doctors'],
             "avg_nurses": stats['avg_nurses'],
             "avg_support": stats['avg_support'],
@@ -1380,23 +1380,24 @@ with tab4:
             "utilization": stats.get('avg_utilization', 0),
         }
 
-        after_data = {
+        optimization_results = {
             "avg_doctors": results['avg_opt_doctors'],
             "avg_nurses": results['avg_opt_nurses'],
             "avg_support": results['avg_opt_support'],
             "daily_cost": results['avg_daily_cost'],
             "weekly_cost": results['optimized_weekly_cost'],
+            "weekly_savings": results['weekly_savings'],
             "overtime_hours": 0,  # Optimized schedule minimizes overtime
             "shortage_days": 0,
             "utilization": 85.0,  # Target utilization
         }
 
         render_staff_optimization_insights(
-            before_data=before_data,
-            after_data=after_data,
+            before_stats=before_stats,
+            optimization_results=optimization_results,
+            cost_params=st.session_state.cost_params,
             mode=st.session_state.staff_insight_mode,
-            api_key=st.session_state.staff_llm_api_key,
-            provider=st.session_state.staff_api_provider
+            api_key=st.session_state.staff_llm_api_key
         )
 
 
