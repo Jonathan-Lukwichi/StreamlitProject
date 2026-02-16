@@ -1054,6 +1054,11 @@ with sync_col1:
         sync_color = "#22c55e" if forecast_data.get("synced_with_page10") else "#f59e0b"
         acc_text = f" | Accuracy: {forecast_data['accuracy']:.1f}%" if forecast_data.get("accuracy") else ""
 
+        # Check if category forecasts are available
+        has_categories = forecast_data.get("category_forecasts") is not None
+        cat_badge = "🏥 Categories" if has_categories else "📊 Total Only"
+        cat_color = "#22c55e" if has_categories else "#94a3b8"
+
         st.markdown(f"""
         <div style='font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.25rem;'>📦 INVENTORY OPTIMIZATION SOURCE</div>
         <div style='display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;'>
@@ -1064,6 +1069,10 @@ with sync_col1:
             </span>
             <span style='background: rgba(168, 85, 247, 0.15); color: #a855f7; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;'>
                 📐 EOQ + Statistical SS
+            </span>
+            <span style='background: rgba({34 if has_categories else 148}, {197 if has_categories else 163}, {94 if has_categories else 184}, 0.15);
+                        color: {cat_color}; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;'>
+                {cat_badge}
             </span>
             <span style='color: #64748b; font-size: 0.8rem;'>{forecast_data['horizon']} days ahead{acc_text}</span>
         </div>
