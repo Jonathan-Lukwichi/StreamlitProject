@@ -104,6 +104,96 @@ DEFAULT_COST_PARAMS = {
     "stockout_penalty": 100.0,
 }
 
+# Clinical categories (must match Page 10 and Page 11)
+CLINICAL_CATEGORIES = [
+    "RESPIRATORY", "CARDIAC", "TRAUMA", "GASTROINTESTINAL",
+    "INFECTIOUS", "NEUROLOGICAL", "OTHER"
+]
+
+# =============================================================================
+# CATEGORY-ITEM USAGE MATRIX
+# =============================================================================
+# This matrix defines usage rates per patient for each item by clinical category.
+# Example: TRAUMA patients use 3.0 boxes of bandages vs 0.5 for RESPIRATORY.
+# Units are per-patient usage rates that multiply with patient counts.
+#
+# Rationale:
+# - TRAUMA: High bandage/syringe use, moderate gloves, low medications
+# - RESPIRATORY: High PPE/gloves (infection control), high medications
+# - CARDIAC: High IV fluids, medications, syringes (IV access)
+# - INFECTIOUS: High PPE (isolation), high gloves, moderate medications
+# - GASTROINTESTINAL: Moderate across all categories
+# - NEUROLOGICAL: Lower overall supply needs, higher medications
+# - OTHER: Baseline/average usage
+# =============================================================================
+CATEGORY_ITEM_USAGE = {
+    "GLOVES": {
+        "RESPIRATORY": 2.5,      # High - respiratory precautions
+        "CARDIAC": 2.0,          # Standard
+        "TRAUMA": 3.5,           # High - wound care, procedures
+        "GASTROINTESTINAL": 2.0, # Standard
+        "INFECTIOUS": 3.0,       # High - infection control
+        "NEUROLOGICAL": 1.5,     # Lower - less invasive
+        "OTHER": 1.5,            # Baseline
+    },
+    "PPE_SETS": {
+        "RESPIRATORY": 0.8,      # High - droplet/airborne precautions
+        "CARDIAC": 0.3,          # Low - usually not infectious
+        "TRAUMA": 0.6,           # Moderate - blood exposure
+        "GASTROINTESTINAL": 0.4, # Low-moderate
+        "INFECTIOUS": 1.0,       # Highest - isolation protocols
+        "NEUROLOGICAL": 0.2,     # Low
+        "OTHER": 0.3,            # Baseline
+    },
+    "MEDICATIONS": {
+        "RESPIRATORY": 1.2,      # High - bronchodilators, steroids
+        "CARDIAC": 1.5,          # Highest - cardiac drugs, anticoagulants
+        "TRAUMA": 0.6,           # Lower - mostly pain management
+        "GASTROINTESTINAL": 0.8, # Moderate - antiemetics, etc.
+        "INFECTIOUS": 1.0,       # High - antibiotics, antivirals
+        "NEUROLOGICAL": 1.2,     # High - seizure meds, sedatives
+        "OTHER": 0.5,            # Baseline
+    },
+    "SYRINGES": {
+        "RESPIRATORY": 1.0,      # Moderate - nebulizers, IV
+        "CARDIAC": 2.0,          # High - IV access, blood draws
+        "TRAUMA": 2.5,           # Highest - IV, blood products
+        "GASTROINTESTINAL": 1.0, # Moderate
+        "INFECTIOUS": 1.5,       # Moderate-high - IV antibiotics
+        "NEUROLOGICAL": 1.0,     # Moderate
+        "OTHER": 1.0,            # Baseline
+    },
+    "BANDAGES": {
+        "RESPIRATORY": 0.3,      # Low - rarely needed
+        "CARDIAC": 0.5,          # Low-moderate - IV sites
+        "TRAUMA": 3.0,           # Highest - wound care
+        "GASTROINTESTINAL": 0.4, # Low
+        "INFECTIOUS": 0.5,       # Low-moderate
+        "NEUROLOGICAL": 0.4,     # Low
+        "OTHER": 0.8,            # Baseline
+    },
+    "IV_FLUIDS": {
+        "RESPIRATORY": 0.5,      # Moderate - careful with fluids
+        "CARDIAC": 0.8,          # Moderate - CHF considerations
+        "TRAUMA": 1.5,           # Highest - resuscitation
+        "GASTROINTESTINAL": 0.8, # Moderate - dehydration
+        "INFECTIOUS": 0.7,       # Moderate - sepsis care
+        "NEUROLOGICAL": 0.4,     # Lower
+        "OTHER": 0.4,            # Baseline
+    },
+}
+
+# Fallback distribution if seasonal proportions not available
+FALLBACK_DISTRIBUTION = {
+    "RESPIRATORY": 0.20,
+    "CARDIAC": 0.15,
+    "TRAUMA": 0.15,
+    "GASTROINTESTINAL": 0.15,
+    "INFECTIOUS": 0.15,
+    "NEUROLOGICAL": 0.10,
+    "OTHER": 0.10,
+}
+
 # =============================================================================
 # CUSTOM STYLING
 # =============================================================================
