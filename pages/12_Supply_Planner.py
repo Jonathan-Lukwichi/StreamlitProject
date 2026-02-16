@@ -1325,13 +1325,40 @@ with tab3:
         with col_run:
             run_optimization = st.button("🚀 Optimize", type="primary", use_container_width=True)
 
+        # NEW: Category weights toggle
+        col_cat, col_info = st.columns([2, 3])
+        with col_cat:
+            st.session_state.use_category_weights = st.checkbox(
+                "🏥 Use Category-Weighted Demand",
+                value=st.session_state.use_category_weights,
+                help="Calculate demand based on clinical category mix (TRAUMA → more bandages, RESPIRATORY → more PPE, etc.)"
+            )
+        with col_info:
+            if st.session_state.use_category_weights:
+                st.markdown("""
+                <div style='font-size: 0.75rem; color: #22c55e; background: rgba(34, 197, 94, 0.1);
+                            border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 0.5rem;'>
+                    ✅ <strong>Category-Aware Mode:</strong> Demand calculated using clinical category mix
+                    (e.g., TRAUMA patients → 3× bandages, RESPIRATORY → high PPE)
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style='font-size: 0.75rem; color: #f59e0b; background: rgba(245, 158, 11, 0.1);
+                            border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 0.5rem;'>
+                    ⚠️ <strong>Flat Rate Mode:</strong> Using average usage per patient (ignores clinical mix)
+                </div>
+                """, unsafe_allow_html=True)
+
         if run_optimization:
-            with st.spinner("Running EOQ optimization with statistical safety stock..."):
+            spinner_text = "Running category-weighted optimization..." if st.session_state.use_category_weights else "Running EOQ optimization..."
+            with st.spinner(spinner_text):
                 results = calculate_inventory_optimization(
                     forecast_data,
                     st.session_state.inventory_stats,
                     st.session_state.inv_cost_params,
-                    constraints
+                    constraints,
+                    use_category_weights=st.session_state.use_category_weights
                 )
 
                 if results["success"]:
