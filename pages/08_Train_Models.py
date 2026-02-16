@@ -3524,6 +3524,11 @@ def run_random_search_optimization(model_type: str, X_train, y_train, n_splits: 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
+    # Determine n_jobs based on model type
+    # Keras models (LSTM, ANN) cannot be pickled for multiprocessing
+    is_keras_model = model_type.upper() in ["LSTM", "ANN"]
+    n_jobs_value = 1 if is_keras_model else -1
+
     # Run Random Search
     random_search = RandomizedSearchCV(
         estimator=base_model,
@@ -3532,7 +3537,7 @@ def run_random_search_optimization(model_type: str, X_train, y_train, n_splits: 
         cv=tscv,
         scoring=scoring,
         refit=refit_metric,
-        n_jobs=-1,
+        n_jobs=n_jobs_value,
         verbose=2,
         random_state=42,
         return_train_score=True
