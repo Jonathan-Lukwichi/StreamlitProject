@@ -566,6 +566,7 @@ def get_forecast_data() -> Dict[str, Any]:
         "horizon": 0,
         "accuracy": None,
         "synced_with_page10": False,
+        "category_forecasts": None,  # NEW: Category-level forecasts from Page 10
     }
 
     # Helper to generate dates
@@ -573,7 +574,7 @@ def get_forecast_data() -> Dict[str, Any]:
         today = datetime.now().date()
         return [(today + timedelta(days=i)).strftime("%a %m/%d") for i in range(1, horizon + 1)]
 
-    # Priority 1: forecast_hub_demand
+    # Priority 1: forecast_hub_demand (from Page 10)
     if "forecast_hub_demand" in st.session_state and st.session_state.forecast_hub_demand:
         hub_data = st.session_state.forecast_hub_demand
         if isinstance(hub_data, dict) and "forecasts" in hub_data:
@@ -584,6 +585,8 @@ def get_forecast_data() -> Dict[str, Any]:
             result["accuracy"] = hub_data.get("accuracy")
             result["synced_with_page10"] = True
             result["dates"] = _generate_dates(result["horizon"])
+            # NEW: Get category forecasts from Page 10
+            result["category_forecasts"] = hub_data.get("category_forecasts")
             return result
 
     # Priority 2: active_forecast
@@ -597,6 +600,8 @@ def get_forecast_data() -> Dict[str, Any]:
             result["accuracy"] = af.get("accuracy")
             result["synced_with_page10"] = True
             result["dates"] = _generate_dates(result["horizon"])
+            # NEW: Get category forecasts from active_forecast
+            result["category_forecasts"] = af.get("category_forecasts")
             return result
 
     # Priority 3: ML model results (using lowercase keys)
@@ -615,6 +620,125 @@ def get_forecast_data() -> Dict[str, Any]:
                         result["horizon"] = len(result["forecasts"])
                         result["dates"] = _generate_dates(result["horizon"])
                         return result
+
+    return result
+
+
+def get_category_distribution(
+    forecast_data: Dict,
+    prepared_data: Optional[pd.DataFrame] = None
+) -> Dict[str, List[float]]:
+    """
+    Get category distribution for inventory planning.
+
+    Priority:
+    1. Use category_forecasts from Page 10 session state (if available)
+    2. Calculate using Seasonal Proportions (DOW × Monthly)
+    3. Fall back to FALLBACK_DISTRIBUTION
+
+    Args:
+        forecast_data: Result from get_forecast_data()
+        prepared_data: Optional prepared data for seasonal proportions calculation
+
+    Returns:
+        Dict mapping category -> list of daily patient forecasts
+        e.g., {"RESPIRATORY": [45, 48, 42, ...], "CARDIAC": [32, 35, 30, ...], ...}
+    """
+    if not forecast_data.get("has_forecast"):
+        return {}
+
+    total_forecasts = forecast_data["forecasts"]
+    horizon = len(total_forecasts)
+
+    if horizon == 0:
+        return {}
+
+    # Priority 1: Check if category forecasts already provided from Page 10
+    category_forecasts = forecast_data.get("category_forecasts")
+    if category_forecasts is not None and isinstance(category_forecasts, dict):
+        # Validate the data
+        if all(cat in category_forecasts for cat in CLINICAL_CATEGORIES):
+            # Ensure all categories have the right number of values
+            valid = True
+            for cat in CLINICAL_CATEGORIES:
+                if len(category_forecasts.get(cat, [])) != horizon:
+                    valid = False
+                    break
+            if valid:
+                return category_forecasts
+
+    # Priority 2: Try Seasonal Proportions calculation
+    # Check if seasonal_proportions_result exists in session state
+    sp_result = st.session_state.get("seasonal_proportions_result")
+
+    if sp_result is not None:
+        try:
+            from app_core.analytics.seasonal_proportions import (
+                distribute_forecast_to_categories,
+            )
+
+            # Generate forecast dates
+            today = datetime.now().date()
+            forecast_dates = pd.date_range(
+                start=today + timedelta(days=1),
+                periods=horizon,
+                freq='D'
+            )
+
+            # Convert forecasts to series
+            forecast_series = pd.Series(total_forecasts, index=forecast_dates)
+
+            # Distribute using seasonal proportions
+            if hasattr(sp_result, 'dow_proportions') and hasattr(sp_result, 'monthly_proportions'):
+                category_df = distribute_forecast_to_categories(
+                    forecast_series,
+                    sp_result.dow_proportions,
+                    sp_result.monthly_proportions
+                )
+
+                # Convert to dict format
+                result = {}
+                for cat in CLINICAL_CATEGORIES:
+                    if cat in category_df.columns:
+                        result[cat] = category_df[cat].tolist()
+                    else:
+                        # Fallback for missing categories
+                        result[cat] = [f * FALLBACK_DISTRIBUTION.get(cat, 0.1) for f in total_forecasts]
+
+                return result
+        except Exception as e:
+            pass  # Fall through to fallback
+
+    # Priority 3: Try to calculate from prepared data
+    if prepared_data is not None and not prepared_data.empty:
+        try:
+            from app_core.analytics.seasonal_proportions import (
+                calculate_seasonal_proportions,
+                SeasonalProportionConfig,
+                distribute_forecast_to_categories,
+            )
+
+            sp_config = SeasonalProportionConfig(
+                use_dow_seasonality=True,
+                use_monthly_seasonality=True,
+            )
+            sp_result = calculate_seasonal_proportions(
+                prepared_data,
+                sp_config,
+                date_col="Date"
+            )
+            st.session_state["seasonal_proportions_result"] = sp_result
+
+            # Recursively call to use the newly calculated proportions
+            return get_category_distribution(forecast_data, None)
+        except Exception:
+            pass  # Fall through to fallback
+
+    # Fallback: Use static distribution
+    result = {}
+    for cat in CLINICAL_CATEGORIES:
+        pct = FALLBACK_DISTRIBUTION.get(cat, 0.1)
+        result[cat] = [f * pct for f in total_forecasts]
 
     return result
 
