@@ -4882,6 +4882,16 @@ def page_hyperparameter_tuning():
                             except Exception as save_err:
                                 st.warning(f"⚠️ Could not save optimized params: {save_err}")
 
+                            # ===== SAVE TO SUPABASE FOR CLOUD PERSISTENCE =====
+                            try:
+                                from app_core.data.cloud_model_sync import save_model_to_supabase
+                                cloud_success, _ = save_model_to_supabase(f"opt_results_{selected_model_opt}")
+                                if cloud_success:
+                                    st.toast(f"☁️ Saved {selected_model_opt} (Bayesian) to cloud")
+                            except Exception:
+                                pass
+                            # ==================================================
+
                             # Show Optuna visualizations
                             if 'study' in results and OPTUNA_VIS_AVAILABLE:
                                 _render_optuna_visualizations(results['study'], selected_model_opt)
