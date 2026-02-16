@@ -3682,7 +3682,10 @@ def run_bayesian_optimization(model_type: str, X_train, y_train, n_splits: int,
             raise ValueError(f"Unknown model type: {model_type}")
 
         # Cross-validation
-        scores = cross_val_score(model, X_train, y_train, cv=tscv, scoring=scorer, n_jobs=-1)
+        # Use n_jobs=1 for Keras models (LSTM, ANN) - they cannot be pickled for multiprocessing
+        is_keras = model_type.upper() in ["LSTM", "ANN"]
+        n_jobs_cv = 1 if is_keras else -1
+        scores = cross_val_score(model, X_train, y_train, cv=tscv, scoring=scorer, n_jobs=n_jobs_cv)
         return scores.mean()
 
     # Suppress Optuna logs
