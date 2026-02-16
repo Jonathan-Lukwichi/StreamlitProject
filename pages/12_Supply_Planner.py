@@ -455,6 +455,10 @@ if "supply_llm_api_key" not in st.session_state:
 if "supply_api_provider" not in st.session_state:
     st.session_state.supply_api_provider = "anthropic"
 
+# NEW: Category-weighted inventory planning
+if "use_category_weights" not in st.session_state:
+    st.session_state.use_category_weights = True  # Enabled by default
+
 
 # =============================================================================
 # DATA LOADING FUNCTIONS
