@@ -1184,7 +1184,7 @@ with tab4:
         with value_cols[2]:
             render_kpi_card("Stockout Risk", f"{stockout_risk_optimized:.1f}%", "success" if stockout_risk_optimized < 5 else "warning", "green" if stockout_risk_optimized < 5 else "yellow")
         with value_cols[3]:
-            render_kpi_card("Buffer Days", f"+{buffer_days_gained:.1f}", "success", "cyan")
+            render_kpi_card("Wait Time Reduced", f"-{lead_time_reduction:.1f} days", "success", "cyan")
 
         # Investment justification message
         if savings < 0:
