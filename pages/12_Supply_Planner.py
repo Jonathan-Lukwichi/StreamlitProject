@@ -1150,20 +1150,11 @@ with tab4:
         # Financial Impact
         st.markdown('<div class="subsection-header">💰 Financial Impact</div>', unsafe_allow_html=True)
 
-        impact_cols = st.columns(4)
+        impact_cols = st.columns(2)
         with impact_cols[0]:
             render_kpi_card("Current Weekly", f"${results['current_weekly_cost']:,.0f}", "cost", "blue")
         with impact_cols[1]:
             render_kpi_card("Optimized Weekly", f"${results['optimized_weekly_cost']:,.0f}", "success", "green")
-        with impact_cols[2]:
-            savings = results['weekly_savings']
-            if savings >= 0:
-                render_kpi_card("Weekly Savings", f"${savings:,.0f}", "success", "green")
-            else:
-                investment = abs(savings)
-                render_kpi_card("Weekly Investment", f"${investment:,.0f}", "linked", "purple")
-        with impact_cols[3]:
-            render_kpi_card("Service Level", f"{results['service_level']:.1f}%", "success", "green")
 
         # Optimization Value Metrics (Option B - show what optimization achieves)
         st.markdown('<div class="subsection-header">🎯 Optimization Value</div>', unsafe_allow_html=True)
