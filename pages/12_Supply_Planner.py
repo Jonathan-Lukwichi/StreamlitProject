@@ -955,7 +955,28 @@ with tab2:
             render_kpi_card("Holding Rate", f"{params['holding_cost_pct'] * 100:.0f}%", "cost", "blue")
         with cost_cols[3]:
             sl = stats.get('avg_service_level', 95)
-            render_kpi_card("Service Level", f"{sl:.1f}%", "success" if sl >= 95 else "warning", "green" if sl >= 95 else "yellow")
+            sl_valid = stats.get('service_level_data_valid', True)
+            if sl_valid:
+                render_kpi_card("Service Level", f"{sl:.1f}%", "success" if sl >= 95 else "warning", "green" if sl >= 95 else "yellow")
+            else:
+                # Show clamped value with warning indicator
+                render_kpi_card("Service Level*", f"{sl:.1f}%", "warning", "yellow")
+
+        # Show warning if service level data was invalid
+        if not stats.get('service_level_data_valid', True):
+            st.warning("""
+            ⚠️ **Service Level Data Quality Issue**
+
+            The raw service level data appears to be outside the valid 0-100% range.
+            The displayed value has been clamped to a valid range.
+
+            **Possible causes:**
+            - Data stored in inconsistent format (decimal vs percentage)
+            - Data entry errors in source system
+            - Column contains different metric than expected
+
+            **Recommendation:** Review the `Service_Level` or `Stockout_Risk_Score` column in your inventory data.
+            """)
 
 
 # =============================================================================
