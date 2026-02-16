@@ -456,7 +456,7 @@ def load_financial_data() -> Dict[str, Any]:
             result["error"] = "Supabase not connected"
             return result
 
-        df = service.fetch_financial_data()
+        df = service.fetch_all()  # Use fetch_all() instead of fetch_financial_data()
         if df.empty:
             result["error"] = "No financial data found"
             return result
@@ -464,20 +464,24 @@ def load_financial_data() -> Dict[str, Any]:
         result["success"] = True
         result["data"] = df
 
-        # Extract cost parameters
-        if "Doctor_Hourly_Rate" in df.columns:
+        # Extract cost parameters (handle different column name variations)
+        if "Doctor_Hourly_Rate" in df.columns and len(df) > 0:
             result["cost_params"]["doctor_hourly"] = df["Doctor_Hourly_Rate"].iloc[-1]
-        if "Nurse_Hourly_Rate" in df.columns:
+        if "Nurse_Hourly_Rate" in df.columns and len(df) > 0:
             result["cost_params"]["nurse_hourly"] = df["Nurse_Hourly_Rate"].iloc[-1]
-        if "Support_Hourly_Rate" in df.columns:
+        if "Support_Staff_Hourly_Rate" in df.columns and len(df) > 0:
+            result["cost_params"]["support_hourly"] = df["Support_Staff_Hourly_Rate"].iloc[-1]
+        elif "Support_Hourly_Rate" in df.columns and len(df) > 0:
             result["cost_params"]["support_hourly"] = df["Support_Hourly_Rate"].iloc[-1]
-        if "Overtime_Multiplier" in df.columns:
+        if "Overtime_Premium_Rate" in df.columns and len(df) > 0:
+            result["cost_params"]["overtime_multiplier"] = df["Overtime_Premium_Rate"].iloc[-1]
+        elif "Overtime_Multiplier" in df.columns and len(df) > 0:
             result["cost_params"]["overtime_multiplier"] = df["Overtime_Multiplier"].iloc[-1]
 
-        # Calculate statistics
+        # Calculate statistics (handle different column name variations)
         result["stats"] = {
             "total_records": len(df),
-            "avg_daily_labor_cost": df["Daily_Labor_Cost"].mean() if "Daily_Labor_Cost" in df.columns else 0,
+            "avg_daily_labor_cost": df["Total_Labor_Cost"].mean() if "Total_Labor_Cost" in df.columns else (df["Daily_Labor_Cost"].mean() if "Daily_Labor_Cost" in df.columns else 0),
             "total_overtime_cost": df["Overtime_Cost"].sum() if "Overtime_Cost" in df.columns else 0,
             "avg_cost_per_patient": df["Cost_Per_Patient"].mean() if "Cost_Per_Patient" in df.columns else 0,
         }
