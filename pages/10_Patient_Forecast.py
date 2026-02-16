@@ -1083,21 +1083,27 @@ def save_forecast_to_session(
         "model": model_name,
         "model_type": model_type,
         "forecast": forecast_values,
+        "forecasts": forecast_values,  # Alias for compatibility
         "lower_bounds": lower_bounds,
         "upper_bounds": upper_bounds,
         "dates": future_dates,
         "historical_dates": dates,
         "horizon": len(forecast_values),
         "avg_accuracy": avg_accuracy,
+        "accuracy": avg_accuracy,  # Alias for compatibility
         "avg_mape": avg_mape,
         "timestamp": datetime.now().isoformat(),
         "source": "Forecast Hub (Page 10)",
+        "model_name": model_name,  # Alias for compatibility
+        # NEW: Category-level forecasts for Staff & Inventory optimization
+        "category_forecasts": category_forecasts,
     }
 
     # Also store in a dedicated key for active forecast tracking
     st.session_state["active_forecast"] = {
         "model": model_name,
         "model_type": model_type,
+        "model_name": model_name,  # Alias for compatibility
         "forecasts": forecast_values,
         "lower": lower_bounds,
         "upper": upper_bounds,
@@ -1105,6 +1111,8 @@ def save_forecast_to_session(
         "horizon": len(forecast_values),
         "accuracy": avg_accuracy,
         "updated_at": datetime.now().isoformat(),
+        # NEW: Category-level forecasts for Staff & Inventory optimization
+        "category_forecasts": category_forecasts,
     }
 
 
