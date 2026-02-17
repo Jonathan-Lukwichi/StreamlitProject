@@ -79,30 +79,34 @@ render_dashboard_header(
 )
 
 # Data status indicators
-status_cols = st.columns(4)
+status_cols = st.columns(5)
 with status_cols[0]:
     status = "✅" if kpis.has_historical else "⚪"
-    st.caption(f"{status} Historical Data: {kpis.total_records} days")
+    st.caption(f"{status} Historical: {kpis.total_records} days")
 with status_cols[1]:
     status = "✅" if kpis.has_forecast else "⚪"
-    st.caption(f"{status} Active Forecast")
+    st.caption(f"{status} Forecast")
 with status_cols[2]:
     status = "✅" if kpis.has_models else "⚪"
-    st.caption(f"{status} {kpis.models_trained} Models Trained")
+    st.caption(f"{status} {kpis.models_trained} Models")
 with status_cols[3]:
     status = "✅" if kpis.has_staff_plan else "⚪"
     st.caption(f"{status} Staff Plan")
+with status_cols[4]:
+    status = "✅" if kpis.has_supply_plan else "⚪"
+    st.caption(f"{status} Supply Plan")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # =============================================================================
 # TAB NAVIGATION
 # =============================================================================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Overview",
     "🎯 Model Accuracy",
     "🏥 Clinical Categories",
-    "👥 Staff Planning"
+    "👥 Staff Planning",
+    "📦 Supply Planning"
 ])
 
 # =============================================================================
