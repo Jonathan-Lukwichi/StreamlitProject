@@ -236,6 +236,13 @@ def decode_special_types(obj: Any) -> Any:
         elif type_marker == "tuple":
             return tuple(obj["data"])
 
+        elif type_marker == "nan":
+            return float('nan')
+
+        elif type_marker == "inf":
+            sign = obj.get("sign", 1)
+            return float('inf') if sign > 0 else float('-inf')
+
         elif type_marker == "pd_index":
             return pd.Index(obj["data"])
 
