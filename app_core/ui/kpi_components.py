@@ -470,13 +470,14 @@ def render_department_load_bars(departments: List[Dict]):
         """, unsafe_allow_html=True)
 
 
-def render_shift_pie_chart(shift_data: List[Dict], height: int = 200):
+def render_shift_pie_chart(shift_data: List[Dict], height: int = 200, chart_key: str = None):
     """
     Render a donut chart for shift distribution.
 
     Args:
         shift_data: List of dicts with 'name', 'value', 'color' keys
         height: Chart height in pixels
+        chart_key: Unique key for the Plotly chart
     """
     fig = go.Figure(data=[go.Pie(
         labels=[s['name'] for s in shift_data],
