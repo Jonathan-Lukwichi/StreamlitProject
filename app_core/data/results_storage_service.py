@@ -253,8 +253,22 @@ def decode_special_types(obj: Any) -> Any:
             return obj["data"]
 
         else:
-            # Regular dict - recurse into values
-            return {k: decode_special_types(v) for k, v in obj.items()}
+            # Regular dict - recurse into values and restore tuple keys
+            result = {}
+            for k, v in obj.items():
+                # Restore tuple keys
+                if isinstance(k, str) and k.startswith("__tuple_key__"):
+                    try:
+                        # Parse the tuple string back to a tuple
+                        tuple_str = k.replace("__tuple_key__", "")
+                        import ast
+                        new_key = ast.literal_eval(tuple_str)
+                    except (ValueError, SyntaxError):
+                        new_key = k
+                else:
+                    new_key = k
+                result[new_key] = decode_special_types(v)
+            return result
 
     elif isinstance(obj, list):
         return [decode_special_types(item) for item in obj]
