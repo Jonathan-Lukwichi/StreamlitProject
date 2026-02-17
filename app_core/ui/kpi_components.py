@@ -409,31 +409,33 @@ def render_stat_card(
         trend: Trend text (e.g., "12%")
         trend_dir: "up" or "down"
     """
-    trend_html = ""
-    if trend and trend_dir:
-        arrow = "↑" if trend_dir == "up" else "↓"
-        trend_class = "trend-up" if trend_dir == "up" else "trend-down"
-        trend_html = f'<div class="trend-badge {trend_class}">{arrow} {trend}</div>'
-
     # Format value
     if isinstance(value, float):
         value_str = f"{value:.1f}"
     else:
         value_str = str(value)
 
+    # Build trend badge if provided
+    trend_html = ""
+    if trend and trend_dir:
+        arrow = "↑" if trend_dir == "up" else "↓"
+        if trend_dir == "up":
+            trend_bg = COLORS['accent_dim']
+            trend_color = COLORS['accent']
+        else:
+            trend_bg = COLORS['danger_dim']
+            trend_color = COLORS['danger']
+        trend_html = f'<span style="background:{trend_bg};color:{trend_color};padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;margin-left:auto;">{arrow} {trend}</span>'
+
     st.markdown(f"""
-    <div class="stat-card">
-        <div class="card-content">
-            <div class="card-main">
-                <div class="card-label">{icon} {label}</div>
-                <div class="card-value-row">
-                    <span class="card-value" style="color: {color};">{value_str}</span>
-                    <span class="card-unit">{unit}</span>
-                </div>
-            </div>
-            {trend_html}
-        </div>
+<div style="background:{COLORS['card']};border:1px solid {COLORS['border']};border-radius:16px;padding:20px;">
+    <div style="color:{COLORS['text_muted']};font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">{icon} {label}</div>
+    <div style="display:flex;align-items:baseline;gap:4px;">
+        <span style="font-size:32px;font-weight:700;color:{color};">{value_str}</span>
+        <span style="color:{COLORS['text_dim']};font-size:13px;">{unit}</span>
+        {trend_html}
     </div>
+</div>
     """, unsafe_allow_html=True)
 
 
