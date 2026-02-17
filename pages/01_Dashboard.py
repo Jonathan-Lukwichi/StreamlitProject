@@ -345,7 +345,8 @@ with tab3:
         metrics=[
             {"key": "throughput", "name": "Throughput", "color": COLORS['accent']}
         ],
-        height=220
+        height=220,
+        chart_key="capacity_throughput_trends"
     )
 
 
