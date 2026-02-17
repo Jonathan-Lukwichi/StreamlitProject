@@ -162,7 +162,8 @@ with tab1:
                 {"key": "occupancy", "name": "Occupancy %", "color": COLORS['accent']},
                 {"key": "waitTime", "name": "Wait Time (min)", "color": COLORS['warning']}
             ],
-            height=240
+            height=240,
+            chart_key="overview_monthly_trends"
         )
 
     with chart_col2:
