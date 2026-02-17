@@ -175,7 +175,7 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        render_shift_pie_chart(kpis.shift_distribution, height=200)
+        render_shift_pie_chart(kpis.shift_distribution, height=200, chart_key="overview_shift_pie")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
