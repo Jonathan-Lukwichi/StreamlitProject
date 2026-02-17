@@ -435,7 +435,7 @@ with tab4:
         </div>
         """, unsafe_allow_html=True)
 
-        render_shift_pie_chart(kpis.shift_distribution, height=200)
+        render_shift_pie_chart(kpis.shift_distribution, height=200, chart_key="staffing_shift_pie")
 
 
 # =============================================================================
