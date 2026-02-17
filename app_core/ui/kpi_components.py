@@ -371,20 +371,20 @@ def render_gauge_kpi(
         dim_color = f"{color}22"
 
     st.markdown(f"""
-    <div class="gauge-kpi">
-        <div class="corner-accent" style="background: {dim_color};"></div>
-        <div class="kpi-header">
-            <span class="kpi-icon">{icon}</span>
-            <span class="kpi-label">{label}</span>
-        </div>
-        <div class="kpi-value-row">
-            <span class="kpi-value" style="color: {color};">{value:.1f}</span>
-            <span class="kpi-unit">{unit}</span>
-        </div>
-        <div class="progress-bar">
-            <div class="progress-fill" style="width: {min(pct, 100):.1f}%; background: linear-gradient(90deg, {color}, {color}aa);"></div>
-        </div>
+<div style="background:{COLORS['card']};border:1px solid {COLORS['border']};border-radius:16px;padding:20px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;right:0;width:100px;height:100px;background:{dim_color};border-radius:0 16px 0 100%;opacity:0.5;"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <span style="font-size:18px;">{icon}</span>
+        <span style="color:{COLORS['text_muted']};font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">{label}</span>
     </div>
+    <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:12px;">
+        <span style="font-size:42px;font-weight:700;color:{color};">{value:.1f}</span>
+        <span style="color:{COLORS['text_dim']};font-size:14px;">{unit}</span>
+    </div>
+    <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+        <div style="width:{min(pct, 100):.1f}%;height:100%;background:linear-gradient(90deg,{color},{color}aa);border-radius:4px;"></div>
+    </div>
+</div>
     """, unsafe_allow_html=True)
 
 
