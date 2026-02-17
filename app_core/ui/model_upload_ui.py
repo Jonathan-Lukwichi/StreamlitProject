@@ -1,8 +1,14 @@
 """
 Model Upload UI Component.
 
-Provides UI for uploading trained models to Supabase Storage
+Provides UI for uploading and downloading trained models to/from Supabase Storage
 for the "Train Locally, Deploy to Cloud" workflow.
+
+Features:
+- Upload local models to Supabase Storage
+- Download and load models from Supabase into session state
+- View models in cloud storage
+- Delete models from cloud
 """
 
 import os
