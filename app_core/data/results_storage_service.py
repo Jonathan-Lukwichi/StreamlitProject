@@ -20,6 +20,42 @@ import streamlit as st
 from app_core.data.supabase_client import get_cached_supabase_client
 
 
+def _sanitize_for_json(obj: Any) -> Any:
+    """
+    Recursively sanitize data for JSON serialization.
+    - Converts tuple keys to strings
+    - Replaces inf/nan with None or string markers
+    """
+    import math
+
+    if isinstance(obj, dict):
+        new_dict = {}
+        for key, value in obj.items():
+            # Convert tuple keys to string
+            if isinstance(key, tuple):
+                new_key = f"__tuple_key__{str(key)}"
+            else:
+                new_key = key
+            new_dict[new_key] = _sanitize_for_json(value)
+        return new_dict
+    elif isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj):
+            return {"__type__": "nan"}
+        elif math.isinf(obj):
+            return {"__type__": "inf", "sign": 1 if obj > 0 else -1}
+        return obj
+    elif isinstance(obj, np.floating):
+        val = float(obj)
+        if np.isnan(val):
+            return {"__type__": "nan"}
+        elif np.isinf(val):
+            return {"__type__": "inf", "sign": 1 if val > 0 else -1}
+        return val
+    return obj
+
+
 class NpEncoder(json.JSONEncoder):
     """
     Custom JSON encoder for NumPy, Pandas, and other non-standard Python types.
@@ -27,11 +63,25 @@ class NpEncoder(json.JSONEncoder):
     """
 
     def default(self, obj: Any) -> Any:
+        # === Handle inf/nan floats ===
+        if isinstance(obj, float):
+            import math
+            if math.isnan(obj):
+                return {"__type__": "nan"}
+            elif math.isinf(obj):
+                return {"__type__": "inf", "sign": 1 if obj > 0 else -1}
+            return obj
+
         # === NumPy Types ===
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
-            return float(obj)
+            val = float(obj)
+            if np.isnan(val):
+                return {"__type__": "nan"}
+            elif np.isinf(val):
+                return {"__type__": "inf", "sign": 1 if val > 0 else -1}
+            return val
         if isinstance(obj, np.bool_):
             return bool(obj)
         if isinstance(obj, np.ndarray):
