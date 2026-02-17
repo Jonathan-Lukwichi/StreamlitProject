@@ -693,7 +693,7 @@ def _download_and_load_all_models(service, models) -> Dict:
 
 
 def render_download_section():
-    """Render section to download models from Supabase and load into session."""
+    """Render section to download models from Supabase Storage and load into session state for Pages 09-13."""
     try:
         from app_core.data.model_storage_service import get_model_storage_service
         service = get_model_storage_service()
