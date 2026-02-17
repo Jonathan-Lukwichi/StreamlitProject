@@ -596,6 +596,166 @@ def render_delete_section():
 
 
 # =============================================================================
+# DOWNLOAD & LOAD FUNCTIONS
+# =============================================================================
+
+def _download_and_load_all_models(service, models) -> Dict:
+    """
+    Download models from Supabase Storage and load into session state.
+
+    Args:
+        service: ModelStorageService instance
+        models: List of ModelInfo objects from service.list_models()
+
+    Returns:
+        Dict with 'loaded' count and 'types' list
+    """
+    import pickle
+    import tempfile
+
+    loaded = 0
+    results_by_type = {}
+
+    for model in models:
+        model_type = model.model_type.lower()
+        horizon = model.horizon or 1
+
+        # Create temp file with correct extension
+        ext = os.path.splitext(model.storage_path)[1]
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                tmp_path = tmp.name
+
+            # Download from Supabase Storage
+            success, msg = service.download_model(model.storage_path, tmp_path)
+            if not success:
+                logger.warning(f"Failed to download {model.storage_path}: {msg}")
+                continue
+
+            # Load based on file type
+            ext_lower = ext.lower()
+            model_obj = None
+
+            if ext_lower in ['.pkl', '.joblib']:
+                with open(tmp_path, 'rb') as f:
+                    model_obj = pickle.load(f)
+            elif ext_lower in ['.h5', '.keras']:
+                try:
+                    from tensorflow.keras.models import load_model as keras_load
+                    model_obj = keras_load(tmp_path, compile=False)
+                except ImportError:
+                    logger.warning("TensorFlow not available, skipping Keras model")
+                    continue
+            else:
+                logger.warning(f"Unsupported file type: {ext}")
+                continue
+
+            if model_obj is None:
+                continue
+
+            # Build structure expected by pages 09-13
+            if model_type not in results_by_type:
+                results_by_type[model_type] = {
+                    "model_type": model_type.upper(),
+                    "successful": [],
+                    "failed": [],
+                    "results": {}
+                }
+
+            results_by_type[model_type]["successful"].append(horizon)
+            results_by_type[model_type]["results"][horizon] = {
+                "model": model_obj,
+                "horizon": horizon,
+                "loaded_from_cloud": True,
+                "storage_path": model.storage_path,
+            }
+            loaded += 1
+
+            logger.info(f"Loaded {model_type} horizon {horizon} from cloud")
+
+        except Exception as e:
+            logger.error(f"Error loading {model.storage_path}: {e}")
+        finally:
+            # Clean up temp file
+            try:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except Exception:
+                pass
+
+    # Store in session state with expected keys
+    for model_type, data in results_by_type.items():
+        session_key = f"ml_mh_results_{model_type}"
+        st.session_state[session_key] = data
+        logger.info(f"Stored {session_key} in session state with {len(data['successful'])} horizons")
+
+    return {"loaded": loaded, "types": list(results_by_type.keys())}
+
+
+def render_download_section():
+    """Render section to download models from Supabase and load into session."""
+    try:
+        from app_core.data.model_storage_service import get_model_storage_service
+        service = get_model_storage_service()
+    except ImportError:
+        return
+
+    if not service.is_connected():
+        return
+
+    models = service.list_models()
+    if not models:
+        return
+
+    st.markdown("---")
+    st.markdown("### 📥 Download & Load Models")
+    st.caption("Download models from Supabase Storage and load them into session for use in Pages 09-13")
+
+    # Group models by type
+    models_by_type = {}
+    for m in models:
+        model_type = m.model_type.upper()
+        if model_type not in models_by_type:
+            models_by_type[model_type] = []
+        models_by_type[model_type].append(m)
+
+    # Show available model types
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        for model_type, model_list in sorted(models_by_type.items()):
+            horizons = sorted([m.horizon for m in model_list if m.horizon])
+            if horizons:
+                st.write(f"**{model_type}**: Horizons {horizons}")
+            else:
+                st.write(f"**{model_type}**: {len(model_list)} file(s)")
+
+    with col2:
+        if st.button("📥 Download & Load All", type="primary", use_container_width=True, key="download_load_btn"):
+            with st.spinner("Downloading models from Supabase..."):
+                results = _download_and_load_all_models(service, models)
+
+            if results['loaded'] > 0:
+                st.success(f"✅ Loaded {results['loaded']} models: {', '.join(results['types'])}")
+                st.toast(f"☁️ Loaded {results['loaded']} models into session!")
+                st.rerun()
+            else:
+                st.warning("No models could be loaded. Check the logs for details.")
+
+    # Show what's currently in session
+    session_keys = ["ml_mh_results_xgboost", "ml_mh_results_lstm", "ml_mh_results_ann"]
+    loaded_in_session = []
+    for key in session_keys:
+        data = st.session_state.get(key)
+        if data and isinstance(data, dict) and data.get("successful"):
+            model_type = key.replace("ml_mh_results_", "").upper()
+            horizons = data.get("successful", [])
+            loaded_in_session.append(f"{model_type}: h{horizons}")
+
+    if loaded_in_session:
+        st.success(f"**Currently in session:** {', '.join(loaded_in_session)}")
+
+
+# =============================================================================
 # MAIN RENDER FUNCTION
 # =============================================================================
 
