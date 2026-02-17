@@ -496,7 +496,8 @@ def render_shift_pie_chart(shift_data: List[Dict], height: int = 200, chart_key:
         height=height
     )
 
-    st.plotly_chart(fig, use_container_width=True, key=f"shift_pie_{id(shift_data)}")
+    key = chart_key or f"shift_pie_{id(shift_data)}"
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
     # Render legend
     for s in shift_data:
