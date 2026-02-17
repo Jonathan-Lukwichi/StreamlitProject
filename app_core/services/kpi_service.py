@@ -1,8 +1,8 @@
 """
-KPI Service - Calculate Hospital Scheduling KPIs.
+KPI Service - Calculate HealthForecast AI KPIs.
 
-Aggregates data from various sources (forecasts, staff planner, historical data)
-to calculate operational KPIs for the dashboard.
+Aggregates data from forecasts, models, staff planner, and historical data
+to calculate operational KPIs that are RELEVANT to this project.
 """
 
 from dataclasses import dataclass, field
@@ -10,281 +10,354 @@ from typing import Dict, List, Optional, Any
 import pandas as pd
 import numpy as np
 import streamlit as st
-from datetime import datetime
-import random
+from datetime import datetime, timedelta
 
 # =============================================================================
 # DATA CLASSES
 # =============================================================================
 
 @dataclass
-class HospitalKPIs:
-    """Container for all hospital KPIs."""
-    # Core KPIs
-    bed_occupancy: float = 82.4
-    avg_wait_time: float = 34.0
-    staff_utilization: float = 78.6
-    patient_satisfaction: float = 4.2
+class ForecastKPIs:
+    """Container for HealthForecast AI KPIs - all project-relevant metrics."""
 
-    # Surgery metrics
-    scheduled_surgeries: int = 148
-    cancelled_surgeries: int = 12
+    # Forecast KPIs (from active forecast)
+    today_forecast: float = 0.0          # Today's predicted ED arrivals
+    week_total_forecast: float = 0.0     # 7-day total forecast
+    peak_day_forecast: float = 0.0       # Highest single day forecast
+    peak_day_name: str = "N/A"           # Name of peak day
 
-    # Operational metrics
-    avg_length_of_stay: float = 4.7
-    readmission_rate: float = 6.8
-    er_throughput: int = 312
-    no_show_rate: float = 8.3
+    # Historical KPIs (from prepared_data)
+    historical_avg_ed: float = 0.0       # Average daily ED arrivals
+    historical_max_ed: float = 0.0       # Max daily ED arrivals
+    historical_min_ed: float = 0.0       # Min daily ED arrivals
+    total_records: int = 0               # Total days of data
 
-    # Staff metrics
-    overtime_hours: float = 186.0
-    staff_turnover: float = 11.2
+    # Model Performance KPIs (from model results)
+    best_model_name: str = "N/A"
+    best_model_mape: float = 0.0
+    best_model_rmse: float = 0.0
+    models_trained: int = 0
 
-    # Time series data
-    monthly_trends: List[Dict] = field(default_factory=list)
-    department_load: List[Dict] = field(default_factory=list)
-    shift_distribution: List[Dict] = field(default_factory=list)
-    weekly_schedule: List[Dict] = field(default_factory=list)
+    # Category Distribution (from seasonal proportions or forecast)
+    category_distribution: List[Dict] = field(default_factory=list)
+
+    # Staff Planning KPIs (from MILP solver)
+    staff_coverage_pct: float = 0.0
+    total_staff_needed: int = 0
+    overtime_hours: float = 0.0
+    daily_staff_cost: float = 0.0
+
+    # Time series data for charts
+    forecast_trend: List[Dict] = field(default_factory=list)      # Historical + forecast
+    daily_ed_pattern: List[Dict] = field(default_factory=list)    # Day-of-week pattern
+    model_comparison: List[Dict] = field(default_factory=list)    # Model accuracy comparison
+    staff_schedule: List[Dict] = field(default_factory=list)      # Staff by day
+
+    # Data availability flags
+    has_forecast: bool = False
+    has_historical: bool = False
+    has_models: bool = False
+    has_staff_plan: bool = False
+
+
+# =============================================================================
+# CLINICAL CATEGORIES
+# =============================================================================
+
+CLINICAL_CATEGORIES = [
+    "RESPIRATORY", "CARDIAC", "TRAUMA",
+    "GASTROINTESTINAL", "INFECTIOUS", "NEUROLOGICAL", "OTHER"
+]
+
+CATEGORY_COLORS = {
+    "RESPIRATORY": "#3b82f6",      # Blue
+    "CARDIAC": "#ef4444",          # Red
+    "TRAUMA": "#f97316",           # Orange
+    "GASTROINTESTINAL": "#22c55e", # Green
+    "INFECTIOUS": "#a855f7",       # Purple
+    "NEUROLOGICAL": "#06b6d4",     # Cyan
+    "OTHER": "#6b7280"             # Gray
+}
 
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
-MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
+    """Extract KPIs from active forecast data."""
+    forecast_data = st.session_state.get('active_forecast', {})
+    forecast_df = forecast_data.get('forecast_df')
 
-CATEGORY_DEPARTMENTS = {
-    "RESPIRATORY": "Pulmonology",
-    "CARDIAC": "Cardiology",
-    "TRAUMA": "Emergency",
-    "GASTROINTESTINAL": "Gastro",
-    "INFECTIOUS": "Infectious",
-    "NEUROLOGICAL": "Neurology",
-    "OTHER": "General"
-}
+    if forecast_df is not None and isinstance(forecast_df, pd.DataFrame) and len(forecast_df) > 0:
+        kpis.has_forecast = True
 
+        # Find ED/Total column
+        ed_col = None
+        for col in ['ED', 'Total', 'Forecast', 'predicted']:
+            if col in forecast_df.columns:
+                ed_col = col
+                break
 
-def _generate_monthly_trends(historical_data: pd.DataFrame = None) -> List[Dict]:
-    """Generate monthly trend data from historical data or defaults."""
-    if historical_data is not None and 'date' in historical_data.columns:
-        # Try to calculate from real data
-        try:
-            df = historical_data.copy()
-            df['date'] = pd.to_datetime(df['date'])
-            df['month'] = df['date'].dt.strftime('%b')
+        if ed_col:
+            kpis.today_forecast = round(forecast_df[ed_col].iloc[0], 1)
+            kpis.week_total_forecast = round(forecast_df[ed_col].sum(), 0)
+            kpis.peak_day_forecast = round(forecast_df[ed_col].max(), 1)
 
-            # Group by month
-            monthly = df.groupby('month').agg({
-                'ED': 'mean'
-            }).reset_index()
+            # Find peak day name
+            peak_idx = forecast_df[ed_col].idxmax()
+            if 'date' in forecast_df.columns:
+                peak_date = pd.to_datetime(forecast_df.loc[peak_idx, 'date'])
+                kpis.peak_day_name = peak_date.strftime('%A')
+            elif 'ds' in forecast_df.columns:
+                peak_date = pd.to_datetime(forecast_df.loc[peak_idx, 'ds'])
+                kpis.peak_day_name = peak_date.strftime('%A')
+            else:
+                kpis.peak_day_name = f"Day {peak_idx + 1}"
 
-            trends = []
-            for _, row in monthly.iterrows():
-                trends.append({
-                    "month": row['month'],
-                    "occupancy": 70 + (row['ED'] / 10 if row['ED'] < 300 else 30),
-                    "waitTime": 25 + random.random() * 20,
-                    "throughput": row['ED'],
-                    "satisfaction": 3.8 + random.random() * 0.8
+        # Build forecast trend for chart
+        date_col = 'date' if 'date' in forecast_df.columns else 'ds' if 'ds' in forecast_df.columns else None
+        if date_col and ed_col:
+            for _, row in forecast_df.iterrows():
+                kpis.forecast_trend.append({
+                    "date": pd.to_datetime(row[date_col]).strftime('%b %d'),
+                    "forecast": round(row[ed_col], 1),
+                    "type": "forecast"
                 })
-            return trends if trends else _default_monthly_trends()
-        except Exception:
-            pass
-
-    return _default_monthly_trends()
 
 
-def _default_monthly_trends() -> List[Dict]:
-    """Generate default monthly trends with realistic variation."""
-    return [
-        {
-            "month": m,
-            "occupancy": 70 + random.random() * 20,
-            "waitTime": 25 + random.random() * 20,
-            "throughput": 250 + random.random() * 100,
-            "satisfaction": 3.5 + random.random() * 1.2
-        }
-        for m in MONTHS
-    ]
+def _extract_historical_kpis(kpis: ForecastKPIs) -> None:
+    """Extract KPIs from historical prepared data."""
+    historical_df = st.session_state.get('prepared_data')
 
+    if historical_df is not None and isinstance(historical_df, pd.DataFrame) and len(historical_df) > 0:
+        kpis.has_historical = True
+        kpis.total_records = len(historical_df)
 
-def _generate_department_load(forecast_data: pd.DataFrame = None) -> List[Dict]:
-    """Generate department load from forecast data or defaults."""
-    if forecast_data is not None:
-        try:
-            # Check for category columns
-            category_cols = [c for c in forecast_data.columns if c in CATEGORY_DEPARTMENTS]
-            if category_cols:
-                loads = []
-                total = forecast_data[category_cols].sum().sum()
-                for cat in category_cols:
-                    cat_total = forecast_data[cat].sum()
-                    pct = (cat_total / total * 100) if total > 0 else 0
-                    loads.append({
-                        "name": CATEGORY_DEPARTMENTS.get(cat, cat),
-                        "load": int(min(pct * 1.5 + 50, 98)),  # Scale to realistic occupancy
-                        "capacity": 100
+        if 'ED' in historical_df.columns:
+            kpis.historical_avg_ed = round(historical_df['ED'].mean(), 1)
+            kpis.historical_max_ed = round(historical_df['ED'].max(), 0)
+            kpis.historical_min_ed = round(historical_df['ED'].min(), 0)
+
+            # Day-of-week pattern
+            if 'date' in historical_df.columns:
+                df = historical_df.copy()
+                df['date'] = pd.to_datetime(df['date'])
+                df['dow'] = df['date'].dt.day_name()
+                dow_avg = df.groupby('dow')['ED'].mean()
+
+                day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                for day in day_order:
+                    if day in dow_avg.index:
+                        kpis.daily_ed_pattern.append({
+                            "day": day[:3],
+                            "avg_ed": round(dow_avg[day], 1)
+                        })
+
+            # Add recent historical data to trend (last 7 days)
+            if 'date' in historical_df.columns:
+                df = historical_df.copy()
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.sort_values('date')
+                recent = df.tail(7)
+
+                historical_trend = []
+                for _, row in recent.iterrows():
+                    historical_trend.append({
+                        "date": row['date'].strftime('%b %d'),
+                        "actual": round(row['ED'], 1),
+                        "type": "historical"
                     })
-                return sorted(loads, key=lambda x: x['load'], reverse=True)
-        except Exception:
-            pass
-
-    return _default_department_load()
+                # Prepend historical to forecast trend
+                kpis.forecast_trend = historical_trend + kpis.forecast_trend
 
 
-def _default_department_load() -> List[Dict]:
-    """Default department load data."""
-    return [
-        {"name": "Emergency", "load": 92, "capacity": 100},
-        {"name": "ICU", "load": 88, "capacity": 100},
-        {"name": "Cardiology", "load": 83, "capacity": 100},
-        {"name": "Surgery", "load": 76, "capacity": 100},
-        {"name": "Oncology", "load": 71, "capacity": 100},
-        {"name": "Pediatrics", "load": 64, "capacity": 100},
+def _extract_model_kpis(kpis: ForecastKPIs) -> None:
+    """Extract KPIs from trained model results."""
+    best_mape = float('inf')
+    best_model = None
+    models = []
+
+    # Check all model result types
+    model_sources = [
+        ('arima_results', 'ARIMA'),
+        ('sarimax_results', 'SARIMAX'),
+        ('ml_results', None),  # ML results have model name inside
+        ('arima_mh_results', 'ARIMA'),
+        ('sarimax_mh_results', 'SARIMAX'),
+        ('ml_mh_results', None),
     ]
 
+    for key, default_name in model_sources:
+        results = st.session_state.get(key)
+        if results and isinstance(results, dict):
+            # Extract metrics
+            metrics = results.get('metrics', results.get('test_metrics', {}))
+            if isinstance(metrics, dict):
+                mape = metrics.get('MAPE', metrics.get('mape'))
+                rmse = metrics.get('RMSE', metrics.get('rmse'))
+                mae = metrics.get('MAE', metrics.get('mae'))
 
-def _default_shift_distribution() -> List[Dict]:
-    """Default shift distribution data."""
-    return [
-        {"name": "Day (7am-3pm)", "value": 42, "color": "#00d4aa"},
-        {"name": "Evening (3pm-11pm)", "value": 33, "color": "#3b82f6"},
-        {"name": "Night (11pm-7am)", "value": 25, "color": "#a78bfa"},
-    ]
+                model_name = results.get('model_name', results.get('name', default_name))
 
-
-def _generate_weekly_schedule(staff_results: Dict = None) -> List[Dict]:
-    """Generate weekly schedule from staff planner or defaults."""
-    if staff_results:
-        try:
-            # Extract from staff optimization results
-            schedule = staff_results.get('schedule', {})
-            if schedule:
-                weekly = []
-                days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-                for i, day in enumerate(days):
-                    scheduled = sum(schedule.get(f'day_{i}', {}).values()) if isinstance(schedule, dict) else 45 + random.randint(-5, 10)
-                    weekly.append({
-                        "day": day,
-                        "scheduled": int(scheduled),
-                        "actual": int(scheduled * (0.92 + random.random() * 0.08)),
-                        "overtime": int(random.randint(2, 10))
+                if mape is not None and not np.isnan(mape) and not np.isinf(mape):
+                    models.append({
+                        "name": model_name or key,
+                        "mape": round(float(mape), 2),
+                        "rmse": round(float(rmse), 2) if rmse else 0,
+                        "mae": round(float(mae), 2) if mae else 0
                     })
-                return weekly
-        except Exception:
-            pass
 
-    return _default_weekly_schedule()
+                    if mape < best_mape:
+                        best_mape = mape
+                        best_model = {
+                            "name": model_name or key,
+                            "mape": mape,
+                            "rmse": rmse
+                        }
+
+    if best_model:
+        kpis.has_models = True
+        kpis.best_model_name = best_model['name']
+        kpis.best_model_mape = round(best_model['mape'], 2)
+        kpis.best_model_rmse = round(best_model['rmse'], 2) if best_model['rmse'] else 0
+        kpis.models_trained = len(models)
+        kpis.model_comparison = sorted(models, key=lambda x: x['mape'])
 
 
-def _default_weekly_schedule() -> List[Dict]:
-    """Default weekly schedule data."""
-    return [
-        {"day": "Mon", "scheduled": 48, "actual": 45, "overtime": 6},
-        {"day": "Tue", "scheduled": 52, "actual": 50, "overtime": 4},
-        {"day": "Wed", "scheduled": 50, "actual": 48, "overtime": 8},
-        {"day": "Thu", "scheduled": 46, "actual": 44, "overtime": 5},
-        {"day": "Fri", "scheduled": 54, "actual": 51, "overtime": 10},
-        {"day": "Sat", "scheduled": 38, "actual": 36, "overtime": 3},
-        {"day": "Sun", "scheduled": 35, "actual": 33, "overtime": 2},
+def _extract_category_distribution(kpis: ForecastKPIs) -> None:
+    """Extract category distribution from seasonal proportions or forecast."""
+    # Try to get from forecast hub
+    forecast_hub = st.session_state.get('forecast_hub_demand')
+
+    if forecast_hub is not None and isinstance(forecast_hub, pd.DataFrame):
+        cat_cols = [c for c in forecast_hub.columns if c in CLINICAL_CATEGORIES]
+        if cat_cols:
+            totals = forecast_hub[cat_cols].sum()
+            grand_total = totals.sum()
+
+            for cat in cat_cols:
+                pct = (totals[cat] / grand_total * 100) if grand_total > 0 else 0
+                kpis.category_distribution.append({
+                    "name": cat.title(),
+                    "value": round(pct, 1),
+                    "count": int(totals[cat]),
+                    "color": CATEGORY_COLORS.get(cat, "#6b7280")
+                })
+            kpis.category_distribution = sorted(
+                kpis.category_distribution,
+                key=lambda x: x['value'],
+                reverse=True
+            )
+            return
+
+    # Try from seasonal proportions results
+    seasonal = st.session_state.get('seasonal_proportions_results', {})
+    if seasonal and 'category_totals' in seasonal:
+        cat_totals = seasonal['category_totals']
+        grand_total = sum(cat_totals.values())
+
+        for cat, count in cat_totals.items():
+            pct = (count / grand_total * 100) if grand_total > 0 else 0
+            kpis.category_distribution.append({
+                "name": cat.title(),
+                "value": round(pct, 1),
+                "count": int(count),
+                "color": CATEGORY_COLORS.get(cat.upper(), "#6b7280")
+            })
+        kpis.category_distribution = sorted(
+            kpis.category_distribution,
+            key=lambda x: x['value'],
+            reverse=True
+        )
+        return
+
+    # Default placeholder
+    kpis.category_distribution = [
+        {"name": "Respiratory", "value": 28, "count": 0, "color": CATEGORY_COLORS["RESPIRATORY"]},
+        {"name": "Cardiac", "value": 22, "count": 0, "color": CATEGORY_COLORS["CARDIAC"]},
+        {"name": "Trauma", "value": 18, "count": 0, "color": CATEGORY_COLORS["TRAUMA"]},
+        {"name": "Gastrointestinal", "value": 14, "count": 0, "color": CATEGORY_COLORS["GASTROINTESTINAL"]},
+        {"name": "Infectious", "value": 10, "count": 0, "color": CATEGORY_COLORS["INFECTIOUS"]},
+        {"name": "Neurological", "value": 5, "count": 0, "color": CATEGORY_COLORS["NEUROLOGICAL"]},
+        {"name": "Other", "value": 3, "count": 0, "color": CATEGORY_COLORS["OTHER"]},
     ]
+
+
+def _extract_staff_kpis(kpis: ForecastKPIs) -> None:
+    """Extract KPIs from staff optimization results."""
+    staff_results = st.session_state.get('staff_optimization_results')
+
+    if staff_results and isinstance(staff_results, dict):
+        kpis.has_staff_plan = True
+
+        # Extract metrics
+        kpis.staff_coverage_pct = round(staff_results.get('coverage_pct',
+            staff_results.get('utilization', 0)), 1)
+        kpis.total_staff_needed = int(staff_results.get('total_staff',
+            staff_results.get('staff_needed', 0)))
+        kpis.overtime_hours = round(staff_results.get('total_overtime',
+            staff_results.get('overtime_hours', 0)), 1)
+        kpis.daily_staff_cost = round(staff_results.get('daily_cost',
+            staff_results.get('total_cost', 0) / 7), 2)
+
+        # Build staff schedule
+        schedule = staff_results.get('schedule', staff_results.get('daily_schedule', {}))
+        if schedule:
+            days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+            for i, day in enumerate(days):
+                day_data = schedule.get(f'day_{i}', schedule.get(day, {}))
+                if isinstance(day_data, dict):
+                    staff_count = sum(day_data.values())
+                else:
+                    staff_count = day_data if isinstance(day_data, (int, float)) else 0
+
+                kpis.staff_schedule.append({
+                    "day": day,
+                    "staff": int(staff_count),
+                    "demand": int(staff_count * 1.1)  # Approximate demand
+                })
+    else:
+        # Default schedule
+        kpis.staff_schedule = [
+            {"day": "Mon", "staff": 45, "demand": 48},
+            {"day": "Tue", "staff": 50, "demand": 52},
+            {"day": "Wed", "staff": 48, "demand": 50},
+            {"day": "Thu", "staff": 44, "demand": 46},
+            {"day": "Fri", "staff": 51, "demand": 54},
+            {"day": "Sat", "staff": 36, "demand": 38},
+            {"day": "Sun", "staff": 33, "demand": 35},
+        ]
 
 
 # =============================================================================
 # MAIN FUNCTION
 # =============================================================================
 
-def calculate_hospital_kpis(
-    forecast_data: pd.DataFrame = None,
-    staff_results: Dict = None,
-    historical_data: pd.DataFrame = None,
-    supply_results: Dict = None
-) -> HospitalKPIs:
+def calculate_forecast_kpis() -> ForecastKPIs:
     """
-    Calculate hospital KPIs from available data sources.
-
-    Args:
-        forecast_data: DataFrame with ED forecasts and category predictions
-        staff_results: Dict from staff optimization (milp_solver results)
-        historical_data: Raw historical ED data
-        supply_results: Dict from supply optimization
+    Calculate all KPIs from available session state data.
 
     Returns:
-        HospitalKPIs dataclass with all metrics
+        ForecastKPIs dataclass with project-relevant metrics
     """
-    kpis = HospitalKPIs()
+    kpis = ForecastKPIs()
 
-    # Try to extract real values from session state
-    try:
-        # Check for forecast data
-        if forecast_data is None:
-            forecast_data = st.session_state.get('forecast_hub_demand')
-            if forecast_data is None:
-                forecast_data = st.session_state.get('active_forecast', {}).get('forecast_df')
-
-        # Check for staff results
-        if staff_results is None:
-            staff_results = st.session_state.get('staff_optimization_results')
-
-        # Check for historical data
-        if historical_data is None:
-            historical_data = st.session_state.get('prepared_data')
-
-        # Check for supply results
-        if supply_results is None:
-            supply_results = st.session_state.get('supply_optimization_results')
-
-    except Exception:
-        pass
-
-    # Calculate bed occupancy from forecast
-    if forecast_data is not None and isinstance(forecast_data, pd.DataFrame):
-        try:
-            if 'ED' in forecast_data.columns:
-                avg_ed = forecast_data['ED'].mean()
-                # Assume 400 beds capacity, scale ED arrivals to occupancy
-                kpis.bed_occupancy = min(95, max(60, avg_ed / 4))
-            if 'Total' in forecast_data.columns:
-                kpis.er_throughput = int(forecast_data['Total'].sum() / 7)  # Weekly
-        except Exception:
-            pass
-
-    # Extract staff utilization from staff results
-    if staff_results and isinstance(staff_results, dict):
-        try:
-            utilization = staff_results.get('utilization', staff_results.get('staff_utilization'))
-            if utilization:
-                kpis.staff_utilization = float(utilization)
-
-            overtime = staff_results.get('total_overtime', staff_results.get('overtime_hours'))
-            if overtime:
-                kpis.overtime_hours = float(overtime)
-        except Exception:
-            pass
-
-    # Generate time series data
-    kpis.monthly_trends = _generate_monthly_trends(historical_data)
-    kpis.department_load = _generate_department_load(forecast_data)
-    kpis.shift_distribution = _default_shift_distribution()
-    kpis.weekly_schedule = _generate_weekly_schedule(staff_results)
+    # Extract from each data source
+    _extract_forecast_kpis(kpis)
+    _extract_historical_kpis(kpis)
+    _extract_model_kpis(kpis)
+    _extract_category_distribution(kpis)
+    _extract_staff_kpis(kpis)
 
     return kpis
 
 
-def get_kpi_status(value: float, thresholds: tuple) -> str:
-    """
-    Get status level based on value and thresholds.
+# Legacy compatibility
+def calculate_hospital_kpis(*args, **kwargs) -> ForecastKPIs:
+    """Legacy function name - redirects to calculate_forecast_kpis."""
+    return calculate_forecast_kpis()
 
-    Args:
-        value: Current value
-        thresholds: (warning_threshold, danger_threshold)
 
-    Returns:
-        'good', 'warning', or 'danger'
-    """
-    warning, danger = thresholds
-    if value >= danger:
-        return 'danger'
-    elif value >= warning:
-        return 'warning'
-    return 'good'
+# Alias for dataclass
+HospitalKPIs = ForecastKPIs
