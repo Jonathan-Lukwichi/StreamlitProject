@@ -510,13 +510,14 @@ def render_shift_pie_chart(shift_data: List[Dict], height: int = 200, chart_key:
         """, unsafe_allow_html=True)
 
 
-def render_weekly_schedule_chart(schedule_data: List[Dict], height: int = 280):
+def render_weekly_schedule_chart(schedule_data: List[Dict], height: int = 280, chart_key: str = None):
     """
     Render a grouped bar chart for weekly schedule.
 
     Args:
         schedule_data: List of dicts with 'day', 'scheduled', 'actual', 'overtime' keys
         height: Chart height in pixels
+        chart_key: Unique key for the Plotly chart
     """
     df = pd.DataFrame(schedule_data)
 
