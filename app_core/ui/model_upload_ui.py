@@ -816,4 +816,5 @@ def render_cloud_sync_tab():
     if connected:
         render_upload_section()
         render_remote_models_table()
+        render_download_section()  # Download & Load models into session
         render_delete_section()
