@@ -393,6 +393,7 @@ def calculate_forecast_kpis() -> ForecastKPIs:
     _extract_model_kpis(kpis)
     _extract_category_distribution(kpis)
     _extract_staff_kpis(kpis)
+    _extract_supply_kpis(kpis)
 
     return kpis
 
