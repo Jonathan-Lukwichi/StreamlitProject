@@ -615,7 +615,8 @@ def render_monthly_trends_chart(
         hovermode='x unified'
     )
 
-    st.plotly_chart(fig, use_container_width=True, key=f"monthly_trends_{id(trends_data)}")
+    key = chart_key or f"monthly_trends_{id(trends_data)}"
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 
 def render_chart_container(title: str, icon: str = "📈"):
