@@ -583,6 +583,144 @@ with tab4:
 
 
 # =============================================================================
+# SUPPLY PLANNING TAB
+# =============================================================================
+with tab5:
+    # Top KPI Row
+    supply_col1, supply_col2, supply_col3, supply_col4 = st.columns(4)
+
+    with supply_col1:
+        if kpis.has_supply_plan:
+            render_gauge_kpi(
+                value=kpis.supply_service_level,
+                max_val=100,
+                label="Service Level",
+                unit="%",
+                icon="🎯",
+                color=COLORS['accent'],
+                dim_color=COLORS['accent_dim']
+            )
+        else:
+            render_stat_card(
+                label="Service Level",
+                value="—",
+                unit="Run optimizer",
+                icon="🎯",
+                color=COLORS['text_dim']
+            )
+
+    with supply_col2:
+        render_stat_card(
+            label="Total Cost",
+            value=f"${kpis.supply_total_cost:,.0f}" if kpis.has_supply_plan else "—",
+            unit="for horizon" if kpis.has_supply_plan else "N/A",
+            icon="💰",
+            color=COLORS['info']
+        )
+
+    with supply_col3:
+        savings = kpis.supply_weekly_savings
+        if kpis.has_supply_plan:
+            if savings >= 0:
+                render_stat_card(
+                    label="Weekly Savings",
+                    value=f"${savings:,.0f}",
+                    unit="vs baseline",
+                    icon="💵",
+                    color=COLORS['accent'],
+                    trend=f"{abs(savings/100):.0f}%" if savings != 0 else None,
+                    trend_dir="up" if savings > 0 else None
+                )
+            else:
+                render_stat_card(
+                    label="Weekly Investment",
+                    value=f"${abs(savings):,.0f}",
+                    unit="for better SL",
+                    icon="📈",
+                    color=COLORS['warning']
+                )
+        else:
+            render_stat_card(
+                label="Weekly Savings",
+                value="—",
+                unit="N/A",
+                icon="💵",
+                color=COLORS['text_dim']
+            )
+
+    with supply_col4:
+        render_stat_card(
+            label="Items Optimized",
+            value=kpis.supply_items_count if kpis.has_supply_plan else "—",
+            unit="inventory items" if kpis.has_supply_plan else "N/A",
+            icon="📦",
+            color=COLORS['purple']
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if kpis.has_supply_plan and kpis.supply_item_breakdown:
+        # Item Breakdown Chart
+        st.markdown(f"""
+        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
+            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
+                📦 Inventory Order Quantities by Item
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Create bar chart for order quantities
+        fig = go.Figure()
+
+        fig.add_trace(go.Bar(
+            name='Order Qty',
+            x=[item['name'] for item in kpis.supply_item_breakdown],
+            y=[item['order_qty'] for item in kpis.supply_item_breakdown],
+            marker_color=COLORS['info'],
+            marker_cornerradius=6
+        ))
+
+        fig.add_trace(go.Bar(
+            name='Safety Stock',
+            x=[item['name'] for item in kpis.supply_item_breakdown],
+            y=[item['safety_stock'] for item in kpis.supply_item_breakdown],
+            marker_color=COLORS['warning'],
+            marker_cornerradius=6
+        ))
+
+        fig.update_layout(
+            barmode='group',
+            bargap=0.15,
+            height=280,
+            margin=dict(l=40, r=20, t=20, b=60),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=COLORS['text_dim'], size=11),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            xaxis=dict(showgrid=False, zeroline=False, tickangle=-45),
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.06)', zeroline=False, title='Units')
+        )
+        st.plotly_chart(fig, use_container_width=True, key="supply_order_chart")
+
+        # Item table
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
+            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
+                📋 Item Details
+            </h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        supply_df = pd.DataFrame(kpis.supply_item_breakdown)
+        supply_df.columns = ['Item', 'Forecast Demand', 'Order Qty', 'Safety Stock', 'Cost ($)']
+        st.dataframe(supply_df, use_container_width=True, hide_index=True)
+
+    else:
+        st.info("📦 **No supply plan generated**\n\nGo to **Supply Planner** page to optimize inventory based on your forecasts.")
+
+
+# =============================================================================
 # FOOTER
 # =============================================================================
 st.markdown("<br><br>", unsafe_allow_html=True)
