@@ -47,6 +47,14 @@ class ForecastKPIs:
     overtime_hours: float = 0.0
     daily_staff_cost: float = 0.0
 
+    # Supply Planning KPIs (from inventory optimizer)
+    supply_service_level: float = 0.0         # Target service level %
+    supply_total_cost: float = 0.0            # Total inventory cost
+    supply_weekly_savings: float = 0.0        # Weekly savings from optimization
+    supply_items_count: int = 0               # Number of items optimized
+    supply_reorder_alerts: int = 0            # Items below reorder point
+    supply_item_breakdown: List[Dict] = field(default_factory=list)  # Item-level details
+
     # Time series data for charts
     forecast_trend: List[Dict] = field(default_factory=list)      # Historical + forecast
     daily_ed_pattern: List[Dict] = field(default_factory=list)    # Day-of-week pattern
@@ -58,6 +66,7 @@ class ForecastKPIs:
     has_historical: bool = False
     has_models: bool = False
     has_staff_plan: bool = False
+    has_supply_plan: bool = False
 
 
 # =============================================================================
