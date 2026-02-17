@@ -568,7 +568,8 @@ def render_weekly_schedule_chart(schedule_data: List[Dict], height: int = 280, c
         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.06)', zeroline=False)
     )
 
-    st.plotly_chart(fig, use_container_width=True, key=f"weekly_schedule_{id(schedule_data)}")
+    key = chart_key or f"weekly_schedule_{id(schedule_data)}"
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 
 def render_monthly_trends_chart(
