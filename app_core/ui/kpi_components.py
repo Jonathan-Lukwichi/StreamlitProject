@@ -571,7 +571,8 @@ def render_weekly_schedule_chart(schedule_data: List[Dict], height: int = 280):
 def render_monthly_trends_chart(
     trends_data: List[Dict],
     metrics: List[Dict],
-    height: int = 240
+    height: int = 240,
+    chart_key: str = None
 ):
     """
     Render a multi-line chart for monthly KPI trends.
