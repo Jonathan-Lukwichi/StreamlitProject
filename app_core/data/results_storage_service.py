@@ -326,8 +326,10 @@ class ResultsStorageService:
         user_id = self._get_user_id()
 
         try:
+            # Sanitize data (convert tuple keys, handle inf/nan)
+            sanitized_data = _sanitize_for_json(data)
             # Serialize data to JSON
-            json_data = json.loads(json.dumps(data, cls=NpEncoder))
+            json_data = json.loads(json.dumps(sanitized_data, cls=NpEncoder))
             json_string = json.dumps(json_data)
             data_size = len(json_string.encode('utf-8'))
 
