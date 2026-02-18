@@ -53,6 +53,24 @@ def inject_kpi_styles():
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
+    /* Style native Streamlit metrics */
+    [data-testid="stMetric"] {{
+        background: {COLORS['card']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 16px;
+        padding: 16px 20px;
+    }}
+    [data-testid="stMetricLabel"] {{
+        color: {COLORS['text_muted']} !important;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: {COLORS['accent']} !important;
+        font-family: 'JetBrains Mono', monospace !important;
+    }}
+    [data-testid="stMetricDelta"] {{
+        font-size: 14px !important;
+    }}
+
     /* Gauge KPI Card */
     .gauge-kpi {{
         background: {COLORS['card']};
