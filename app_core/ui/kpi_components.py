@@ -398,14 +398,14 @@ def render_stat_card(
     trend_dir: str = None
 ):
     """
-    Render a stat card with optional trend indicator.
+    Render a stat card with optional trend indicator using Streamlit native components.
 
     Args:
         label: KPI label text
         value: Value to display
         unit: Unit suffix
         icon: Emoji icon
-        color: Value color
+        color: Value color (used for styling)
         trend: Trend text (e.g., "12%")
         trend_dir: "up" or "down"
     """
@@ -415,28 +415,23 @@ def render_stat_card(
     else:
         value_str = str(value)
 
-    # Build trend badge if provided
-    trend_html = ""
+    # Build delta string for st.metric
+    delta = None
+    delta_color = "normal"
     if trend and trend_dir:
-        arrow = "↑" if trend_dir == "up" else "↓"
-        if trend_dir == "up":
-            trend_bg = COLORS['accent_dim']
-            trend_color = COLORS['accent']
-        else:
-            trend_bg = COLORS['danger_dim']
-            trend_color = COLORS['danger']
-        trend_html = f'<span style="background:{trend_bg};color:{trend_color};padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;margin-left:auto;">{arrow} {trend}</span>'
+        delta = f"{trend}"
+        delta_color = "normal" if trend_dir == "up" else "inverse"
 
-    st.markdown(f"""
-<div style="background:{COLORS['card']};border:1px solid {COLORS['border']};border-radius:16px;padding:20px;">
-    <div style="color:{COLORS['text_muted']};font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">{icon} {label}</div>
-    <div style="display:flex;align-items:baseline;gap:4px;">
-        <span style="font-size:32px;font-weight:700;color:{color};">{value_str}</span>
-        <span style="color:{COLORS['text_dim']};font-size:13px;">{unit}</span>
-        {trend_html}
-    </div>
-</div>
-    """, unsafe_allow_html=True)
+    # Use a container with custom styling
+    with st.container():
+        st.metric(
+            label=f"{icon} {label}",
+            value=value_str,
+            delta=delta,
+            delta_color=delta_color,
+            help=unit
+        )
+        st.caption(unit)
 
 
 def render_department_load_bars(departments: List[Dict]):
