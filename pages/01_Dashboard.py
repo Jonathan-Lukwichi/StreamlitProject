@@ -67,12 +67,52 @@ inject_tab_styling()
 # =============================================================================
 # CALCULATE KPIs FROM REAL DATA
 # =============================================================================
-@st.cache_data(ttl=60)  # Cache for 1 minute
-def get_kpis() -> ForecastKPIs:
-    """Get KPIs calculated from session state data."""
+def _get_session_state_hash() -> str:
+    """Generate a hash based on presence of key session state data.
+
+    This allows caching to invalidate when relevant data changes.
+    """
+    keys_to_check = [
+        'prepared_data',
+        'active_forecast',
+        # Model results
+        'arima_results', 'sarimax_results', 'arima_mh_results',
+        'ml_mh_results_xgboost', 'ml_mh_results_lstm', 'ml_mh_results_ann',
+        'ml_mh_results_XGBoost', 'ml_mh_results_LSTM', 'ml_mh_results_ANN',
+        'ml_mh_results', 'ml_results',
+        'lstm_xgb_results', 'lstm_sarimax_results', 'lstm_ann_results',
+        'opt_results_xgboost', 'opt_results_lstm', 'opt_results_ann',
+        # Optimization results
+        'optimized_results', 'staff_optimization_results', 'optimization_done',
+        'inv_optimized_results', 'inv_optimization_done',
+        # Category distribution
+        'forecast_hub_demand', 'seasonal_proportions_results',
+    ]
+    # Create hash from which keys exist and have data
+    state_sig = []
+    for key in keys_to_check:
+        val = st.session_state.get(key)
+        if val is not None:
+            if isinstance(val, pd.DataFrame):
+                state_sig.append(f"{key}:{len(val)}")
+            elif isinstance(val, dict):
+                state_sig.append(f"{key}:{len(val)}")
+            else:
+                state_sig.append(f"{key}:1")
+    return "|".join(state_sig)
+
+
+@st.cache_data(ttl=30)
+def get_kpis(_state_hash: str) -> ForecastKPIs:
+    """Get KPIs calculated from session state data.
+
+    Args:
+        _state_hash: Hash of session state keys (prefixed with _ to exclude from display)
+    """
     return calculate_forecast_kpis()
 
-kpis = get_kpis()
+# Pass state hash so cache invalidates when data changes
+kpis = get_kpis(_get_session_state_hash())
 
 # =============================================================================
 # DASHBOARD HEADER
