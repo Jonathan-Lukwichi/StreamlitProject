@@ -658,13 +658,7 @@ with tab5:
 
         # Item table
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"""
-        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-                📋 Item Details
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        render_fluorescent_chart_title("Item Details", "📋")
 
         supply_df = pd.DataFrame(kpis.supply_item_breakdown)
         supply_df.columns = ['Item', 'Forecast Demand', 'Order Qty', 'Safety Stock', 'Cost ($)']
