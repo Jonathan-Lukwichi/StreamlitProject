@@ -173,13 +173,7 @@ with tab1:
     chart_col1, chart_col2 = st.columns([2, 1])
 
     with chart_col1:
-        st.markdown(f"""
-        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']}; letter-spacing: 0.5px;">
-                📈 ED Arrivals — Historical & Forecast
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        render_fluorescent_chart_title("ED Arrivals — Historical & Forecast", "📈")
 
         if kpis.forecast_trend:
             # Build chart from trend data
