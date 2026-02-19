@@ -47,8 +47,10 @@ from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand
 from app_core.ui.kpi_components import (
     inject_kpi_styles, render_dashboard_header,
     render_gauge_kpi, render_stat_card,
+    render_fluorescent_chart_title,
     COLORS
 )
+from app_core.ui.effects import inject_fluorescent_effects, inject_tab_styling
 from app_core.services.kpi_service import calculate_forecast_kpis, ForecastKPIs
 
 # =============================================================================
