@@ -599,7 +599,7 @@ def render_stat_card(
 
 def render_department_load_bars(departments: List[Dict]):
     """
-    Render horizontal progress bars for department capacity.
+    Render fluorescent horizontal progress bars for department capacity.
 
     Args:
         departments: List of dicts with 'name', 'load', 'capacity' keys
@@ -611,23 +611,33 @@ def render_department_load_bars(departments: List[Dict]):
 
         # Color based on load
         if pct > 85:
-            color = COLORS['danger']
+            color = "#ef4444"  # Red
         elif pct > 70:
-            color = COLORS['warning']
+            color = "#f59e0b"  # Amber
         else:
-            color = COLORS['accent']
+            color = "#22d3ee"  # Cyan
 
         st.markdown(f"""
-        <div class="dept-load-item">
-            <div class="dept-load-header">
-                <span class="dept-load-name">{dept['name']}</span>
-                <span class="dept-load-value" style="color: {color};">{load}%</span>
+        <div class="fluorescent-dept-item">
+            <div class="dept-header">
+                <span class="dept-name">{dept['name']}</span>
+                <span class="dept-value" style="color: {color};">{load}%</span>
             </div>
-            <div class="dept-load-bar">
-                <div class="dept-load-fill" style="width: {pct}%; background: linear-gradient(90deg, {color}, {color}aa);"></div>
+            <div class="dept-bar">
+                <div class="dept-fill" style="width: {pct}%; background: linear-gradient(90deg, {color}, {color}88); color: {color};"></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+
+def render_fluorescent_chart_title(title: str, icon: str = "📈"):
+    """Render a fluorescent styled chart title header."""
+    st.markdown(f"""
+    <div class="fluorescent-chart-container" style="padding: 1rem 1.5rem; margin-bottom: 0.5rem;">
+        <div class="chart-shimmer"></div>
+        <h3 class="chart-title" style="margin: 0;">{icon} {title}</h3>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_shift_pie_chart(shift_data: List[Dict], height: int = 200, chart_key: str = None):
