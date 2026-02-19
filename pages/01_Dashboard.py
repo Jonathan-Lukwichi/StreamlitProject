@@ -162,7 +162,7 @@ with tab1:
         render_stat_card(
             label="Historical Avg",
             value=kpis.historical_avg_ed if kpis.has_historical else "—",
-            unit="ED/day" if kpis.has_historical else "Upload data",
+            unit="patients/day" if kpis.has_historical else "Upload data",
             icon="📊",
             color=COLORS['purple']
         )
