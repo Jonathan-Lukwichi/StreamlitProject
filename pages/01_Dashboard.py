@@ -215,7 +215,7 @@ with tab1:
             )
             st.plotly_chart(fig, use_container_width=True, key="overview_ed_trend")
         else:
-            st.info("📊 Upload data and run forecasts to see ED arrival trends")
+            st.info("📊 Upload data and run forecasts to see patient arrival trends")
 
     with chart_col2:
         render_fluorescent_chart_title("Day-of-Week Pattern", "📅")
