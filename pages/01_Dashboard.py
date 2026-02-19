@@ -210,7 +210,7 @@ with tab1:
                 font=dict(color=COLORS['text_dim'], size=11),
                 legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
                 xaxis=dict(showgrid=False, zeroline=False),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.06)', zeroline=False, title='ED Arrivals'),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.06)', zeroline=False, title='Patient Arrivals'),
                 hovermode='x unified'
             )
             st.plotly_chart(fig, use_container_width=True, key="overview_ed_trend")
