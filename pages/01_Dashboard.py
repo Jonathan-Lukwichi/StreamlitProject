@@ -410,16 +410,16 @@ with tab3:
             st.plotly_chart(fig, use_container_width=True, key="category_pie")
 
         with cat_col2:
-            # Progress bars for each category
+            # Progress bars for each category with fluorescent styling
             for cat in kpis.category_distribution:
                 st.markdown(f"""
-                <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 13px; color: {COLORS['text']};">{cat['name']}</span>
-                        <span style="font-size: 13px; color: {cat['color']}; font-weight: 600;">{cat['value']}%</span>
+                <div class="fluorescent-dept-item">
+                    <div class="dept-header">
+                        <span class="dept-name">{cat['name']}</span>
+                        <span class="dept-value" style="color: {cat['color']};">{cat['value']}%</span>
                     </div>
-                    <div style="background: {COLORS['border']}; border-radius: 4px; height: 8px; overflow: hidden;">
-                        <div style="background: {cat['color']}; height: 100%; width: {cat['value']}%; border-radius: 4px;"></div>
+                    <div class="dept-bar">
+                        <div class="dept-fill" style="width: {cat['value']}%; background: linear-gradient(90deg, {cat['color']}, {cat['color']}88); color: {cat['color']};"></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
