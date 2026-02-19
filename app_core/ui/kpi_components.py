@@ -21,14 +21,14 @@ from app_core.ui.components import add_grid
 # CONSTANTS
 # =============================================================================
 
-# Color palette matching the React reference
+# Color palette matching Welcome.py fluorescent design
 COLORS = {
     "bg": "#0a1628",
-    "card": "#111d33",
+    "card": "rgba(15, 23, 42, 0.9)",  # Matching Welcome.py gradient mid
     "card_hover": "#162440",
-    "border": "#1e3354",
-    "accent": "#00d4aa",  # Teal/cyan
-    "accent_dim": "rgba(0,212,170,0.15)",
+    "border": "rgba(6, 78, 145, 0.4)",  # Matching Welcome.py border
+    "accent": "#22d3ee",  # Cyan from Welcome.py
+    "accent_dim": "rgba(34, 211, 238, 0.15)",
     "warning": "#f59e0b",
     "warning_dim": "rgba(245,158,11,0.15)",
     "danger": "#ef4444",
