@@ -499,13 +499,7 @@ with tab4:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Staff Schedule Chart
-    st.markdown(f"""
-    <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-        <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-            📅 Weekly Staff Schedule — Demand vs Allocated
-        </h3>
-    </div>
-    """, unsafe_allow_html=True)
+    render_fluorescent_chart_title("Weekly Staff Schedule — Demand vs Allocated", "📅")
 
     if kpis.staff_schedule:
         fig = go.Figure()
