@@ -621,13 +621,7 @@ with tab5:
 
     if kpis.has_supply_plan and kpis.supply_item_breakdown:
         # Item Breakdown Chart
-        st.markdown(f"""
-        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-                📦 Inventory Order Quantities by Item
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        render_fluorescent_chart_title("Inventory Order Quantities by Item", "📦")
 
         # Create bar chart for order quantities
         fig = go.Figure()
