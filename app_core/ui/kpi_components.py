@@ -503,7 +503,7 @@ def render_gauge_kpi(
     dim_color: str = None
 ):
     """
-    Render a gauge-style KPI card with progress bar using Streamlit native + progress bar.
+    Render a fluorescent gauge-style KPI card with progress bar.
 
     Args:
         value: Current value
@@ -519,18 +519,31 @@ def render_gauge_kpi(
     # Auto-determine color based on threshold
     if color is None:
         if pct > 85:
-            color = COLORS['danger']
+            color = "#ef4444"  # Red
         elif pct > 70:
-            color = COLORS['warning']
+            color = "#f59e0b"  # Amber
         else:
-            color = COLORS['accent']
+            color = "#22d3ee"  # Cyan
 
-    with st.container():
-        st.metric(
-            label=f"{icon} {label}",
-            value=f"{value:.1f}{unit}",
-        )
-        st.progress(min(pct / 100, 1.0))
+    # Format value
+    if isinstance(value, float):
+        value_str = f"{value:.1f}"
+    else:
+        value_str = str(value)
+
+    st.markdown(f"""
+    <div class="fluorescent-gauge-card">
+        <div class="kpi-shimmer"></div>
+        <div class="gauge-header">
+            <span class="gauge-icon">{icon}</span>
+            <span class="gauge-label">{label}</span>
+        </div>
+        <div class="gauge-value" style="color: {color};">{value_str}{unit}</div>
+        <div class="gauge-bar-container">
+            <div class="gauge-bar-fill" style="width: {min(pct, 100):.1f}%; background: linear-gradient(90deg, {color}, {color}88); color: {color};"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_stat_card(
