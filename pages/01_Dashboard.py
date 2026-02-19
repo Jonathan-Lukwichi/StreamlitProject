@@ -218,13 +218,7 @@ with tab1:
             st.info("📊 Upload data and run forecasts to see ED arrival trends")
 
     with chart_col2:
-        st.markdown(f"""
-        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']}; letter-spacing: 0.5px;">
-                📅 Day-of-Week Pattern
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        render_fluorescent_chart_title("Day-of-Week Pattern", "📅")
 
         if kpis.daily_ed_pattern:
             fig = go.Figure(data=[go.Bar(
