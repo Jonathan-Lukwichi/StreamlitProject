@@ -187,31 +187,50 @@ def _extract_model_kpis(kpis: ForecastKPIs) -> None:
     best_model = None
     models = []
 
-    # Check all model result types
+    # Check all model result types (from all pages)
     model_sources = [
+        # Baseline Models (05_Baseline_Models.py)
         ('arima_results', 'ARIMA'),
         ('sarimax_results', 'SARIMAX'),
-        ('ml_results', None),  # ML results have model name inside
         ('arima_mh_results', 'ARIMA'),
-        ('sarimax_mh_results', 'SARIMAX'),
+        # ML Models (08_Train_Models.py - Tab 2)
+        ('ml_mh_results_xgboost', 'XGBoost'),
+        ('ml_mh_results_lstm', 'LSTM'),
+        ('ml_mh_results_ann', 'ANN'),
+        ('ml_mh_results_XGBoost', 'XGBoost'),
+        ('ml_mh_results_LSTM', 'LSTM'),
+        ('ml_mh_results_ANN', 'ANN'),
         ('ml_mh_results', None),
+        ('ml_results', None),
+        # Hybrid Models (08_Train_Models.py - Tab 4)
+        ('lstm_xgb_results', 'LSTM-XGBoost'),
+        ('lstm_sarimax_results', 'LSTM-SARIMAX'),
+        ('lstm_ann_results', 'LSTM-ANN'),
+        # Optimized Models (08_Train_Models.py - Tab 3)
+        ('opt_results_xgboost', 'XGBoost (Opt)'),
+        ('opt_results_lstm', 'LSTM (Opt)'),
+        ('opt_results_ann', 'ANN (Opt)'),
+        ('opt_results_XGBoost', 'XGBoost (Opt)'),
+        ('opt_results_LSTM', 'LSTM (Opt)'),
+        ('opt_results_ANN', 'ANN (Opt)'),
     ]
 
     for key, default_name in model_sources:
         results = st.session_state.get(key)
         if results and isinstance(results, dict):
-            # Extract metrics
-            metrics = results.get('metrics', results.get('test_metrics', {}))
-            if isinstance(metrics, dict):
-                mape = metrics.get('MAPE', metrics.get('mape'))
-                rmse = metrics.get('RMSE', metrics.get('rmse'))
-                mae = metrics.get('MAE', metrics.get('mae'))
+            # Try multiple metric extraction patterns
+            metrics = _extract_metrics_from_results(results)
+
+            if metrics:
+                mape = metrics.get('mape')
+                rmse = metrics.get('rmse')
+                mae = metrics.get('mae')
 
                 model_name = results.get('model_name', results.get('name', default_name))
 
                 if mape is not None and not np.isnan(mape) and not np.isinf(mape):
                     models.append({
-                        "name": model_name or key,
+                        "name": model_name or default_name or key,
                         "mape": round(float(mape), 2),
                         "rmse": round(float(rmse), 2) if rmse else 0,
                         "mae": round(float(mae), 2) if mae else 0
@@ -220,10 +239,18 @@ def _extract_model_kpis(kpis: ForecastKPIs) -> None:
                     if mape < best_mape:
                         best_mape = mape
                         best_model = {
-                            "name": model_name or key,
+                            "name": model_name or default_name or key,
                             "mape": mape,
                             "rmse": rmse
                         }
+
+    # Remove duplicates (keep model with lowest MAPE if same name)
+    seen_models = {}
+    for m in models:
+        name = m['name']
+        if name not in seen_models or m['mape'] < seen_models[name]['mape']:
+            seen_models[name] = m
+    models = list(seen_models.values())
 
     if best_model:
         kpis.has_models = True
@@ -232,6 +259,60 @@ def _extract_model_kpis(kpis: ForecastKPIs) -> None:
         kpis.best_model_rmse = round(best_model['rmse'], 2) if best_model['rmse'] else 0
         kpis.models_trained = len(models)
         kpis.model_comparison = sorted(models, key=lambda x: x['mape'])
+
+
+def _extract_metrics_from_results(results: dict) -> Optional[Dict[str, float]]:
+    """Extract MAPE, RMSE, MAE from various result formats."""
+    if not results:
+        return None
+
+    # Pattern 1: Direct metrics dict
+    metrics = results.get('metrics', results.get('test_metrics', {}))
+    if isinstance(metrics, dict) and metrics:
+        mape = metrics.get('MAPE', metrics.get('mape', metrics.get('Test_MAPE')))
+        rmse = metrics.get('RMSE', metrics.get('rmse', metrics.get('Test_RMSE')))
+        mae = metrics.get('MAE', metrics.get('mae', metrics.get('Test_MAE')))
+        if mape is not None:
+            return {'mape': mape, 'rmse': rmse, 'mae': mae}
+
+    # Pattern 2: results_df with Test metrics (ML models)
+    results_df = results.get('results_df')
+    if results_df is not None and isinstance(results_df, pd.DataFrame) and not results_df.empty:
+        if 'Test_MAPE' in results_df.columns:
+            return {
+                'mape': results_df['Test_MAPE'].mean(),
+                'rmse': results_df['Test_RMSE'].mean() if 'Test_RMSE' in results_df.columns else None,
+                'mae': results_df['Test_MAE'].mean() if 'Test_MAE' in results_df.columns else None
+            }
+        if 'Test_Acc' in results_df.columns:
+            # Convert accuracy to MAPE (MAPE = 100 - Accuracy)
+            return {
+                'mape': 100 - results_df['Test_Acc'].mean(),
+                'rmse': results_df['Test_RMSE'].mean() if 'Test_RMSE' in results_df.columns else None,
+                'mae': results_df['Test_MAE'].mean() if 'Test_MAE' in results_df.columns else None
+            }
+
+    # Pattern 3: best_metrics (optimized models)
+    best_metrics = results.get('best_metrics')
+    if isinstance(best_metrics, dict) and best_metrics:
+        mape = best_metrics.get('mape', best_metrics.get('MAPE'))
+        rmse = best_metrics.get('rmse', best_metrics.get('RMSE'))
+        mae = best_metrics.get('mae', best_metrics.get('MAE'))
+        if mape is not None:
+            return {'mape': mape, 'rmse': rmse, 'mae': mae}
+
+    # Pattern 4: artifacts object (hybrid models)
+    artifacts = results.get('artifacts')
+    if artifacts and hasattr(artifacts, 'metrics'):
+        metrics = artifacts.metrics
+        if isinstance(metrics, dict):
+            mape = metrics.get('MAPE', metrics.get('mape'))
+            rmse = metrics.get('RMSE', metrics.get('rmse'))
+            mae = metrics.get('MAE', metrics.get('mae'))
+            if mape is not None:
+                return {'mape': mape, 'rmse': rmse, 'mae': mae}
+
+    return None
 
 
 def _extract_category_distribution(kpis: ForecastKPIs) -> None:
