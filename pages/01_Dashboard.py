@@ -382,16 +382,7 @@ with tab2:
 # CLINICAL CATEGORIES TAB
 # =============================================================================
 with tab3:
-    st.markdown(f"""
-    <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px; margin-bottom: 20px;">
-        <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-            🏥 ED Arrivals by Clinical Category
-        </h3>
-        <p style="margin: 8px 0 0; font-size: 12px; color: {COLORS['text_dim']};">
-            Distribution of patients across clinical categories
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    render_fluorescent_chart_title("ED Arrivals by Clinical Category", "🏥")
 
     if kpis.category_distribution:
         cat_col1, cat_col2 = st.columns([1, 1])
