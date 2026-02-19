@@ -367,13 +367,8 @@ with tab2:
 
         # Model Details Table
         if kpis.model_comparison:
-            st.markdown(f"""
-            <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px; margin-top: 20px;">
-                <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-                    📋 Model Metrics Detail
-                </h3>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            render_fluorescent_chart_title("Model Metrics Detail", "📋")
 
             df_models = pd.DataFrame(kpis.model_comparison)
             df_models.columns = ['Model', 'MAPE %', 'RMSE', 'MAE']
