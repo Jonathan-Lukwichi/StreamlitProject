@@ -331,13 +331,7 @@ with tab2:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # Model Comparison Chart
-        st.markdown(f"""
-        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-                📊 Model Performance Comparison (MAPE %)
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        render_fluorescent_chart_title("Model Performance Comparison (MAPE %)", "📊")
 
         if kpis.model_comparison:
             fig = go.Figure()
