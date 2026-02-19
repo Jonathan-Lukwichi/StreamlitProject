@@ -475,19 +475,22 @@ def inject_kpi_styles():
 # =============================================================================
 
 def render_dashboard_header(title: str = "Hospital Scheduling KPI", subtitle: str = "Real-time operational performance metrics"):
-    """Render the dashboard header with logo and live badge."""
+    """Render the fluorescent dashboard header with logo and live badge."""
     st.markdown(f"""
-    <div class="dashboard-header">
-        <div class="dashboard-brand">
-            <div class="dashboard-logo">H</div>
-            <div>
-                <h1 class="dashboard-title">{title}</h1>
-                <p class="dashboard-subtitle">{subtitle}</p>
+    <div class="fluorescent-dashboard-header">
+        <div class="header-shimmer"></div>
+        <div class="header-content">
+            <div class="header-brand">
+                <div class="header-logo">H</div>
+                <div>
+                    <h1 class="header-title">{title}</h1>
+                    <p class="header-subtitle">{subtitle}</p>
+                </div>
             </div>
-        </div>
-        <div class="live-badge">
-            <div class="live-dot"></div>
-            <span class="live-text">Live Dashboard</span>
+            <div class="live-badge">
+                <div class="live-dot"></div>
+                <span class="live-text">Live Dashboard</span>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
