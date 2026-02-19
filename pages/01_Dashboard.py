@@ -672,4 +672,4 @@ with tab5:
 # FOOTER
 # =============================================================================
 st.markdown("<br><br>", unsafe_allow_html=True)
-st.caption("HealthForecast AI — ED Forecasting & Resource Planning Dashboard")
+st.caption("HealthForecast AI — Hospital Forecasting & Resource Planning Dashboard")
