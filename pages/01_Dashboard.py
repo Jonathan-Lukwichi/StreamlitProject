@@ -382,7 +382,7 @@ with tab2:
 # CLINICAL CATEGORIES TAB
 # =============================================================================
 with tab3:
-    render_fluorescent_chart_title("ED Arrivals by Clinical Category", "🏥")
+    render_fluorescent_chart_title("Patient Arrivals by Clinical Category", "🏥")
 
     if kpis.category_distribution:
         cat_col1, cat_col2 = st.columns([1, 1])
