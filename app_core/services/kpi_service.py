@@ -375,49 +375,81 @@ def _extract_category_distribution(kpis: ForecastKPIs) -> None:
 
 
 def _extract_staff_kpis(kpis: ForecastKPIs) -> None:
-    """Extract KPIs from staff optimization results."""
-    staff_results = st.session_state.get('staff_optimization_results')
+    """Extract KPIs from staff optimization results (11_Staff_Planner.py)."""
+    # Check multiple possible session state keys
+    staff_results = st.session_state.get('optimized_results')  # Main key from Staff Planner
+    if not staff_results:
+        staff_results = st.session_state.get('staff_optimization_results')  # Alternate key
 
-    if staff_results and isinstance(staff_results, dict):
+    # Also check if optimization was done
+    optimization_done = st.session_state.get('optimization_done', False)
+
+    if (staff_results and isinstance(staff_results, dict)) or optimization_done:
         kpis.has_staff_plan = True
 
-        # Extract metrics
-        kpis.staff_coverage_pct = round(staff_results.get('coverage_pct',
-            staff_results.get('utilization', 0)), 1)
-        kpis.total_staff_needed = int(staff_results.get('total_staff',
-            staff_results.get('staff_needed', 0)))
-        kpis.overtime_hours = round(staff_results.get('total_overtime',
-            staff_results.get('overtime_hours', 0)), 1)
-        kpis.daily_staff_cost = round(staff_results.get('daily_cost',
-            staff_results.get('total_cost', 0) / 7), 2)
+        if staff_results:
+            # Extract metrics from Staff Planner results structure
+            kpis.staff_coverage_pct = round(staff_results.get('coverage_pct',
+                staff_results.get('utilization', 85.0)), 1)
 
-        # Build staff schedule
-        schedule = staff_results.get('schedule', staff_results.get('daily_schedule', {}))
-        if schedule:
-            days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-            for i, day in enumerate(days):
-                day_data = schedule.get(f'day_{i}', schedule.get(day, {}))
-                if isinstance(day_data, dict):
-                    staff_count = sum(day_data.values())
-                else:
-                    staff_count = day_data if isinstance(day_data, (int, float)) else 0
+            # Total staff - sum of optimized doctors, nurses, support
+            total_staff = (
+                staff_results.get('total_staff', 0) or
+                (staff_results.get('avg_opt_doctors', 0) +
+                 staff_results.get('avg_opt_nurses', 0) +
+                 staff_results.get('avg_opt_support', 0)) * 7
+            )
+            kpis.total_staff_needed = int(total_staff)
 
-                kpis.staff_schedule.append({
-                    "day": day,
-                    "staff": int(staff_count),
-                    "demand": int(staff_count * 1.1)  # Approximate demand
-                })
-    else:
-        # Default schedule
-        kpis.staff_schedule = [
-            {"day": "Mon", "staff": 45, "demand": 48},
-            {"day": "Tue", "staff": 50, "demand": 52},
-            {"day": "Wed", "staff": 48, "demand": 50},
-            {"day": "Thu", "staff": 44, "demand": 46},
-            {"day": "Fri", "staff": 51, "demand": 54},
-            {"day": "Sat", "staff": 36, "demand": 38},
-            {"day": "Sun", "staff": 33, "demand": 35},
-        ]
+            kpis.overtime_hours = round(staff_results.get('total_overtime',
+                staff_results.get('overtime_hours', 0)), 1)
+
+            # Cost calculation
+            weekly_cost = staff_results.get('optimized_weekly_cost', staff_results.get('total_cost', 0))
+            kpis.daily_staff_cost = round(weekly_cost / 7, 2) if weekly_cost else 0
+
+            # Build staff schedule from daily breakdown
+            daily_breakdown = staff_results.get('daily_breakdown', {})
+            if daily_breakdown:
+                days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                for day in days:
+                    day_data = daily_breakdown.get(day, {})
+                    if isinstance(day_data, dict):
+                        staff_count = (
+                            day_data.get('doctors', 0) +
+                            day_data.get('nurses', 0) +
+                            day_data.get('support', 0)
+                        )
+                        demand = day_data.get('demand', staff_count * 1.1)
+                    else:
+                        staff_count = day_data if isinstance(day_data, (int, float)) else 0
+                        demand = staff_count * 1.1
+
+                    kpis.staff_schedule.append({
+                        "day": day,
+                        "staff": int(staff_count),
+                        "demand": int(demand)
+                    })
+            else:
+                # Try alternate schedule structure
+                schedule = staff_results.get('schedule', {})
+                days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                for i, day in enumerate(days):
+                    day_data = schedule.get(f'day_{i}', schedule.get(day, {}))
+                    if isinstance(day_data, dict):
+                        staff_count = sum(day_data.values())
+                    else:
+                        staff_count = day_data if isinstance(day_data, (int, float)) else 0
+
+                    kpis.staff_schedule.append({
+                        "day": day,
+                        "staff": int(staff_count),
+                        "demand": int(staff_count * 1.1)
+                    })
+
+    # If no schedule built yet, use empty (not placeholder data)
+    if not kpis.staff_schedule and kpis.has_staff_plan:
+        kpis.staff_schedule = []
 
 
 def _extract_supply_kpis(kpis: ForecastKPIs) -> None:
