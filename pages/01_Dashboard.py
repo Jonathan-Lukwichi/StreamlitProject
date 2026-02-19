@@ -426,13 +426,7 @@ with tab3:
 
         # Category Stats
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"""
-        <div style="background: {COLORS['card']}; border: 1px solid {COLORS['border']}; border-radius: 16px; padding: 20px;">
-            <h3 style="margin: 0 0 16px; font-size: 14px; font-weight: 600; color: {COLORS['text_muted']};">
-                📊 Category Summary
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        render_fluorescent_chart_title("Category Summary", "📊")
 
         cat_cols = st.columns(len(kpis.category_distribution[:4]))
         for i, cat in enumerate(kpis.category_distribution[:4]):
