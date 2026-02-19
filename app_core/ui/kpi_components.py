@@ -556,7 +556,7 @@ def render_stat_card(
     trend_dir: str = None
 ):
     """
-    Render a stat card with optional trend indicator using Streamlit native components.
+    Render a fluorescent stat card with optional trend indicator.
 
     Args:
         label: KPI label text
@@ -573,23 +573,25 @@ def render_stat_card(
     else:
         value_str = str(value)
 
-    # Build delta string for st.metric
-    delta = None
-    delta_color = "normal"
+    # Build trend HTML if provided
+    trend_html = ""
     if trend and trend_dir:
-        delta = f"{trend}"
-        delta_color = "normal" if trend_dir == "up" else "inverse"
+        trend_class = "trend-up" if trend_dir == "up" else "trend-down"
+        trend_arrow = "↑" if trend_dir == "up" else "↓"
+        trend_html = f'<div class="kpi-trend {trend_class}">{trend_arrow} {trend}</div>'
 
-    # Use a container with custom styling
-    with st.container():
-        st.metric(
-            label=f"{icon} {label}",
-            value=value_str,
-            delta=delta,
-            delta_color=delta_color,
-            help=unit
-        )
-        st.caption(unit)
+    st.markdown(f"""
+    <div class="fluorescent-kpi-card">
+        <div class="kpi-shimmer"></div>
+        <div class="kpi-header">
+            <span class="kpi-icon">{icon}</span>
+            <span class="kpi-label">{label}</span>
+        </div>
+        <div class="kpi-value" style="color: {color};">{value_str}</div>
+        <div class="kpi-unit">{unit}</div>
+        {trend_html}
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_department_load_bars(departments: List[Dict]):
