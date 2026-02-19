@@ -48,194 +48,402 @@ COLORS = {
 # =============================================================================
 
 def inject_kpi_styles():
-    """Inject CSS styles for KPI dashboard components."""
+    """Inject CSS styles for KPI dashboard components with fluorescent effects."""
     st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
-    /* Style native Streamlit metrics */
-    [data-testid="stMetric"] {{
-        background: {COLORS['card']};
-        border: 1px solid {COLORS['border']};
-        border-radius: 16px;
-        padding: 16px 20px;
-    }}
-    [data-testid="stMetricLabel"] {{
-        color: {COLORS['text_muted']} !important;
-    }}
-    [data-testid="stMetricValue"] {{
-        color: {COLORS['accent']} !important;
-        font-family: 'JetBrains Mono', monospace !important;
-    }}
-    [data-testid="stMetricDelta"] {{
-        font-size: 14px !important;
+    /* ========================================
+       FLUORESCENT ANIMATIONS (from Welcome.py)
+       ======================================== */
+
+    @keyframes card-glow {{
+        0%, 100% {{
+            box-shadow:
+                0 0 20px rgba(6, 78, 145, 0.3),
+                0 0 40px rgba(6, 78, 145, 0.2),
+                0 0 60px rgba(34, 211, 238, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }}
+        50% {{
+            box-shadow:
+                0 0 30px rgba(6, 78, 145, 0.4),
+                0 0 60px rgba(6, 78, 145, 0.3),
+                0 0 80px rgba(34, 211, 238, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }}
     }}
 
-    /* Gauge KPI Card */
-    .gauge-kpi {{
-        background: {COLORS['card']};
-        border: 1px solid {COLORS['border']};
-        border-radius: 16px;
-        padding: 20px;
+    @keyframes text-glow-cyan {{
+        0%, 100% {{
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.5), 0 0 20px rgba(34, 211, 238, 0.3);
+        }}
+        50% {{
+            text-shadow: 0 0 20px rgba(34, 211, 238, 0.7), 0 0 40px rgba(34, 211, 238, 0.4);
+        }}
+    }}
+
+    @keyframes shimmer-sweep {{
+        0% {{ left: -100%; }}
+        100% {{ left: 100%; }}
+    }}
+
+    @keyframes pulse-glow {{
+        0%, 100% {{ opacity: 1; box-shadow: 0 0 10px currentColor; }}
+        50% {{ opacity: 0.7; box-shadow: 0 0 20px currentColor; }}
+    }}
+
+    /* ========================================
+       FLUORESCENT KPI CARD
+       ======================================== */
+
+    .fluorescent-kpi-card {{
+        background: linear-gradient(145deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.9) 50%, rgba(6, 78, 145, 0.1) 100%);
+        border: 1px solid rgba(6, 78, 145, 0.4);
+        border-radius: 20px;
+        padding: 1.5rem;
         position: relative;
         overflow: hidden;
+        animation: card-glow 3s ease-in-out infinite;
         transition: all 0.3s ease;
     }}
-    .gauge-kpi:hover {{
-        background: {COLORS['card_hover']};
-        transform: translateY(-2px);
+
+    .fluorescent-kpi-card:hover {{
+        transform: translateY(-3px);
+        border-color: rgba(34, 211, 238, 0.5);
     }}
-    .gauge-kpi .corner-accent {{
+
+    .fluorescent-kpi-card .kpi-shimmer {{
         position: absolute;
         top: 0;
-        right: 0;
-        width: 80px;
-        height: 80px;
-        border-radius: 0 16px 0 80px;
-        opacity: 0.5;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent);
+        animation: shimmer-sweep 4s infinite;
+        pointer-events: none;
     }}
-    .gauge-kpi .kpi-header {{
+
+    .fluorescent-kpi-card .kpi-header {{
         display: flex;
         align-items: center;
         gap: 8px;
         margin-bottom: 12px;
     }}
-    .gauge-kpi .kpi-icon {{
-        font-size: 18px;
-    }}
-    .gauge-kpi .kpi-label {{
-        color: {COLORS['text_muted']};
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-    }}
-    .gauge-kpi .kpi-value-row {{
-        display: flex;
-        align-items: baseline;
-        gap: 4px;
-    }}
-    .gauge-kpi .kpi-value {{
-        font-size: 36px;
-        font-weight: 700;
-        font-family: 'JetBrains Mono', monospace;
-    }}
-    .gauge-kpi .kpi-unit {{
-        color: {COLORS['text_dim']};
-        font-size: 14px;
-    }}
-    .gauge-kpi .progress-bar {{
-        margin-top: 12px;
-        height: 6px;
-        background: rgba(255,255,255,0.06);
-        border-radius: 3px;
-        overflow: hidden;
-    }}
-    .gauge-kpi .progress-fill {{
-        height: 100%;
-        border-radius: 3px;
-        transition: width 1s ease;
+
+    .fluorescent-kpi-card .kpi-icon {{
+        font-size: 1.25rem;
     }}
 
-    /* Stat Card */
-    .stat-card {{
-        background: {COLORS['card']};
-        border: 1px solid {COLORS['border']};
-        border-radius: 16px;
-        padding: 20px;
-        transition: all 0.3s ease;
-    }}
-    .stat-card:hover {{
-        background: {COLORS['card_hover']};
-        transform: translateY(-2px);
-    }}
-    .stat-card .card-content {{
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-    }}
-    .stat-card .card-main {{}}
-    .stat-card .card-label {{
-        color: {COLORS['text_muted']};
-        font-size: 12px;
+    .fluorescent-kpi-card .kpi-label {{
+        color: #94a3b8;
+        font-size: 0.75rem;
         font-weight: 600;
         letter-spacing: 1px;
         text-transform: uppercase;
-        margin-bottom: 8px;
     }}
-    .stat-card .card-value-row {{
-        display: flex;
-        align-items: baseline;
-        gap: 4px;
-    }}
-    .stat-card .card-value {{
-        font-size: 32px;
-        font-weight: 700;
+
+    .fluorescent-kpi-card .kpi-value {{
+        font-size: 2.25rem;
+        font-weight: 800;
         font-family: 'JetBrains Mono', monospace;
+        animation: text-glow-cyan 3s ease-in-out infinite;
+        margin: 0.5rem 0;
     }}
-    .stat-card .card-unit {{
-        color: {COLORS['text_dim']};
-        font-size: 13px;
+
+    .fluorescent-kpi-card .kpi-unit {{
+        color: #64748b;
+        font-size: 0.85rem;
+        margin-top: 0.25rem;
     }}
-    .stat-card .trend-badge {{
+
+    .fluorescent-kpi-card .kpi-trend {{
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
         padding: 4px 10px;
         border-radius: 20px;
-        font-size: 12px;
+        font-size: 0.75rem;
         font-weight: 600;
-    }}
-    .stat-card .trend-up {{
-        background: {COLORS['accent_dim']};
-        color: {COLORS['accent']};
-    }}
-    .stat-card .trend-down {{
-        background: {COLORS['danger_dim']};
-        color: {COLORS['danger']};
+        margin-top: 0.5rem;
     }}
 
-    /* Department Load Bar */
-    .dept-load-item {{
-        margin-bottom: 16px;
+    .fluorescent-kpi-card .trend-up {{
+        background: rgba(34, 211, 238, 0.15);
+        color: #22d3ee;
     }}
-    .dept-load-header {{
+
+    .fluorescent-kpi-card .trend-down {{
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+    }}
+
+    /* ========================================
+       FLUORESCENT GAUGE CARD
+       ======================================== */
+
+    .fluorescent-gauge-card {{
+        background: linear-gradient(145deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.9) 50%, rgba(6, 78, 145, 0.1) 100%);
+        border: 1px solid rgba(6, 78, 145, 0.4);
+        border-radius: 20px;
+        padding: 1.5rem;
+        position: relative;
+        overflow: hidden;
+        animation: card-glow 3s ease-in-out infinite;
+        transition: all 0.3s ease;
+    }}
+
+    .fluorescent-gauge-card:hover {{
+        transform: translateY(-3px);
+        border-color: rgba(34, 211, 238, 0.5);
+    }}
+
+    .fluorescent-gauge-card .kpi-shimmer {{
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent);
+        animation: shimmer-sweep 4s infinite;
+        pointer-events: none;
+    }}
+
+    .fluorescent-gauge-card .gauge-header {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+    }}
+
+    .fluorescent-gauge-card .gauge-icon {{
+        font-size: 1.25rem;
+    }}
+
+    .fluorescent-gauge-card .gauge-label {{
+        color: #94a3b8;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }}
+
+    .fluorescent-gauge-card .gauge-value {{
+        font-size: 2.25rem;
+        font-weight: 800;
+        font-family: 'JetBrains Mono', monospace;
+        animation: text-glow-cyan 3s ease-in-out infinite;
+        margin: 0.5rem 0;
+    }}
+
+    .fluorescent-gauge-card .gauge-bar-container {{
+        margin-top: 1rem;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 4px;
+        overflow: hidden;
+    }}
+
+    .fluorescent-gauge-card .gauge-bar-fill {{
+        height: 100%;
+        border-radius: 4px;
+        transition: width 1s ease;
+        box-shadow: 0 0 10px currentColor;
+    }}
+
+    /* ========================================
+       FLUORESCENT CHART CONTAINER
+       ======================================== */
+
+    .fluorescent-chart-container {{
+        background: linear-gradient(145deg, rgba(6, 78, 145, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(6, 78, 145, 0.08) 100%);
+        border: 1px solid rgba(6, 78, 145, 0.35);
+        border-radius: 20px;
+        padding: 1.5rem;
+        position: relative;
+        overflow: hidden;
+        animation: card-glow 4s ease-in-out infinite;
+    }}
+
+    .fluorescent-chart-container .chart-shimmer {{
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.08), transparent);
+        animation: shimmer-sweep 5s infinite;
+        pointer-events: none;
+    }}
+
+    .fluorescent-chart-container .chart-title {{
+        color: #e2e8f0;
+        font-size: 1rem;
+        font-weight: 700;
+        margin: 0 0 1rem 0;
+        animation: text-glow-cyan 4s ease-in-out infinite;
+    }}
+
+    /* ========================================
+       FLUORESCENT DASHBOARD HEADER
+       ======================================== */
+
+    .fluorescent-dashboard-header {{
+        background: linear-gradient(145deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.9) 50%, rgba(6, 78, 145, 0.1) 100%);
+        border: 1px solid rgba(6, 78, 145, 0.4);
+        border-radius: 24px;
+        padding: 2rem;
+        position: relative;
+        overflow: hidden;
+        animation: card-glow 3s ease-in-out infinite;
+        margin-bottom: 2rem;
+    }}
+
+    .fluorescent-dashboard-header .header-shimmer {{
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent);
+        animation: shimmer-sweep 4s infinite;
+        pointer-events: none;
+    }}
+
+    .fluorescent-dashboard-header .header-content {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        position: relative;
+        z-index: 1;
+    }}
+
+    .fluorescent-dashboard-header .header-brand {{
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }}
+
+    .fluorescent-dashboard-header .header-logo {{
+        width: 50px;
+        height: 50px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #064e91 0%, #22d3ee 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #fff;
+        box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+    }}
+
+    .fluorescent-dashboard-header .header-title {{
+        margin: 0;
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #ffffff;
+        animation: text-glow-cyan 3s ease-in-out infinite;
+        letter-spacing: -0.5px;
+    }}
+
+    .fluorescent-dashboard-header .header-subtitle {{
+        margin: 0.25rem 0 0 0;
+        color: #94a3b8;
+        font-size: 0.95rem;
+    }}
+
+    .fluorescent-dashboard-header .live-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(6, 78, 145, 0.3);
+        border: 1px solid rgba(34, 211, 238, 0.3);
+        border-radius: 20px;
+        padding: 8px 16px;
+    }}
+
+    .fluorescent-dashboard-header .live-dot {{
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #22d3ee;
+        animation: pulse-glow 2s infinite;
+        box-shadow: 0 0 10px #22d3ee;
+    }}
+
+    .fluorescent-dashboard-header .live-text {{
+        color: #22d3ee;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }}
+
+    /* ========================================
+       FLUORESCENT DEPARTMENT LOAD BAR
+       ======================================== */
+
+    .fluorescent-dept-item {{
+        margin-bottom: 1rem;
+    }}
+
+    .fluorescent-dept-item .dept-header {{
         display: flex;
         justify-content: space-between;
         margin-bottom: 6px;
     }}
-    .dept-load-name {{
-        font-size: 13px;
+
+    .fluorescent-dept-item .dept-name {{
+        font-size: 0.875rem;
         font-weight: 500;
-        color: {COLORS['text']};
+        color: #e2e8f0;
     }}
-    .dept-load-value {{
-        font-size: 13px;
+
+    .fluorescent-dept-item .dept-value {{
+        font-size: 0.875rem;
         font-weight: 700;
         font-family: 'JetBrains Mono', monospace;
     }}
-    .dept-load-bar {{
+
+    .fluorescent-dept-item .dept-bar {{
         height: 10px;
-        background: rgba(255,255,255,0.06);
+        background: rgba(255, 255, 255, 0.06);
         border-radius: 5px;
         overflow: hidden;
     }}
-    .dept-load-fill {{
+
+    .fluorescent-dept-item .dept-fill {{
         height: 100%;
         border-radius: 5px;
         transition: width 1s ease;
+        box-shadow: 0 0 8px currentColor;
     }}
 
-    /* Chart Container */
-    .chart-container {{
-        background: {COLORS['card']};
-        border: 1px solid {COLORS['border']};
-        border-radius: 16px;
-        padding: 20px;
+    /* ========================================
+       LEGACY SUPPORT (keep for compatibility)
+       ======================================== */
+
+    /* Style native Streamlit metrics */
+    [data-testid="stMetric"] {{
+        background: linear-gradient(145deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.9) 50%, rgba(6, 78, 145, 0.1) 100%);
+        border: 1px solid rgba(6, 78, 145, 0.4);
+        border-radius: 20px;
+        padding: 16px 20px;
+        animation: card-glow 3s ease-in-out infinite;
     }}
-    .chart-title {{
-        margin: 0 0 16px;
-        font-size: 14px;
-        font-weight: 600;
-        color: {COLORS['text_muted']};
-        letter-spacing: 0.5px;
+    [data-testid="stMetricLabel"] {{
+        color: #94a3b8 !important;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: #22d3ee !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        animation: text-glow-cyan 3s ease-in-out infinite !important;
+    }}
+    [data-testid="stMetricDelta"] {{
+        font-size: 14px !important;
     }}
 
     /* Legend Item */
@@ -252,76 +460,11 @@ def inject_kpi_styles():
         border-radius: 3px;
     }}
     .legend-label {{
-        color: {COLORS['text_muted']};
+        color: #94a3b8;
     }}
     .legend-value {{
         margin-left: auto;
         font-weight: 600;
-    }}
-
-    /* Live Badge */
-    .live-badge {{
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: {COLORS['card']};
-        border-radius: 12px;
-        padding: 6px 14px;
-        border: 1px solid {COLORS['border']};
-    }}
-    .live-dot {{
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: {COLORS['accent']};
-        animation: pulse 2s infinite;
-    }}
-    .live-text {{
-        color: {COLORS['text_muted']};
-        font-size: 12px;
-    }}
-    @keyframes pulse {{
-        0%, 100% {{ opacity: 1; }}
-        50% {{ opacity: 0.4; }}
-    }}
-
-    /* Dashboard Header */
-    .dashboard-header {{
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 28px;
-        flex-wrap: wrap;
-        gap: 16px;
-    }}
-    .dashboard-brand {{
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }}
-    .dashboard-logo {{
-        width: 42px;
-        height: 42px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, {COLORS['accent']}, {COLORS['info']});
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        font-weight: 700;
-        color: #fff;
-    }}
-    .dashboard-title {{
-        margin: 0;
-        font-size: 22px;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-        color: {COLORS['text']};
-    }}
-    .dashboard-subtitle {{
-        margin: 0;
-        color: {COLORS['text_muted']};
-        font-size: 13px;
     }}
     </style>
     """, unsafe_allow_html=True)
