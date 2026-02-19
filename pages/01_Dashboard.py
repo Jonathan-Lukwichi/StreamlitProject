@@ -173,7 +173,7 @@ with tab1:
     chart_col1, chart_col2 = st.columns([2, 1])
 
     with chart_col1:
-        render_fluorescent_chart_title("ED Arrivals — Historical & Forecast", "📈")
+        render_fluorescent_chart_title("Patient Arrivals — Historical & Forecast", "📈")
 
         if kpis.forecast_trend:
             # Build chart from trend data
