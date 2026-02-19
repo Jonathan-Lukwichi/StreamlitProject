@@ -61,6 +61,8 @@ inject_sidebar_style()
 render_sidebar_brand()
 add_logout_button()
 inject_kpi_styles()
+inject_fluorescent_effects()
+inject_tab_styling()
 
 # =============================================================================
 # CALCULATE KPIs FROM REAL DATA
