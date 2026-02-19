@@ -79,7 +79,7 @@ kpis = get_kpis()
 # =============================================================================
 render_dashboard_header(
     title="HealthForecast AI Dashboard",
-    subtitle="ED arrival forecasting and resource planning metrics"
+    subtitle="Hospital demand forecasting and resource optimization metrics"
 )
 
 # Data status indicators
