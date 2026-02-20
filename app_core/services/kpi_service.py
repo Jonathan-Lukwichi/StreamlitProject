@@ -109,9 +109,9 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
         kpis.has_forecast = True
         forecast_arr = np.array(forecast_values)
 
-        kpis.today_forecast = round(float(forecast_arr[0]), 1)
-        kpis.week_total_forecast = round(float(forecast_arr.sum()), 0)
-        kpis.peak_day_forecast = round(float(forecast_arr.max()), 1)
+        kpis.today_forecast = int(round(float(forecast_arr[0])))
+        kpis.week_total_forecast = int(round(float(forecast_arr.sum())))
+        kpis.peak_day_forecast = int(round(float(forecast_arr.max())))
 
         # Find peak day name
         peak_idx = int(np.argmax(forecast_arr))
