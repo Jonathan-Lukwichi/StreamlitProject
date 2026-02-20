@@ -456,6 +456,147 @@ def apply_css() -> None:
         .hf-pill-container {{
             justify-content: center;
         }}
+
+        /* Mobile: Stack columns vertically */
+        [data-testid="column"] {{
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }}
+
+        /* Tabs - scrollable on mobile */
+        .stTabs [data-baseweb="tab-list"] {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            gap: 0.25rem;
+        }}
+
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {{
+            display: none;
+        }}
+
+        .stTabs [data-baseweb="tab"] {{
+            padding: 0.5rem 0.75rem;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }}
+
+        /* Sidebar - collapse on mobile */
+        .stSidebar {{
+            width: 280px !important;
+        }}
+
+        .stSidebar [data-testid="stSidebarNav"] a {{
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+        }}
+
+        /* Headers */
+        h1 {{
+            font-size: 1.5rem !important;
+        }}
+        h2 {{
+            font-size: 1.25rem !important;
+        }}
+        h3 {{
+            font-size: 1.1rem !important;
+        }}
+
+        /* Buttons */
+        .stButton > button {{
+            padding: 0.625rem 1.5rem;
+            font-size: 0.875rem;
+        }}
+
+        /* Data frames - horizontal scroll */
+        [data-testid="stDataFrame"] {{
+            overflow-x: auto;
+        }}
+
+        /* Expanders */
+        .streamlit-expanderHeader {{
+            font-size: 0.9rem;
+        }}
+
+        /* Section headers */
+        .section-header, .subsection-header {{
+            font-size: 1rem !important;
+        }}
+    }}
+
+    /* Very small mobile (480px and below) */
+    @media (max-width: 480px) {{
+        .block-container {{
+            padding: 1rem 0.75rem;
+        }}
+
+        .hf-hero-container {{
+            padding: 1.5rem 1rem;
+            border-radius: 16px;
+        }}
+
+        .hf-feature-card {{
+            padding: 1.25rem;
+            border-radius: 16px;
+        }}
+
+        h1 {{
+            font-size: 1.25rem !important;
+        }}
+        h2 {{
+            font-size: 1.1rem !important;
+        }}
+        h3 {{
+            font-size: 1rem !important;
+        }}
+
+        .stButton > button {{
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            width: 100%;
+        }}
+
+        /* Tabs - even more compact */
+        .stTabs [data-baseweb="tab"] {{
+            padding: 0.4rem 0.6rem;
+            font-size: 0.75rem;
+        }}
+
+        /* Input fields */
+        .stTextInput > div > div > input,
+        .stNumberInput > div > div > input,
+        .stSelectbox > div > div {{
+            font-size: 0.875rem;
+            padding: 0.5rem 0.75rem;
+        }}
+
+        /* Sliders */
+        .stSlider {{
+            padding: 0.5rem 0;
+        }}
+
+        /* Info/Warning/Error boxes */
+        .stAlert {{
+            padding: 0.75rem;
+            font-size: 0.85rem;
+        }}
+    }}
+
+    /* Ultra small (360px and below) */
+    @media (max-width: 360px) {{
+        .block-container {{
+            padding: 0.75rem 0.5rem;
+        }}
+
+        h1 {{
+            font-size: 1.1rem !important;
+        }}
+
+        .stTabs [data-baseweb="tab"] {{
+            padding: 0.35rem 0.5rem;
+            font-size: 0.7rem;
+        }}
     }}
 
     /* Headings */
