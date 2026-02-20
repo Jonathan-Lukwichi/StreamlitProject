@@ -25,8 +25,6 @@
 # Manual run
 .\forecast_env_py311\Scripts\activate
 streamlit run Welcome.py
-
-# Default login: admin / admin123
 ```
 
 **Requirements:**
