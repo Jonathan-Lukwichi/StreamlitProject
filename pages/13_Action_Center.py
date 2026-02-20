@@ -1565,7 +1565,7 @@ with tab_staff:
                         <div class="priority-title">{action['title']}</div>
                         <div class="priority-description">{action['description']}</div>
                         <div class="priority-meta">
-                            <span style="background: {priority_color}20; color: {priority_color}; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">{action['priority']}</span>
+                            <span style="background: {priority_color}20; color: {priority_color}; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">{priority_val.title()}</span>
                             <span style="margin-left: 0.5rem; color: #64748b;">{action['category']}</span>
                             {f'<span style="margin-left: 0.5rem; color: #94a3b8;">Est. Impact: ${action.get("cost_impact", 0):,.0f}</span>' if action.get('cost_impact', 0) > 0 else ''}
                         </div>
