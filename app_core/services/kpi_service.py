@@ -152,9 +152,9 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
                 break
 
         if ed_col:
-            kpis.today_forecast = round(forecast_df[ed_col].iloc[0], 1)
-            kpis.week_total_forecast = round(forecast_df[ed_col].sum(), 0)
-            kpis.peak_day_forecast = round(forecast_df[ed_col].max(), 1)
+            kpis.today_forecast = int(round(forecast_df[ed_col].iloc[0]))
+            kpis.week_total_forecast = int(round(forecast_df[ed_col].sum()))
+            kpis.peak_day_forecast = int(round(forecast_df[ed_col].max()))
 
             # Find peak day name
             peak_idx = forecast_df[ed_col].idxmax()
