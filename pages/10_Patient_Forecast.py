@@ -991,7 +991,8 @@ def save_forecast_to_session(
     horizons: List[int] = None,
     forecast_days: int = 7,
     category_forecasts: Dict[str, List[float]] = None,
-    base_date=None
+    base_date=None,
+    forecast_idx: int = None
 ):
     """
     Save comprehensive forecast data to session state for use by Staff Scheduling,
@@ -1007,6 +1008,7 @@ def save_forecast_to_session(
         category_forecasts: Dict mapping category -> list of daily forecasts
                            e.g., {"RESPIRATORY": [45, 48, 42, ...], "CARDIAC": [32, 35, 30, ...]}
         base_date: The base date from which forecast dates are calculated (from test set)
+        forecast_idx: The row index in F matrix to extract forecasts from (user-selected date)
     """
     if not forecast_data:
         return
