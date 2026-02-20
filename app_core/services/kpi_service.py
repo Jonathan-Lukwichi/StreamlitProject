@@ -180,7 +180,22 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
 
 def _extract_historical_kpis(kpis: ForecastKPIs) -> None:
     """Extract KPIs from historical prepared data."""
+    # Try multiple session state sources for historical data
     historical_df = st.session_state.get('prepared_data')
+
+    # Fallback 1: Check feature_engineering dict (from Feature Studio)
+    if historical_df is None:
+        fe_data = st.session_state.get('feature_engineering', {})
+        if isinstance(fe_data, dict):
+            historical_df = fe_data.get('df')
+
+    # Fallback 2: Check fused_data (from Data Fusion)
+    if historical_df is None:
+        historical_df = st.session_state.get('fused_data')
+
+    # Fallback 3: Check uploaded_data (raw upload)
+    if historical_df is None:
+        historical_df = st.session_state.get('uploaded_data')
 
     if historical_df is not None and isinstance(historical_df, pd.DataFrame) and len(historical_df) > 0:
         kpis.has_historical = True
