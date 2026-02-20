@@ -1555,8 +1555,9 @@ with tab_staff:
 
             # Action cards
             for action in staff_actions:
-                priority_class = f"priority-{action['priority'].lower()}"
-                priority_color = PRIORITY_COLORS.get(action["priority"], "#3b82f6")
+                priority_val = str(action['priority']).lower() if action.get('priority') else 'medium'
+                priority_class = f"priority-{priority_val}"
+                priority_color = PRIORITY_COLORS.get(action["priority"], PRIORITY_COLORS.get(priority_val, "#3b82f6"))
                 st.markdown(f"""
                 <div class="priority-card {priority_class}">
                     <div class="priority-icon">{action['icon']}</div>
