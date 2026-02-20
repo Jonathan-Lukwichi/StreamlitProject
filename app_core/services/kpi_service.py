@@ -538,38 +538,64 @@ def _extract_staff_kpis(kpis: ForecastKPIs) -> None:
 
 
 def _extract_supply_kpis(kpis: ForecastKPIs) -> None:
-    """Extract KPIs from supply/inventory optimization results."""
+    """Extract KPIs from supply/inventory optimization results (12_Supply_Planner.py)."""
     supply_results = st.session_state.get('inv_optimized_results')
 
-    if supply_results and isinstance(supply_results, dict) and supply_results.get('success'):
+    # Also check alternate key and optimization_done flag
+    if not supply_results:
+        supply_results = st.session_state.get('inventory_optimization_results')
+    inv_optimization_done = st.session_state.get('inv_optimization_done', False)
+
+    if (supply_results and isinstance(supply_results, dict) and supply_results.get('success')) or inv_optimization_done:
         kpis.has_supply_plan = True
 
-        # Core metrics
-        kpis.supply_service_level = round(supply_results.get('service_level', 95.0), 1)
-        kpis.supply_total_cost = round(supply_results.get('total_cost', 0), 2)
-        kpis.supply_weekly_savings = round(supply_results.get('weekly_savings', 0), 2)
+        if supply_results:
+            # Core metrics from Supply Planner
+            kpis.supply_service_level = round(supply_results.get('service_level', 95.0), 1)
 
-        # Item breakdown
-        item_results = supply_results.get('item_results', {})
-        kpis.supply_items_count = len(item_results)
+            # Total cost = sum of ordering, holding, purchase costs
+            total_cost = supply_results.get('total_cost', 0)
+            if not total_cost:
+                total_cost = (
+                    supply_results.get('ordering_cost', 0) +
+                    supply_results.get('holding_cost', 0) +
+                    supply_results.get('purchase_cost', 0)
+                )
+            kpis.supply_total_cost = round(total_cost, 2)
 
-        # Count reorder alerts (items where current stock might be below reorder point)
-        reorder_alerts = 0
-        for item_id, item_data in item_results.items():
-            if item_data.get('reorder_point', 0) > 0:
-                # Assume we need to reorder if safety stock is being used
-                if item_data.get('safety_stock', 0) > item_data.get('avg_daily_demand', 0) * 2:
-                    reorder_alerts += 1
+            # Weekly savings (if available)
+            kpis.supply_weekly_savings = round(supply_results.get('weekly_savings', 0), 2)
 
-            kpis.supply_item_breakdown.append({
-                "name": item_data.get('name', item_id)[:20],
-                "demand": round(item_data.get('forecast_demand', 0), 0),
-                "order_qty": int(item_data.get('optimal_order', 0)),
-                "safety_stock": round(item_data.get('safety_stock', 0), 0),
-                "cost": round(item_data.get('purchase_cost', 0) + item_data.get('holding_cost', 0), 0)
-            })
+            # Item breakdown from item_results dict
+            item_results = supply_results.get('item_results', {})
+            kpis.supply_items_count = len(item_results)
 
-        kpis.supply_reorder_alerts = reorder_alerts
+            # Count reorder alerts and build item breakdown
+            reorder_alerts = 0
+            for item_id, item_data in item_results.items():
+                if isinstance(item_data, dict):
+                    # Check if item has reorder point set (potential alert)
+                    reorder_point = item_data.get('reorder_point', 0)
+                    safety_stock = item_data.get('safety_stock', 0)
+                    if reorder_point > 0 and safety_stock > 0:
+                        reorder_alerts += 1
+
+                    # Calculate item total cost
+                    item_cost = (
+                        item_data.get('ordering_cost', 0) +
+                        item_data.get('holding_cost', 0) +
+                        item_data.get('purchase_cost', 0)
+                    )
+
+                    kpis.supply_item_breakdown.append({
+                        "name": str(item_data.get('name', item_id))[:20],
+                        "demand": round(float(item_data.get('forecast_demand', 0)), 0),
+                        "order_qty": int(item_data.get('optimal_order', 0)),
+                        "safety_stock": round(float(item_data.get('safety_stock', 0)), 0),
+                        "cost": round(float(item_cost), 0)
+                    })
+
+            kpis.supply_reorder_alerts = reorder_alerts
 
 
 # =============================================================================
