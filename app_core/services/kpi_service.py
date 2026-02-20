@@ -360,9 +360,39 @@ def _extract_metrics_from_results(results: dict) -> Optional[Dict[str, float]]:
 
 def _extract_category_distribution(kpis: ForecastKPIs) -> None:
     """Extract category distribution from seasonal proportions or forecast."""
-    # Try to get from forecast hub
-    forecast_hub = st.session_state.get('forecast_hub_demand')
+    # Try to get from forecast hub (dict with category_forecasts)
+    forecast_hub = st.session_state.get('forecast_hub_demand', {})
 
+    # Check for category_forecasts dict (from 10_Patient_Forecast.py)
+    if isinstance(forecast_hub, dict):
+        category_forecasts = forecast_hub.get('category_forecasts', {})
+        if category_forecasts and isinstance(category_forecasts, dict):
+            grand_total = 0
+            cat_totals = {}
+
+            for cat, values in category_forecasts.items():
+                if isinstance(values, (list, np.ndarray)) and len(values) > 0:
+                    cat_sum = float(np.sum(values))
+                    cat_totals[cat.upper()] = cat_sum
+                    grand_total += cat_sum
+
+            if grand_total > 0:
+                for cat, total in cat_totals.items():
+                    pct = (total / grand_total * 100)
+                    kpis.category_distribution.append({
+                        "name": cat.title(),
+                        "value": round(pct, 1),
+                        "count": int(total),
+                        "color": CATEGORY_COLORS.get(cat, "#6b7280")
+                    })
+                kpis.category_distribution = sorted(
+                    kpis.category_distribution,
+                    key=lambda x: x['value'],
+                    reverse=True
+                )
+                return
+
+    # Fallback: DataFrame format (legacy)
     if forecast_hub is not None and isinstance(forecast_hub, pd.DataFrame):
         cat_cols = [c for c in forecast_hub.columns if c in CLINICAL_CATEGORIES]
         if cat_cols:
