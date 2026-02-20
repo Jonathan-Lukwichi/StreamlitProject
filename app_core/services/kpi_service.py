@@ -21,10 +21,12 @@ class ForecastKPIs:
     """Container for HealthForecast AI KPIs - all project-relevant metrics."""
 
     # Forecast KPIs (from active forecast)
-    today_forecast: float = 0.0          # Today's predicted ED arrivals
+    today_forecast: float = 0.0          # First day predicted ED arrivals
     week_total_forecast: float = 0.0     # 7-day total forecast
     peak_day_forecast: float = 0.0       # Highest single day forecast
-    peak_day_name: str = "N/A"           # Name of peak day
+    peak_day_name: str = "N/A"           # Name of peak day (with date)
+    forecast_model_name: str = "N/A"     # Model used for forecast (e.g., "ANN", "LSTM")
+    forecast_dates: List[str] = field(default_factory=list)  # Actual forecast dates
 
     # Historical KPIs (from prepared_data)
     historical_avg_ed: float = 0.0       # Average daily ED arrivals
