@@ -239,17 +239,17 @@ def _extract_historical_kpis(kpis: ForecastKPIs) -> None:
                         })
 
             # Add recent historical data to trend (last 7 days)
-            if 'date' in historical_df.columns:
+            if date_col:
                 df = historical_df.copy()
-                df['date'] = pd.to_datetime(df['date'])
-                df = df.sort_values('date')
+                df['_date'] = pd.to_datetime(df[date_col], errors='coerce')
+                df = df.sort_values('_date')
                 recent = df.tail(7)
 
                 historical_trend = []
                 for _, row in recent.iterrows():
                     historical_trend.append({
-                        "date": row['date'].strftime('%b %d'),
-                        "actual": round(row['ED'], 1),
+                        "date": row['_date'].strftime('%b %d'),
+                        "actual": round(row[ed_col], 1),
                         "type": "historical"
                     })
                 # Prepend historical to forecast trend
