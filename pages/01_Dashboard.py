@@ -86,7 +86,8 @@ with status_cols[0]:
     st.caption(f"{status} Historical: {kpis.total_records} days")
 with status_cols[1]:
     status = "✅" if kpis.has_forecast else "⚪"
-    st.caption(f"{status} Forecast")
+    model_info = f" ({kpis.forecast_model_name})" if kpis.forecast_model_name != "N/A" else ""
+    st.caption(f"{status} Forecast{model_info}")
 with status_cols[2]:
     status = "✅" if kpis.has_models else "⚪"
     st.caption(f"{status} {kpis.models_trained} Models")
