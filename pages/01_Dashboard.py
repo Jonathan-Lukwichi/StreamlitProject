@@ -120,10 +120,12 @@ with tab1:
 
     with col1:
         if kpis.has_forecast:
+            # Get first forecast date label (e.g., "Mon 02/07")
+            first_date_label = kpis.forecast_dates[0] if kpis.forecast_dates else "Day 1"
             render_gauge_kpi(
                 value=kpis.today_forecast,
                 max_val=max(kpis.historical_max_ed, kpis.today_forecast) if kpis.has_historical else 200,
-                label="Today's Forecast",
+                label=f"{first_date_label}",
                 unit=" patients",
                 icon="📈",
                 color=COLORS['accent'],
@@ -131,7 +133,7 @@ with tab1:
             )
         else:
             render_stat_card(
-                label="Today's Forecast",
+                label="Day 1 Forecast",
                 value="—",
                 unit="Run forecast first",
                 icon="📈",
