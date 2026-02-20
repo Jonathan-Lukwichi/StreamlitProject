@@ -173,7 +173,7 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
             for _, row in forecast_df.iterrows():
                 kpis.forecast_trend.append({
                     "date": pd.to_datetime(row[date_col]).strftime('%b %d'),
-                    "forecast": round(row[ed_col], 1),
+                    "forecast": int(round(row[ed_col])),
                     "type": "forecast"
                 })
 
