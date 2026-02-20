@@ -1899,7 +1899,8 @@ with tab_forecast:
             selected_model_name,
             horizons=horizons,
             forecast_days=forecast_days,
-            category_forecasts=category_forecasts_for_session
+            category_forecasts=category_forecasts_for_session,
+            base_date=base_date
         )
 
 # =============================================================================
