@@ -1905,7 +1905,8 @@ with tab_forecast:
             horizons=horizons,
             forecast_days=forecast_days,
             category_forecasts=category_forecasts_for_session,
-            base_date=base_date
+            base_date=base_date,
+            forecast_idx=forecast_idx
         )
 
 # =============================================================================
