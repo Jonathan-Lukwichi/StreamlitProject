@@ -193,25 +193,42 @@ def _extract_historical_kpis(kpis: ForecastKPIs) -> None:
     if historical_df is None:
         historical_df = st.session_state.get('fused_data')
 
-    # Fallback 3: Check uploaded_data (raw upload)
+    # Fallback 3: Check uploaded_data (legacy key)
     if historical_df is None:
         historical_df = st.session_state.get('uploaded_data')
+
+    # Fallback 4: Check patient_data (raw upload from 02_Upload_Data.py)
+    if historical_df is None:
+        historical_df = st.session_state.get('patient_data')
 
     if historical_df is not None and isinstance(historical_df, pd.DataFrame) and len(historical_df) > 0:
         kpis.has_historical = True
         kpis.total_records = len(historical_df)
 
-        if 'ED' in historical_df.columns:
-            kpis.historical_avg_ed = round(historical_df['ED'].mean(), 1)
-            kpis.historical_max_ed = round(historical_df['ED'].max(), 0)
-            kpis.historical_min_ed = round(historical_df['ED'].min(), 0)
+        # Find ED column with multiple candidate names (matches data_processing.py)
+        ed_col = None
+        for col in ['ED', 'ed', 'Ed', 'Arrivals', 'arrivals', 'patients', 'patient_count', 'ED_Count']:
+            if col in historical_df.columns:
+                ed_col = col
+                break
 
-            # Day-of-week pattern
-            if 'date' in historical_df.columns:
+        if ed_col:
+            kpis.historical_avg_ed = round(historical_df[ed_col].mean(), 1)
+            kpis.historical_max_ed = round(historical_df[ed_col].max(), 0)
+            kpis.historical_min_ed = round(historical_df[ed_col].min(), 0)
+
+            # Day-of-week pattern - find date column
+            date_col = None
+            for dc in ['date', 'Date', 'datetime', 'ds', 'timestamp']:
+                if dc in historical_df.columns:
+                    date_col = dc
+                    break
+
+            if date_col:
                 df = historical_df.copy()
-                df['date'] = pd.to_datetime(df['date'])
-                df['dow'] = df['date'].dt.day_name()
-                dow_avg = df.groupby('dow')['ED'].mean()
+                df['_date'] = pd.to_datetime(df[date_col], errors='coerce')
+                df['dow'] = df['_date'].dt.day_name()
+                dow_avg = df.groupby('dow')[ed_col].mean()
 
                 day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                 for day in day_order:
