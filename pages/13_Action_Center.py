@@ -400,7 +400,7 @@ st.markdown(f"""
     margin-bottom: 0.75rem;
 }}
 
-/* Mobile Responsive */
+/* Mobile Responsive - Tablet */
 @media (max-width: 768px) {{
     .fluorescent-orb {{
         width: 200px !important;
@@ -410,8 +410,83 @@ st.markdown(f"""
     .sparkle {{
         display: none;
     }}
+
+    /* KPI Cards */
+    .cmd-kpi-card {{
+        padding: 1rem;
+        border-radius: 12px;
+    }}
+    .cmd-kpi-icon {{ font-size: 2rem; }}
     .cmd-kpi-value {{ font-size: 1.5rem; }}
+    .cmd-kpi-label {{ font-size: 0.8rem; }}
+    .cmd-kpi-sublabel {{ font-size: 0.7rem; }}
+
+    /* Savings Card */
     .savings-value {{ font-size: 2rem; }}
+    .savings-label {{ font-size: 0.85rem; }}
+    .savings-card {{ padding: 1rem; border-radius: 12px; }}
+
+    /* Priority Cards */
+    .priority-card {{
+        padding: 0.875rem 1rem;
+        border-radius: 10px;
+    }}
+    .priority-icon {{ font-size: 1.25rem; }}
+    .priority-title {{ font-size: 0.875rem; }}
+    .priority-description {{ font-size: 0.8rem; }}
+    .priority-meta {{ font-size: 0.7rem; }}
+
+    /* Section Headers */
+    .section-header {{
+        margin: 1rem 0 0.75rem 0;
+    }}
+    .section-icon {{ font-size: 1.25rem; }}
+    .section-title {{ font-size: 1.1rem; }}
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab"] {{
+        height: 40px;
+        padding: 0 1rem;
+        font-size: 0.85rem;
+    }}
+}}
+
+/* Mobile Responsive - Phone */
+@media (max-width: 480px) {{
+    /* KPI Cards - Compact */
+    .cmd-kpi-card {{
+        padding: 0.875rem;
+    }}
+    .cmd-kpi-icon {{ font-size: 1.75rem; }}
+    .cmd-kpi-value {{ font-size: 1.25rem; }}
+    .cmd-kpi-label {{ font-size: 0.75rem; }}
+
+    /* Savings Card */
+    .savings-value {{ font-size: 1.5rem; }}
+    .savings-card {{ padding: 0.875rem; }}
+
+    /* Priority Cards */
+    .priority-card {{
+        padding: 0.75rem;
+        gap: 0.75rem;
+    }}
+    .priority-icon {{ font-size: 1.1rem; }}
+    .priority-title {{ font-size: 0.8rem; }}
+    .priority-description {{ font-size: 0.75rem; }}
+
+    /* Section Headers */
+    .section-icon {{ font-size: 1.1rem; }}
+    .section-title {{ font-size: 1rem; }}
+
+    /* Export Card */
+    .export-card {{ padding: 1rem; }}
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab"] {{
+        height: 36px;
+        padding: 0 0.75rem;
+        font-size: 0.75rem;
+    }}
 }}
 </style>
 
