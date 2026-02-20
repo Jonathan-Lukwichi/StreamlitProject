@@ -272,6 +272,88 @@ div[data-testid="stButton"] > button[kind="primary"]:active {
     position: static !important;
     margin-right: 0 !important;
 }
+
+/* ========================================
+   MOBILE RESPONSIVE STYLES
+   ======================================== */
+
+/* Tablet (768px and below) */
+@media (max-width: 768px) {
+    .fluorescent-cta-card {
+        padding: 2rem 1.5rem;
+        border-radius: 20px;
+    }
+    .cta-title {
+        font-size: 1.5rem;
+    }
+    .cta-subtitle {
+        font-size: 1rem;
+    }
+
+    /* Button */
+    div[data-testid="stButton"] > button[kind="primary"] {
+        padding: 1rem 2rem !important;
+        font-size: 1.1rem !important;
+        letter-spacing: 2px !important;
+        min-height: 56px !important;
+    }
+
+    /* Feature cards */
+    .hf-feature-card {
+        padding: 1.5rem !important;
+    }
+    .hf-feature-title {
+        font-size: 1.1rem !important;
+    }
+    .hf-feature-description {
+        font-size: 0.9rem !important;
+    }
+    .hf-feature-list li {
+        font-size: 0.85rem !important;
+    }
+}
+
+/* Phone (480px and below) */
+@media (max-width: 480px) {
+    .fluorescent-cta-card {
+        padding: 1.5rem 1rem;
+        border-radius: 16px;
+        margin: 0.5rem;
+    }
+    .cta-title {
+        font-size: 1.25rem;
+        letter-spacing: 0.5px;
+    }
+    .cta-subtitle {
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    /* Button - Full width on mobile */
+    div[data-testid="stButton"] > button[kind="primary"] {
+        padding: 0.875rem 1.5rem !important;
+        font-size: 0.95rem !important;
+        letter-spacing: 1.5px !important;
+        min-height: 48px !important;
+        border-radius: 12px !important;
+    }
+
+    /* Feature cards - Compact */
+    .hf-feature-card {
+        padding: 1.25rem !important;
+        border-radius: 16px !important;
+    }
+    .hf-feature-title {
+        font-size: 1rem !important;
+    }
+    .hf-feature-description {
+        font-size: 0.85rem !important;
+    }
+    .hf-feature-list li {
+        font-size: 0.8rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+}
 </style>
 
 <div class='fluorescent-cta-card'>
