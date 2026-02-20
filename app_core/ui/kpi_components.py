@@ -466,6 +466,195 @@ def inject_kpi_styles():
         margin-left: auto;
         font-weight: 600;
     }}
+
+    /* ========================================
+       MOBILE RESPONSIVE STYLES
+       ======================================== */
+
+    /* Tablet (768px and below) */
+    @media (max-width: 768px) {{
+        /* KPI Cards */
+        .fluorescent-kpi-card,
+        .fluorescent-gauge-card {{
+            padding: 1rem;
+            border-radius: 16px;
+        }}
+
+        .fluorescent-kpi-card .kpi-value,
+        .fluorescent-gauge-card .gauge-value {{
+            font-size: 1.75rem;
+        }}
+
+        .fluorescent-kpi-card .kpi-label,
+        .fluorescent-gauge-card .gauge-label {{
+            font-size: 0.7rem;
+        }}
+
+        .fluorescent-kpi-card .kpi-icon,
+        .fluorescent-gauge-card .gauge-icon {{
+            font-size: 1.1rem;
+        }}
+
+        /* Dashboard Header */
+        .fluorescent-dashboard-header {{
+            padding: 1.25rem;
+            border-radius: 16px;
+        }}
+
+        .fluorescent-dashboard-header .header-title {{
+            font-size: 1.25rem;
+        }}
+
+        .fluorescent-dashboard-header .header-subtitle {{
+            font-size: 0.85rem;
+        }}
+
+        .fluorescent-dashboard-header .header-logo {{
+            width: 40px;
+            height: 40px;
+            font-size: 1.2rem;
+        }}
+
+        .fluorescent-dashboard-header .header-content {{
+            flex-direction: column;
+            align-items: flex-start;
+        }}
+
+        .fluorescent-dashboard-header .live-badge {{
+            padding: 6px 12px;
+            font-size: 0.7rem;
+        }}
+
+        /* Chart Container */
+        .fluorescent-chart-container {{
+            padding: 1rem;
+            border-radius: 16px;
+        }}
+
+        .fluorescent-chart-container .chart-title {{
+            font-size: 0.9rem;
+        }}
+
+        /* Native Streamlit Metrics */
+        [data-testid="stMetric"] {{
+            padding: 12px 14px;
+            border-radius: 16px;
+        }}
+
+        [data-testid="stMetricValue"] {{
+            font-size: 1.5rem !important;
+        }}
+    }}
+
+    /* Mobile (480px and below) */
+    @media (max-width: 480px) {{
+        /* KPI Cards - Compact mode */
+        .fluorescent-kpi-card,
+        .fluorescent-gauge-card {{
+            padding: 0.875rem;
+            border-radius: 14px;
+        }}
+
+        .fluorescent-kpi-card .kpi-value,
+        .fluorescent-gauge-card .gauge-value {{
+            font-size: 1.5rem;
+        }}
+
+        .fluorescent-kpi-card .kpi-label,
+        .fluorescent-gauge-card .gauge-label {{
+            font-size: 0.65rem;
+            letter-spacing: 0.5px;
+        }}
+
+        .fluorescent-kpi-card .kpi-unit {{
+            font-size: 0.75rem;
+        }}
+
+        .fluorescent-kpi-card .kpi-trend {{
+            padding: 3px 8px;
+            font-size: 0.7rem;
+        }}
+
+        /* Dashboard Header - Minimal */
+        .fluorescent-dashboard-header {{
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }}
+
+        .fluorescent-dashboard-header .header-title {{
+            font-size: 1.1rem;
+        }}
+
+        .fluorescent-dashboard-header .header-subtitle {{
+            font-size: 0.75rem;
+        }}
+
+        .fluorescent-dashboard-header .header-logo {{
+            width: 36px;
+            height: 36px;
+            font-size: 1rem;
+            border-radius: 10px;
+        }}
+
+        .fluorescent-dashboard-header .header-brand {{
+            gap: 0.75rem;
+        }}
+
+        .fluorescent-dashboard-header .live-badge {{
+            padding: 4px 10px;
+        }}
+
+        .fluorescent-dashboard-header .live-dot {{
+            width: 8px;
+            height: 8px;
+        }}
+
+        .fluorescent-dashboard-header .live-text {{
+            font-size: 0.65rem;
+        }}
+
+        /* Chart Container - Compact */
+        .fluorescent-chart-container {{
+            padding: 0.75rem;
+            border-radius: 14px;
+        }}
+
+        /* Department bars */
+        .fluorescent-dept-item .dept-name,
+        .fluorescent-dept-item .dept-value {{
+            font-size: 0.8rem;
+        }}
+
+        /* Native Streamlit Metrics - Compact */
+        [data-testid="stMetric"] {{
+            padding: 10px 12px;
+            border-radius: 14px;
+        }}
+
+        [data-testid="stMetricValue"] {{
+            font-size: 1.25rem !important;
+        }}
+
+        [data-testid="stMetricLabel"] {{
+            font-size: 0.75rem !important;
+        }}
+    }}
+
+    /* Very Small Mobile (360px and below) */
+    @media (max-width: 360px) {{
+        .fluorescent-kpi-card .kpi-value,
+        .fluorescent-gauge-card .gauge-value {{
+            font-size: 1.25rem;
+        }}
+
+        .fluorescent-dashboard-header .header-title {{
+            font-size: 1rem;
+        }}
+
+        [data-testid="stMetricValue"] {{
+            font-size: 1.1rem !important;
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
