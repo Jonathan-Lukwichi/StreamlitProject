@@ -1283,67 +1283,62 @@ with tab4:
         results = st.session_state.optimized_results
         stats = st.session_state.staff_stats
 
-        # Financial Impact Summary
-        st.markdown('<div class="subsection-header">💰 Financial Impact</div>', unsafe_allow_html=True)
+        # Resource Planning Metrics (replaces Financial Impact)
+        st.markdown('<div class="subsection-header">📊 Resource Planning Metrics</div>', unsafe_allow_html=True)
+
+        # Calculate staff totals
+        current_staff = stats['avg_doctors'] + stats['avg_nurses'] + stats['avg_support']
+        opt_staff = results['avg_opt_doctors'] + results['avg_opt_nurses'] + results['avg_opt_support']
+        staff_delta = opt_staff - current_staff
 
         impact_cols = st.columns(4)
         with impact_cols[0]:
-            render_kpi_card("Current Weekly", f"${results['current_weekly_cost']:,.0f}", "financial", "blue")
+            render_kpi_card("Current Staff", f"{current_staff:.0f}", "status", "blue")
         with impact_cols[1]:
-            render_kpi_card("Optimized Weekly", f"${results['optimized_weekly_cost']:,.0f}", "success", "green")
+            render_kpi_card("Optimized Staff", f"{opt_staff:.0f}", "success", "green")
         with impact_cols[2]:
-            savings = results['weekly_savings']
-            if savings >= 0:
-                render_kpi_card("Weekly Savings", f"${savings:,.0f}", "success", "green")
+            if staff_delta >= 0:
+                render_kpi_card("Staff Adjustment", f"+{staff_delta:.0f}", "success", "green")
             else:
-                investment = abs(savings)
-                render_kpi_card("Weekly Investment", f"${investment:,.0f}", "linked", "purple")
+                render_kpi_card("Staff Adjustment", f"{staff_delta:.0f}", "warning", "yellow")
         with impact_cols[3]:
-            monthly = abs(savings) * 4.33
-            if savings >= 0:
-                render_kpi_card("Monthly Savings", f"${monthly:,.0f}", "success", "green")
-            else:
-                render_kpi_card("Monthly Investment", f"${monthly:,.0f}", "linked", "purple")
+            efficiency = (min(current_staff, opt_staff) / max(current_staff, opt_staff)) * 100 if max(current_staff, opt_staff) > 0 else 100
+            render_kpi_card("Plan Efficiency", f"{efficiency:.0f}%", "success", "cyan")
 
-        # Optimization Value Metrics (Option B - show what optimization achieves)
-        st.markdown('<div class="subsection-header">🎯 Optimization Value</div>', unsafe_allow_html=True)
+        # Forecast-Based Allocation (replaces Optimization Value)
+        st.markdown('<div class="subsection-header">🎯 Forecast-Based Allocation</div>', unsafe_allow_html=True)
 
-        # Calculate value metrics based on optimization results
-        current_staff = stats['avg_doctors'] + stats['avg_nurses'] + stats['avg_support']
-        opt_staff = results['avg_opt_doctors'] + results['avg_opt_nurses'] + results['avg_opt_support']
-        staff_increase = opt_staff - current_staff
+        # Get forecast data if available
+        forecasted_patients = 0
+        if "forecast_data" in st.session_state and st.session_state.forecast_data:
+            forecasted_patients = st.session_state.forecast_data.get("total_week", 0)
 
-        # Calculate improvement metrics
-        # Assume each additional staff member covers ~15 patients and reduces wait by ~5 min
-        additional_capacity = max(0, staff_increase * 15)
-        wait_time_reduction = max(0, staff_increase * 5)  # minutes
-
-        # Calculate shortage risk reduction
-        # If optimizing recommends more staff, it means we're preparing for higher demand
-        shortage_days_avoided = 7 if staff_increase > 0 else 0  # Forecasted shortage days
-        utilization_improvement = min(15, staff_increase * 2) if staff_increase > 0 else 0
+        capacity_per_staff = 15  # patients per staff per week
+        planned_capacity = opt_staff * capacity_per_staff
+        demand_coverage = (planned_capacity / forecasted_patients * 100) if forecasted_patients > 0 else 100
 
         value_cols = st.columns(4)
         with value_cols[0]:
-            render_kpi_card("Capacity Increase", f"+{additional_capacity:.0f} pts/wk", "success", "green")
+            render_kpi_card("Demand Coverage", f"{min(demand_coverage, 100):.0f}%", "success", "green")
         with value_cols[1]:
-            render_kpi_card("Wait Time Reduction", f"-{wait_time_reduction:.0f} min", "success", "green")
+            alignment = "Aligned" if abs(staff_delta) <= 2 else "Adjusted"
+            render_kpi_card("Forecast Alignment", alignment, "success", "cyan")
         with value_cols[2]:
-            render_kpi_card("Shortage Days Avoided", f"{shortage_days_avoided} days", "success", "cyan")
+            render_kpi_card("Planning Horizon", "7 days", "info", "blue")
         with value_cols[3]:
-            render_kpi_card("Utilization Target", f"85%", "success", "green")
+            render_kpi_card("Utilization Target", "85%", "success", "green")
 
-        # Investment justification message
-        if savings < 0:
+        # Justification message based on staff adjustment
+        if staff_delta != 0:
+            direction = "increase" if staff_delta > 0 else "decrease"
             st.info(f"""
-            **Why invest ${abs(savings):,.0f}/week?**
+            **Why {direction} staffing by {abs(staff_delta):.0f}?**
 
-            The optimization model forecasts higher patient demand than current staffing can handle efficiently.
-            The recommended staffing levels will:
-            - Handle forecasted patient volume without shortage
-            - Maintain target 85% staff utilization
-            - Avoid overtime costs from understaffing
-            - Ensure quality care standards are met
+            The ML forecast predicts patient demand requiring adjusted staffing levels:
+            - Forecasted weekly patients: {forecasted_patients:.0f}
+            - Planned capacity: {planned_capacity:.0f} patients
+            - Target utilization: 85%
+            - Demand coverage: {min(demand_coverage, 100):.0f}%
             """)
 
         # Comparison charts
