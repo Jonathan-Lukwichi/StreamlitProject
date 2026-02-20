@@ -301,9 +301,9 @@ backgroundColor = "#0a0e27"
 
 1. **Python Version**: Must use Python 3.11 for TensorFlow/LSTM support
 2. **Secrets**: Never commit `.streamlit/secrets.toml`
-4. **Model Artifacts**: Saved to `pipeline_artifacts/`
-5. **Offline Mode**: Falls back to SQLite via `app_core/offline/` if Supabase unavailable
-6. **Seasonal Proportions**: Enable in training pages to distribute forecasts by clinical category
+3. **Model Artifacts**: Saved to `pipeline_artifacts/`
+4. **Offline Mode**: Falls back to SQLite via `app_core/offline/` if Supabase unavailable
+5. **Seasonal Proportions**: Enable in training pages to distribute forecasts by clinical category
 
 ---
 
