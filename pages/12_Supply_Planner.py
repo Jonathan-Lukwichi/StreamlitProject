@@ -1541,22 +1541,18 @@ with tab4:
         with impact_cols[1]:
             render_kpi_card("Optimized Weekly", f"${results['optimized_weekly_cost']:,.0f}", "success", "green")
 
-        # Optimization Value Metrics (Option B - show what optimization achieves)
-        st.markdown('<div class="subsection-header">🎯 Optimization Value</div>', unsafe_allow_html=True)
+        # Forecast-Based Allocation (replaces Optimization Value)
+        st.markdown('<div class="subsection-header">🎯 Forecast-Based Allocation</div>', unsafe_allow_html=True)
 
         # Calculate value metrics
         service_level_improvement = results['service_level'] - 95.0  # vs old 95% assumption
-        stockout_risk_current = 5.0  # Old assumed 5% stockout risk
         stockout_risk_optimized = (100 - results['service_level'])
-        stockout_risk_reduction = stockout_risk_current - stockout_risk_optimized
 
-        # Calculate lead time reduction from better safety stock positioning
-        # Higher safety stock = less emergency orders = shorter effective lead time
-        lead_time_reduction = max(0, service_level_improvement * 0.2)  # ~0.2 days per % SL improvement
-
-        # Emergency procurement costs avoided (rough estimate)
-        # Stockouts often cost 2-3x regular procurement
-        emergency_cost_avoided = stockout_risk_reduction * 500  # $500 per % risk reduction
+        # Calculate horizon coverage - how many days of demand the inventory covers
+        avg_daily_demand = results.get('total_demand', 0) / results['horizon'] if results['horizon'] > 0 else 1
+        total_inventory = results.get('total_order_qty', 0) + results.get('total_safety_stock', 0)
+        days_covered = total_inventory / avg_daily_demand if avg_daily_demand > 0 else results['horizon']
+        horizon_coverage = min((days_covered / results['horizon']) * 100, 150)  # Cap at 150%
 
         value_cols = st.columns(4)
         with value_cols[0]:
@@ -1569,20 +1565,19 @@ with tab4:
         with value_cols[2]:
             render_kpi_card("Stockout Risk", f"{stockout_risk_optimized:.1f}%", "success" if stockout_risk_optimized < 5 else "warning", "green" if stockout_risk_optimized < 5 else "yellow")
         with value_cols[3]:
-            render_kpi_card("Wait Time Reduced", f"-{lead_time_reduction:.1f} days", "success", "cyan")
+            render_kpi_card("Horizon Coverage", f"{horizon_coverage:.0f}%", "success", "cyan")
 
-        # Investment justification message
+        # Investment justification message (based on inventory adjustment)
         savings = results['weekly_savings']
         if savings < 0:
             st.info(f"""
-            **Why invest ${abs(savings):,.0f}/week?**
+            **Why this inventory investment?**
 
-            The statistical safety stock calculation (Z×σ×√L) indicates that maintaining {results['service_level']:.0f}% service level
-            requires more inventory than the old 10% rule-of-thumb. This investment:
-            - Reduces stockout risk from ~5% to {stockout_risk_optimized:.1f}%
-            - Ensures supply continuity during demand spikes
-            - Avoids emergency procurement costs (~${emergency_cost_avoided:.0f}/week saved)
-            - Provides scientifically-backed inventory buffer
+            The statistical safety stock calculation ensures {results['service_level']:.0f}% service level:
+            - Forecast horizon: {results['horizon']} days
+            - Horizon coverage: {horizon_coverage:.0f}%
+            - Stockout risk: {stockout_risk_optimized:.1f}%
+            - Method: Z × σ × √L (scientifically-backed)
             """)
 
         # Comparison chart
