@@ -619,32 +619,30 @@ with tab5:
         )
 
     with supply_col3:
-        savings = kpis.supply_weekly_savings
         if kpis.has_supply_plan:
-            if savings >= 0:
-                render_stat_card(
-                    label="Weekly Savings",
-                    value=f"${savings:,.0f}",
-                    unit="vs baseline",
-                    icon="💵",
-                    color=COLORS['accent'],
-                    trend=f"{abs(savings/100):.0f}%" if savings != 0 else None,
-                    trend_dir="up" if savings > 0 else None
-                )
-            else:
-                render_stat_card(
-                    label="Weekly Investment",
-                    value=f"${abs(savings):,.0f}",
-                    unit="for better SL",
-                    icon="📈",
-                    color=COLORS['warning']
-                )
+            # Calculate demand coverage from supply results
+            coverage = 100  # Default
+            if "inv_optimized_results" in st.session_state:
+                inv_results = st.session_state.inv_optimized_results
+                horizon = inv_results.get('horizon', 7)
+                total_demand = inv_results.get('total_demand', 0)
+                total_inventory = inv_results.get('total_order_qty', 0) + inv_results.get('total_safety_stock', 0)
+                if total_demand > 0:
+                    coverage = min((total_inventory / total_demand) * 100, 150)
+
+            render_stat_card(
+                label="Demand Coverage",
+                value=f"{coverage:.0f}%",
+                unit="of forecast",
+                icon="📊",
+                color=COLORS['accent'] if coverage >= 95 else COLORS['warning']
+            )
         else:
             render_stat_card(
-                label="Weekly Savings",
+                label="Demand Coverage",
                 value="—",
                 unit="N/A",
-                icon="💵",
+                icon="📊",
                 color=COLORS['text_dim']
             )
 
