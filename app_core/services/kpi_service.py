@@ -134,7 +134,7 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
                     pass
             kpis.forecast_trend.append({
                 "date": date_str,
-                "forecast": round(float(val), 1),
+                "forecast": int(round(float(val))),
                 "type": "forecast"
             })
         return
