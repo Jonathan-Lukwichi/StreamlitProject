@@ -106,6 +106,12 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
     forecast_values = forecast_data.get('forecasts', forecast_data.get('forecast', []))
     forecast_dates = forecast_data.get('dates', [])
 
+    # Extract model name (from Patient Forecast page)
+    kpis.forecast_model_name = forecast_data.get('model', forecast_data.get('model_name', 'N/A'))
+
+    # Store forecast dates for Dashboard display
+    kpis.forecast_dates = list(forecast_dates) if forecast_dates else []
+
     # Handle list-based format (from 10_Patient_Forecast.py)
     if forecast_values and isinstance(forecast_values, (list, np.ndarray)) and len(forecast_values) > 0:
         kpis.has_forecast = True
@@ -115,12 +121,12 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
         kpis.week_total_forecast = int(round(float(forecast_arr.sum())))
         kpis.peak_day_forecast = int(round(float(forecast_arr.max())))
 
-        # Find peak day name
+        # Find peak day name - show actual date (e.g., "TUE Feb 08")
         peak_idx = int(np.argmax(forecast_arr))
         if forecast_dates and len(forecast_dates) > peak_idx:
             try:
-                peak_date = pd.to_datetime(forecast_dates[peak_idx])
-                kpis.peak_day_name = peak_date.strftime('%A')
+                # forecast_dates from Patient Forecast are already formatted as "Mon 02/07"
+                kpis.peak_day_name = str(forecast_dates[peak_idx])
             except:
                 kpis.peak_day_name = f"Day {peak_idx + 1}"
         else:
@@ -131,7 +137,8 @@ def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
             date_str = f"Day {i + 1}"
             if forecast_dates and len(forecast_dates) > i:
                 try:
-                    date_str = pd.to_datetime(forecast_dates[i]).strftime('%b %d')
+                    # Use the date string directly (already formatted)
+                    date_str = str(forecast_dates[i])
                 except:
                     pass
             kpis.forecast_trend.append({
