@@ -1038,21 +1038,24 @@ def save_forecast_to_session(
 
     if F is not None and len(F) > 0:
         num_horizons = min(forecast_days, F.shape[1]) if F.shape[1] > 0 else 0
-        last_idx = len(F) - 1
+        # Use forecast_idx if provided, otherwise fallback to last row
+        row_idx = forecast_idx if forecast_idx is not None else len(F) - 1
+        # Ensure row_idx is within bounds
+        row_idx = min(max(0, row_idx), len(F) - 1)
 
         for h_idx in range(num_horizons):
-            # Get forecast value
-            fv = float(F[last_idx, h_idx]) if not np.isnan(F[last_idx, h_idx]) else 0
+            # Get forecast value from the selected row (same as UI display)
+            fv = float(F[row_idx, h_idx]) if not np.isnan(F[row_idx, h_idx]) else 0
             forecast_values.append(max(0, fv))  # Ensure non-negative
 
             # Get confidence intervals
-            if L is not None and not np.isnan(L[last_idx, h_idx]):
-                lower_bounds.append(max(0, float(L[last_idx, h_idx])))
+            if L is not None and not np.isnan(L[row_idx, h_idx]):
+                lower_bounds.append(max(0, float(L[row_idx, h_idx])))
             else:
                 lower_bounds.append(max(0, fv * 0.9))
 
-            if U is not None and not np.isnan(U[last_idx, h_idx]):
-                upper_bounds.append(max(0, float(U[last_idx, h_idx])))
+            if U is not None and not np.isnan(U[row_idx, h_idx]):
+                upper_bounds.append(max(0, float(U[row_idx, h_idx])))
             else:
                 upper_bounds.append(max(0, fv * 1.1))
 
