@@ -1874,8 +1874,9 @@ with tab_dashboard:
 
         # Show top actions
         for action in all_actions[:6]:
-            priority_class = f"priority-{action['priority'].lower()}"
-            priority_color = PRIORITY_COLORS.get(action["priority"], "#3b82f6")
+            priority_val = str(action['priority']).lower() if action.get('priority') else 'medium'
+            priority_class = f"priority-{priority_val}"
+            priority_color = PRIORITY_COLORS.get(action["priority"], PRIORITY_COLORS.get(priority_val, "#3b82f6"))
             st.markdown(f"""
             <div class="priority-card {priority_class}">
                 <div class="priority-icon">{action['icon']}</div>
@@ -1883,7 +1884,7 @@ with tab_dashboard:
                     <div class="priority-title">{action['title']}</div>
                     <div class="priority-description">{action['description']}</div>
                     <div class="priority-meta">
-                        <span style="background: {priority_color}20; color: {priority_color}; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">{action['priority']}</span>
+                        <span style="background: {priority_color}20; color: {priority_color}; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">{priority_val.title()}</span>
                         <span style="margin-left: 0.5rem; color: #64748b;">{action['category']}</span>
                     </div>
                 </div>
