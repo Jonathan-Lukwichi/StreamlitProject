@@ -102,17 +102,8 @@ def _get_session_state_hash() -> str:
     return "|".join(state_sig)
 
 
-@st.cache_data(ttl=30)
-def get_kpis(_state_hash: str) -> ForecastKPIs:
-    """Get KPIs calculated from session state data.
-
-    Args:
-        _state_hash: Hash of session state keys (prefixed with _ to exclude from display)
-    """
-    return calculate_forecast_kpis()
-
-# Pass state hash so cache invalidates when data changes
-kpis = get_kpis(_get_session_state_hash())
+# Calculate KPIs directly (no caching - fast calculation from session state)
+kpis = calculate_forecast_kpis()
 
 # =============================================================================
 # DASHBOARD HEADER
