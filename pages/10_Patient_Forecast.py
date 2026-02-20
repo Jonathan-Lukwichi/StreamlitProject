@@ -1054,9 +1054,19 @@ def save_forecast_to_session(
             else:
                 upper_bounds.append(max(0, fv * 1.1))
 
-    # Generate future dates for the forecast horizon
-    today = datetime.now().date()
-    future_dates = [(today + timedelta(days=i+1)).strftime("%a %m/%d") for i in range(len(forecast_values))]
+    # Generate future dates for the forecast horizon (use base_date from test set if provided)
+    if base_date is not None:
+        # Use actual test set date as base
+        if hasattr(base_date, 'date'):
+            start_date = base_date.date()
+        elif hasattr(base_date, 'strftime'):
+            start_date = base_date
+        else:
+            start_date = datetime.now().date()
+    else:
+        start_date = datetime.now().date()
+
+    future_dates = [(start_date + timedelta(days=i+1)).strftime("%a %m/%d") for i in range(len(forecast_values))]
 
     # Determine model type
     model_type = "Statistical" if model_name in ["ARIMA", "SARIMAX"] else "ML"
