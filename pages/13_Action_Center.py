@@ -1792,50 +1792,66 @@ with tab_dashboard:
         """, unsafe_allow_html=True)
 
     with kpi_cols[4]:
-        savings = f"${financial['total_monthly_savings']:,.0f}" if financial["total_monthly_savings"] > 0 else "—"
+        planning_complete = staffing["optimization_done"] and inventory["optimization_done"]
+        status_text = "✓ Complete" if planning_complete else "In Progress"
+        status_color = "#22c55e" if planning_complete else "#f59e0b"
         st.markdown(f"""
-        <div class="cmd-kpi-card" style="--accent-color: #22c55e; --accent-end: #4ade80;">
-            <div class="cmd-kpi-icon">💰</div>
-            <div class="cmd-kpi-value" style="color: #22c55e;">{savings}</div>
-            <div class="cmd-kpi-label">Monthly Savings</div>
+        <div class="cmd-kpi-card" style="--accent-color: {status_color}; --accent-end: {status_color};">
+            <div class="cmd-kpi-icon">📋</div>
+            <div class="cmd-kpi-value" style="color: {status_color};">{status_text}</div>
+            <div class="cmd-kpi-label">Planning Status</div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # Financial Impact Section
-    if financial["total_monthly_savings"] > 0:
-        st.markdown("""
-        <div class="section-header">
-            <span class="section-icon">💰</span>
-            <span class="section-title">Financial Impact</span>
-        </div>
-        """, unsafe_allow_html=True)
+    # Resource Allocation Summary (replaces Financial Impact)
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-icon">📊</span>
+        <span class="section-title">Resource Allocation Summary</span>
+    </div>
+    """, unsafe_allow_html=True)
 
+    alloc_cols = st.columns(3)
+    with alloc_cols[0]:
+        staff_status = "✓ Optimized" if staffing["optimization_done"] else "⏳ Pending"
+        staff_color = "#22c55e" if staffing["optimization_done"] else "#94a3b8"
         st.markdown(f"""
-        <div class="savings-card">
-            <div class="savings-label">ESTIMATED MONTHLY SAVINGS</div>
-            <div class="savings-value">${financial['total_monthly_savings']:,.0f}</div>
-            <div style="color: #86efac; margin-top: 0.5rem;">
-                Annual projection: ${financial['annual_savings']:,.0f} | ROI: {financial['roi_percent']:.0f}%
+        <div class="priority-card priority-low" style="border-left: 3px solid {staff_color};">
+            <div class="priority-icon">👥</div>
+            <div class="priority-content">
+                <div class="priority-title">Staff Planning</div>
+                <div class="priority-description" style="color: {staff_color};">{staff_status}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        if financial["breakdown"]:
-            fin_cols = st.columns(len(financial["breakdown"]))
-            for idx, item in enumerate(financial["breakdown"]):
-                with fin_cols[idx]:
-                    st.markdown(f"""
-                    <div class="priority-card priority-low">
-                        <div class="priority-icon">💵</div>
-                        <div class="priority-content">
-                            <div class="priority-title">{item['category']}</div>
-                            <div class="priority-description">${item['savings']:,.0f}/month</div>
-                            <div class="priority-meta">Method: {item.get('method', 'N/A')}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+    with alloc_cols[1]:
+        inv_status = "✓ Optimized" if inventory["optimization_done"] else "⏳ Pending"
+        inv_color = "#22c55e" if inventory["optimization_done"] else "#94a3b8"
+        st.markdown(f"""
+        <div class="priority-card priority-low" style="border-left: 3px solid {inv_color};">
+            <div class="priority-icon">📦</div>
+            <div class="priority-content">
+                <div class="priority-title">Inventory Planning</div>
+                <div class="priority-description" style="color: {inv_color};">{inv_status}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with alloc_cols[2]:
+        forecast_source = forecast.get("source", "None") if forecast["has_forecast"] else "No Forecast"
+        fc_color = "#22c55e" if forecast["has_forecast"] else "#94a3b8"
+        st.markdown(f"""
+        <div class="priority-card priority-low" style="border-left: 3px solid {fc_color};">
+            <div class="priority-icon">📈</div>
+            <div class="priority-content">
+                <div class="priority-title">Forecast Basis</div>
+                <div class="priority-description" style="color: {fc_color};">{forecast_source}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
 
