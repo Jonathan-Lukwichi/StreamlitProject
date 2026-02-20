@@ -95,9 +95,52 @@ CATEGORY_COLORS = {
 
 def _extract_forecast_kpis(kpis: ForecastKPIs) -> None:
     """Extract KPIs from active forecast data."""
+    # Try multiple session state keys (Patient Forecast stores in these)
     forecast_data = st.session_state.get('active_forecast', {})
-    forecast_df = forecast_data.get('forecast_df')
+    if not forecast_data:
+        forecast_data = st.session_state.get('forecast_hub_demand', {})
 
+    # Get forecast values - can be list or DataFrame
+    forecast_values = forecast_data.get('forecasts', forecast_data.get('forecast', []))
+    forecast_dates = forecast_data.get('dates', [])
+
+    # Handle list-based format (from 10_Patient_Forecast.py)
+    if forecast_values and isinstance(forecast_values, (list, np.ndarray)) and len(forecast_values) > 0:
+        kpis.has_forecast = True
+        forecast_arr = np.array(forecast_values)
+
+        kpis.today_forecast = round(float(forecast_arr[0]), 1)
+        kpis.week_total_forecast = round(float(forecast_arr.sum()), 0)
+        kpis.peak_day_forecast = round(float(forecast_arr.max()), 1)
+
+        # Find peak day name
+        peak_idx = int(np.argmax(forecast_arr))
+        if forecast_dates and len(forecast_dates) > peak_idx:
+            try:
+                peak_date = pd.to_datetime(forecast_dates[peak_idx])
+                kpis.peak_day_name = peak_date.strftime('%A')
+            except:
+                kpis.peak_day_name = f"Day {peak_idx + 1}"
+        else:
+            kpis.peak_day_name = f"Day {peak_idx + 1}"
+
+        # Build forecast trend for chart
+        for i, val in enumerate(forecast_arr):
+            date_str = f"Day {i + 1}"
+            if forecast_dates and len(forecast_dates) > i:
+                try:
+                    date_str = pd.to_datetime(forecast_dates[i]).strftime('%b %d')
+                except:
+                    pass
+            kpis.forecast_trend.append({
+                "date": date_str,
+                "forecast": round(float(val), 1),
+                "type": "forecast"
+            })
+        return
+
+    # Fallback: Handle DataFrame format (legacy)
+    forecast_df = forecast_data.get('forecast_df')
     if forecast_df is not None and isinstance(forecast_df, pd.DataFrame) and len(forecast_df) > 0:
         kpis.has_forecast = True
 
