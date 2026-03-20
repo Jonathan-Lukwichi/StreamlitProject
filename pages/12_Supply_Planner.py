@@ -86,6 +86,7 @@ apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
 add_logout_button()
+inject_page_hero_styles("supply")
 
 # =============================================================================
 # CONFIGURATION
