@@ -1,110 +1,140 @@
 from __future__ import annotations
 import streamlit as st
 
-# A. COLOR SYSTEM (export publicly)
-PRIMARY_COLOR   = "#3b82f6"   # electric blue
-SECONDARY_COLOR = "#22d3ee"   # neon cyan
-ACCENT_PINK     = "#f43f5e"   # neon pink
-ACCENT_ROSE     = "#fb7185"   # soft rose
-SUCCESS_COLOR   = "#22c55e"
-WARNING_COLOR   = "#facc15"
-DANGER_COLOR    = "#f97373"
-TEXT_COLOR      = "#ffffff"   # pure white for headings
-BODY_TEXT       = "#d1d5db"   # soft gray for body
-SUBTLE_TEXT     = "#94a3b8"   # muted labels
-CARD_BG         = "#0b1120"   # charcoal background
-BG_BLACK        = "#0b1120"   # black background (same as CARD_BG)
-BG_GRADIENT_START = "#020617" # deep cinematic gradient start
-BG_GRADIENT_MID   = "#050816" # gradient middle
-BG_GRADIENT_END   = "#02010f" # gradient end
+# ============================================================================
+# A. HEALTHCARE COLOR SYSTEM
+# ============================================================================
 
-# B. GLOBAL CSS (in apply_css())
+# Primary Colors - Healthcare Palette
+PRIMARY_COLOR    = "#0284c7"   # Healthcare blue (sky-600)
+SECONDARY_COLOR  = "#0ea5e9"   # Light blue (sky-500)
+ACCENT_BLUE      = "#38bdf8"   # Sky blue (sky-400)
+ACCENT_LIGHT     = "#7dd3fc"   # Pale blue (sky-300)
+
+# Action Colors
+CTA_COLOR        = "#dc2626"   # Medical red for CTAs (red-600)
+CTA_HOVER        = "#b91c1c"   # Darker red on hover (red-700)
+SUCCESS_COLOR    = "#16a34a"   # Health green (green-600)
+WARNING_COLOR    = "#f59e0b"   # Amber warning
+DANGER_COLOR     = "#dc2626"   # Red for alerts
+
+# Text Colors (Dark on Light)
+TEXT_PRIMARY     = "#0f172a"   # Slate-900 - main headings
+TEXT_SECONDARY   = "#334155"   # Slate-700 - body text
+TEXT_MUTED       = "#64748b"   # Slate-500 - subtle text
+TEXT_LIGHT       = "#94a3b8"   # Slate-400 - placeholders
+
+# Background Colors (Light Theme)
+BG_WHITE         = "#ffffff"   # Pure white
+BG_LIGHT         = "#f8fafc"   # Slate-50 - light gray
+BG_SUBTLE        = "#f1f5f9"   # Slate-100 - subtle sections
+BG_CARD          = "#ffffff"   # White cards
+
+# Border Colors
+BORDER_LIGHT     = "#e2e8f0"   # Slate-200
+BORDER_DEFAULT   = "#cbd5e1"   # Slate-300
+BORDER_ACCENT    = "#0ea5e9"   # Blue accent border
+
+# Legacy exports (for backwards compatibility)
+TEXT_COLOR       = TEXT_PRIMARY
+BODY_TEXT        = TEXT_SECONDARY
+SUBTLE_TEXT      = TEXT_MUTED
+CARD_BG          = BG_WHITE
+BG_BLACK         = BG_LIGHT
+BG_GRADIENT_START = BG_WHITE
+BG_GRADIENT_MID   = BG_LIGHT
+BG_GRADIENT_END   = BG_SUBTLE
+ACCENT_PINK      = CTA_COLOR
+ACCENT_ROSE      = "#fb7185"
+
+
+# ============================================================================
+# B. GLOBAL CSS - HEALTHCARE LIGHT THEME
+# ============================================================================
 def apply_css() -> None:
     css_string = f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-    /* Global Reset & Typography */
+    /* ========================================
+       GLOBAL RESET & TYPOGRAPHY
+       ======================================== */
+
     html, body, [class*='css'] {{
         font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        color: {BODY_TEXT};
+        color: {TEXT_SECONDARY};
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
     }}
 
-    /* Cinematic Background Gradient */
+    /* ========================================
+       MAIN BACKGROUND - LIGHT HEALTHCARE
+       ======================================== */
+
     .main {{
-        background: linear-gradient(135deg, {BG_GRADIENT_START} 0%, {BG_GRADIENT_MID} 50%, {BG_GRADIENT_END} 100%);
+        background: linear-gradient(180deg, {BG_WHITE} 0%, {BG_LIGHT} 50%, {BG_SUBTLE} 100%);
         background-attachment: fixed;
         min-height: 100vh;
     }}
 
-    /* Diagonal Neon Streaks (Raycast-style) */
+    /* Subtle blue accent gradient overlay */
     .main::before {{
         content: '';
         position: fixed;
-        top: -50%;
-        right: -20%;
-        width: 100%;
-        height: 200%;
-        background: radial-gradient(ellipse at center, rgba(59,130,246,0.15) 0%, transparent 70%);
-        transform: rotate(-45deg);
+        top: 0;
+        right: 0;
+        width: 50%;
+        height: 100%;
+        background: radial-gradient(ellipse at top right, rgba(14, 165, 233, 0.05) 0%, transparent 60%);
         pointer-events: none;
         z-index: 0;
     }}
+
     .main::after {{
         content: '';
         position: fixed;
-        bottom: -50%;
-        left: -20%;
-        width: 100%;
-        height: 200%;
-        background: radial-gradient(ellipse at center, rgba(244,63,94,0.1) 0%, transparent 70%);
-        transform: rotate(-45deg);
+        bottom: 0;
+        left: 0;
+        width: 50%;
+        height: 50%;
+        background: radial-gradient(ellipse at bottom left, rgba(2, 132, 199, 0.03) 0%, transparent 60%);
         pointer-events: none;
         z-index: 0;
     }}
 
     /* ========================================
-       SIDEBAR - Premium Navigation Design
+       SIDEBAR - DARK FOR CONTRAST
        ======================================== */
 
-    /* Sidebar Container */
     .stSidebar {{
-        background: linear-gradient(180deg, {CARD_BG} 0%, {BG_GRADIENT_START} 100%);
-        border-right: 1px solid rgba(59, 130, 246, 0.12);
-        backdrop-filter: blur(20px);
-        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+        border-right: 1px solid rgba(14, 165, 233, 0.2);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.1);
     }}
 
-    /* Sidebar Content */
     .stSidebar [data-testid="stSidebarNav"] {{
         background-color: transparent;
         padding-top: 2rem;
     }}
 
-    /* Logo/Branding Area */
     .stSidebar > div:first-child {{
         padding: 2rem 1.5rem 1rem 1.5rem;
     }}
 
-    /* Navigation Links Container */
     .stSidebar [data-testid="stSidebarNav"] ul {{
         padding: 0 1rem;
     }}
 
-    /* Individual Navigation Items */
     .stSidebar [data-testid="stSidebarNav"] li {{
         margin-bottom: 0.35rem;
     }}
 
-    /* Navigation Link Styling */
     .stSidebar [data-testid="stSidebarNav"] a {{
         display: flex;
         align-items: center;
         padding: 0.875rem 1.25rem;
         border-radius: 12px;
-        color: {BODY_TEXT};
+        color: #cbd5e1;
         text-decoration: none;
         font-size: 0.9375rem;
         font-weight: 500;
@@ -114,28 +144,22 @@ def apply_css() -> None:
         border: 1px solid transparent;
     }}
 
-    /* Navigation Link Hover Effect */
     .stSidebar [data-testid="stSidebarNav"] a:hover {{
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(34, 211, 238, 0.1));
-        border-color: rgba(59, 130, 246, 0.3);
-        color: {TEXT_COLOR};
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(56, 189, 248, 0.15));
+        border-color: rgba(14, 165, 233, 0.4);
+        color: #ffffff;
         transform: translateX(4px);
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
     }}
 
-    /* Active/Selected Navigation Item */
     .stSidebar [data-testid="stSidebarNav"] a[aria-current="page"],
     .stSidebar [data-testid="stSidebarNav"] a.active {{
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(34, 211, 238, 0.15));
-        border-color: rgba(59, 130, 246, 0.5);
-        color: {TEXT_COLOR};
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(56, 189, 248, 0.2));
+        border-color: rgba(14, 165, 233, 0.5);
+        color: #ffffff;
         font-weight: 600;
-        box-shadow:
-            0 0 20px rgba(59, 130, 246, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
     }}
 
-    /* Active Item Left Accent Bar */
     .stSidebar [data-testid="stSidebarNav"] a[aria-current="page"]::before {{
         content: '';
         position: absolute;
@@ -147,44 +171,30 @@ def apply_css() -> None:
         border-radius: 0 3px 3px 0;
     }}
 
-    /* Navigation Section Headers (if any) */
-    .stSidebar [data-testid="stSidebarNav"] .css-1q8dd3e {{
-        color: {SUBTLE_TEXT};
-        font-size: 0.75rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        padding: 1.5rem 1.25rem 0.5rem 1.25rem;
-        margin-top: 1rem;
-    }}
-
-    /* Sidebar Divider */
     .stSidebar hr {{
         border: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
         margin: 1.5rem 1rem;
     }}
 
-    /* Sidebar User Controls Area (collapse button, etc.) */
     .stSidebar [data-testid="collapsedControl"] {{
-        background: rgba(59, 130, 246, 0.1);
-        border: 1px solid rgba(59, 130, 246, 0.3);
+        background: rgba(14, 165, 233, 0.1);
+        border: 1px solid rgba(14, 165, 233, 0.3);
         border-radius: 0 12px 12px 0;
         color: {SECONDARY_COLOR};
         transition: all 0.3s ease;
     }}
 
     .stSidebar [data-testid="collapsedControl"]:hover {{
-        background: rgba(59, 130, 246, 0.2);
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+        background: rgba(14, 165, 233, 0.2);
+        box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
     }}
 
-    /* Sidebar Widgets Styling */
     .stSidebar .stButton > button {{
         width: 100%;
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(34, 211, 238, 0.15));
-        border: 1px solid rgba(59, 130, 246, 0.3);
-        color: {TEXT_COLOR};
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(56, 189, 248, 0.15));
+        border: 1px solid rgba(14, 165, 233, 0.3);
+        color: #ffffff;
         border-radius: 10px;
         padding: 0.75rem 1rem;
         font-weight: 600;
@@ -194,34 +204,36 @@ def apply_css() -> None:
     .stSidebar .stButton > button:hover {{
         background: linear-gradient(135deg, {PRIMARY_COLOR}, {SECONDARY_COLOR});
         border-color: transparent;
-        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+        box-shadow: 0 4px 20px rgba(14, 165, 233, 0.4);
         transform: translateY(-2px);
     }}
 
-    /* Sidebar Select/Input Fields */
     .stSidebar .stSelectbox > div > div,
     .stSidebar .stTextInput > div > div > input {{
-        background: rgba(11, 17, 32, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 8px;
-        color: {TEXT_COLOR};
+        color: #ffffff;
     }}
 
     .stSidebar .stSelectbox > div > div:hover,
     .stSidebar .stTextInput > div > div > input:hover {{
-        border-color: rgba(59, 130, 246, 0.3);
+        border-color: rgba(14, 165, 233, 0.4);
     }}
 
     .stSidebar .stSelectbox > div > div:focus-within,
     .stSidebar .stTextInput > div > div > input:focus {{
         border-color: {PRIMARY_COLOR};
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
     }}
 
-    /* Main Content Container */
+    /* ========================================
+       MAIN CONTENT CONTAINER
+       ======================================== */
+
     .block-container {{
         max-width: 1400px;
-        padding-top: 3rem;
+        padding-top: 2rem;
         padding-bottom: 3rem;
         padding-left: 2rem;
         padding-right: 2rem;
@@ -231,35 +243,61 @@ def apply_css() -> None:
         z-index: 1;
     }}
 
-    /* Hero Section (Bolt + Raycast Fusion) */
+    /* ========================================
+       HEADINGS - DARK TEXT
+       ======================================== */
+
+    h1 {{
+        color: {TEXT_PRIMARY} !important;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+    }}
+
+    h2 {{
+        color: {TEXT_PRIMARY} !important;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }}
+
+    h3 {{
+        color: {TEXT_PRIMARY} !important;
+        font-weight: 600;
+    }}
+
+    h4, h5, h6 {{
+        color: {TEXT_SECONDARY} !important;
+        font-weight: 600;
+    }}
+
+    p {{
+        color: {TEXT_SECONDARY};
+    }}
+
+    /* ========================================
+       HEALTHCARE CARDS - WHITE WITH SHADOWS
+       ======================================== */
+
     .hf-hero-container {{
         position: relative;
-        border-radius: 32px;
-        background: linear-gradient(135deg, rgba(11,17,32,0.95), rgba(5,8,22,0.9));
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow:
-            0 0 60px rgba(59,130,246,0.2),
-            0 0 30px rgba(244,63,94,0.15),
-            inset 0 1px 0 rgba(255,255,255,0.05);
+        border-radius: 24px;
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_LIGHT};
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                    0 2px 4px -2px rgba(0, 0, 0, 0.1),
+                    0 0 0 1px rgba(14, 165, 233, 0.05);
         padding: 4rem 3rem;
         margin-bottom: 3rem;
         overflow: hidden;
-        backdrop-filter: blur(20px);
     }}
 
-    /* Hero Diagonal Glow Effect */
     .hf-hero-container::before {{
         content: '';
         position: absolute;
-        top: -50%;
-        right: -30%;
-        width: 80%;
-        height: 200%;
-        background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(34,211,238,0.1));
-        filter: blur(80px);
-        transform: rotate(-25deg);
-        pointer-events: none;
-        z-index: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, {PRIMARY_COLOR}, {SECONDARY_COLOR}, {ACCENT_BLUE});
     }}
 
     .hf-hero-content {{
@@ -272,37 +310,30 @@ def apply_css() -> None:
         justify-content: center !important;
     }}
 
-    /* Hero Title */
     .hf-hero-title {{
-        font-size: clamp(2.5rem, 5vw, 4.5rem);
+        font-size: clamp(2.5rem, 5vw, 4rem);
         font-weight: 900;
         line-height: 1.1;
         letter-spacing: -0.03em;
-        background: linear-gradient(135deg, {TEXT_COLOR} 0%, {SECONDARY_COLOR} 50%, {PRIMARY_COLOR} 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: {TEXT_PRIMARY};
         margin-bottom: 1.5rem;
-        text-shadow: 0 0 40px rgba(59,130,246,0.3);
         text-align: center !important;
         width: 100% !important;
     }}
 
-    /* Hero Subtitle */
     .hf-hero-subtitle {{
-        font-size: clamp(1.125rem, 2vw, 1.5rem);
+        font-size: clamp(1.125rem, 2vw, 1.375rem);
         font-weight: 400;
-        color: {BODY_TEXT};
-        line-height: 1.6;
-        max-width: 800px;
+        color: {TEXT_SECONDARY};
+        line-height: 1.7;
+        max-width: 700px;
         margin: 0 auto 2rem auto !important;
-        opacity: 0.9;
         text-align: center !important;
         width: 100% !important;
         display: block !important;
     }}
 
-    /* Pills (Tags) */
+    /* Pills/Tags - Healthcare Style */
     .hf-pill-container {{
         display: flex;
         flex-wrap: wrap;
@@ -316,25 +347,24 @@ def apply_css() -> None:
         align-items: center;
         padding: 0.5rem 1.25rem;
         border-radius: 9999px;
-        background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(34,211,238,0.1));
-        border: 1px solid rgba(59,130,246,0.3);
-        color: {SECONDARY_COLOR};
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(56, 189, 248, 0.08));
+        border: 1px solid rgba(14, 165, 233, 0.3);
+        color: {PRIMARY_COLOR};
         font-weight: 600;
         font-size: 0.875rem;
         letter-spacing: 0.02em;
         cursor: default;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        backdrop-filter: blur(10px);
     }}
 
     .hf-pill:hover {{
-        background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(34,211,238,0.2));
-        border-color: rgba(59,130,246,0.5);
-        box-shadow: 0 0 20px rgba(59,130,246,0.4);
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(56, 189, 248, 0.15));
+        border-color: {PRIMARY_COLOR};
+        box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
         transform: translateY(-2px);
     }}
 
-    /* Feature Cards */
+    /* Feature Cards - Healthcare White */
     .hf-feature-grid {{
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -344,16 +374,14 @@ def apply_css() -> None:
 
     .hf-feature-card {{
         position: relative;
-        border-radius: 24px;
-        background: linear-gradient(135deg, rgba(11,17,32,0.9), rgba(5,8,22,0.8));
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow:
-            0 4px 24px rgba(0,0,0,0.3),
-            0 0 0 1px rgba(255,255,255,0.05) inset;
-        padding: 2.5rem;
+        border-radius: 20px;
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_LIGHT};
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                    0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        padding: 2rem;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         overflow: hidden;
-        backdrop-filter: blur(10px);
     }}
 
     .hf-feature-card::before {{
@@ -369,11 +397,11 @@ def apply_css() -> None:
     }}
 
     .hf-feature-card:hover {{
-        transform: translateY(-8px);
-        border-color: rgba(59,130,246,0.3);
-        box-shadow:
-            0 8px 40px rgba(59,130,246,0.25),
-            0 0 0 1px rgba(59,130,246,0.2) inset;
+        transform: translateY(-6px);
+        border-color: rgba(14, 165, 233, 0.3);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+                    0 8px 10px -6px rgba(0, 0, 0, 0.1),
+                    0 0 0 1px rgba(14, 165, 233, 0.1);
     }}
 
     .hf-feature-card:hover::before {{
@@ -381,29 +409,29 @@ def apply_css() -> None:
     }}
 
     .hf-feature-icon {{
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(34,211,238,0.15));
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(56, 189, 248, 0.1));
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 1.5rem;
         margin-bottom: 1.5rem;
-        border: 1px solid rgba(59,130,246,0.3);
+        border: 1px solid rgba(14, 165, 233, 0.2);
     }}
 
     .hf-feature-title {{
-        font-size: 1.5rem;
+        font-size: 1.375rem;
         font-weight: 700;
-        color: {TEXT_COLOR};
-        margin-bottom: 1rem;
+        color: {TEXT_PRIMARY};
+        margin-bottom: 0.75rem;
         letter-spacing: -0.02em;
     }}
 
     .hf-feature-description {{
         font-size: 1rem;
-        color: {BODY_TEXT};
+        color: {TEXT_SECONDARY};
         line-height: 1.7;
         margin-bottom: 1.5rem;
     }}
@@ -417,21 +445,239 @@ def apply_css() -> None:
     .hf-feature-list li {{
         position: relative;
         padding-left: 1.75rem;
-        margin-bottom: 0.875rem;
-        color: {BODY_TEXT};
+        margin-bottom: 0.75rem;
+        color: {TEXT_SECONDARY};
         font-size: 0.9375rem;
         line-height: 1.6;
     }}
 
     .hf-feature-list li::before {{
-        content: '→';
+        content: '✓';
         position: absolute;
         left: 0;
-        color: {PRIMARY_COLOR};
+        color: {SUCCESS_COLOR};
         font-weight: 700;
     }}
 
-    /* Responsive Typography */
+    /* ========================================
+       BUTTONS - HEALTHCARE STYLE
+       ======================================== */
+
+    /* Primary Button - Healthcare Blue */
+    .stButton > button {{
+        background: linear-gradient(135deg, {PRIMARY_COLOR} 0%, {SECONDARY_COLOR} 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+    }}
+
+    .stButton > button:hover {{
+        box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4);
+        transform: translateY(-2px);
+    }}
+
+    /* CTA Button - Medical Red */
+    div[data-testid="stButton"] > button[kind="primary"] {{
+        background: linear-gradient(135deg, {CTA_COLOR} 0%, #ef4444 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 14px !important;
+        padding: 1rem 2.5rem !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1.5px !important;
+        box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
+        transition: all 0.3s ease !important;
+    }}
+
+    div[data-testid="stButton"] > button[kind="primary"]:hover {{
+        background: linear-gradient(135deg, {CTA_HOVER} 0%, #dc2626 100%) !important;
+        box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45) !important;
+        transform: translateY(-3px) !important;
+    }}
+
+    /* ========================================
+       INPUT FIELDS - LIGHT THEME
+       ======================================== */
+
+    .stTextInput > div > div > input {{
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_DEFAULT};
+        border-radius: 10px;
+        color: {TEXT_PRIMARY};
+        padding: 0.75rem 1rem;
+        transition: all 0.2s ease;
+    }}
+
+    .stTextInput > div > div > input:focus {{
+        border-color: {PRIMARY_COLOR};
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+    }}
+
+    .stTextInput > div > div > input::placeholder {{
+        color: {TEXT_LIGHT};
+    }}
+
+    .stSelectbox > div > div {{
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_DEFAULT};
+        border-radius: 10px;
+        color: {TEXT_PRIMARY};
+    }}
+
+    .stSelectbox > div > div:hover {{
+        border-color: {PRIMARY_COLOR};
+    }}
+
+    .stNumberInput > div > div > input {{
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_DEFAULT};
+        border-radius: 10px;
+        color: {TEXT_PRIMARY};
+    }}
+
+    /* ========================================
+       METRICS - HEALTHCARE STYLE
+       ======================================== */
+
+    [data-testid="stMetricValue"] {{
+        color: {TEXT_PRIMARY} !important;
+        font-weight: 700;
+    }}
+
+    [data-testid="stMetricDelta"] svg {{
+        stroke: {SUCCESS_COLOR};
+    }}
+
+    /* ========================================
+       TABS - LIGHT THEME
+       ======================================== */
+
+    .stTabs [data-baseweb="tab-list"] {{
+        background: {BG_SUBTLE};
+        border-radius: 12px;
+        padding: 0.25rem;
+        gap: 0.25rem;
+    }}
+
+    .stTabs [data-baseweb="tab"] {{
+        background: transparent;
+        border-radius: 10px;
+        color: {TEXT_SECONDARY};
+        font-weight: 500;
+        padding: 0.75rem 1.5rem;
+        transition: all 0.2s ease;
+    }}
+
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: {BG_WHITE};
+        color: {TEXT_PRIMARY};
+    }}
+
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {{
+        background: {BG_WHITE};
+        color: {PRIMARY_COLOR};
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }}
+
+    /* ========================================
+       EXPANDERS - LIGHT THEME
+       ======================================== */
+
+    .streamlit-expanderHeader {{
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_LIGHT};
+        border-radius: 12px;
+        color: {TEXT_PRIMARY};
+        font-weight: 600;
+    }}
+
+    .streamlit-expanderHeader:hover {{
+        border-color: {PRIMARY_COLOR};
+    }}
+
+    .streamlit-expanderContent {{
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_LIGHT};
+        border-top: none;
+        border-radius: 0 0 12px 12px;
+    }}
+
+    /* ========================================
+       ALERTS/INFO BOXES
+       ======================================== */
+
+    .stAlert {{
+        border-radius: 12px;
+        border: 1px solid;
+    }}
+
+    [data-testid="stAlert"][data-baseweb="notification"] {{
+        background: rgba(14, 165, 233, 0.08);
+        border-color: rgba(14, 165, 233, 0.3);
+    }}
+
+    /* ========================================
+       DATAFRAMES/TABLES
+       ======================================== */
+
+    [data-testid="stDataFrame"] {{
+        border: 1px solid {BORDER_LIGHT};
+        border-radius: 12px;
+        overflow: hidden;
+    }}
+
+    [data-testid="stDataFrame"] table {{
+        background: {BG_WHITE};
+    }}
+
+    [data-testid="stDataFrame"] th {{
+        background: {BG_SUBTLE} !important;
+        color: {TEXT_PRIMARY} !important;
+        font-weight: 600;
+    }}
+
+    [data-testid="stDataFrame"] td {{
+        color: {TEXT_SECONDARY};
+    }}
+
+    /* ========================================
+       SECTION CARDS - LEGACY SUPPORT
+       ======================================== */
+
+    .hf-section-card {{
+        border-radius: 20px;
+        background: {BG_WHITE};
+        border: 1px solid {BORDER_LIGHT};
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                    0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+    }}
+
+    .hf-section-title {{
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: {TEXT_PRIMARY};
+        margin-bottom: 1rem;
+    }}
+
+    .hf-section-body {{
+        color: {TEXT_SECONDARY};
+        font-size: 1rem;
+        line-height: 1.7;
+    }}
+
+    /* ========================================
+       RESPONSIVE STYLES
+       ======================================== */
+
     @media (max-width: 1023px) {{
         .block-container {{
             padding-left: 1.5rem;
@@ -444,32 +690,26 @@ def apply_css() -> None:
 
     @media (max-width: 767px) {{
         .block-container {{
-            padding: 2rem 1rem;
+            padding: 1.5rem 1rem;
         }}
         .hf-hero-container {{
-            padding: 2.5rem 1.5rem;
-            border-radius: 20px;
+            padding: 2rem 1.5rem;
+            border-radius: 16px;
         }}
         .hf-feature-card {{
-            padding: 2rem;
-        }}
-        .hf-pill-container {{
-            justify-content: center;
+            padding: 1.5rem;
         }}
 
-        /* Mobile: Stack columns vertically */
         [data-testid="column"] {{
             width: 100% !important;
             flex: 1 1 100% !important;
             min-width: 100% !important;
         }}
 
-        /* Tabs - scrollable on mobile */
         .stTabs [data-baseweb="tab-list"] {{
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
-            gap: 0.25rem;
         }}
 
         .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {{
@@ -478,211 +718,57 @@ def apply_css() -> None:
 
         .stTabs [data-baseweb="tab"] {{
             padding: 0.5rem 0.75rem;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             white-space: nowrap;
         }}
 
-        /* Sidebar - collapse on mobile */
         .stSidebar {{
             width: 280px !important;
         }}
 
-        .stSidebar [data-testid="stSidebarNav"] a {{
-            padding: 0.75rem 1rem;
-            font-size: 0.875rem;
-        }}
+        h1 {{ font-size: 1.5rem !important; }}
+        h2 {{ font-size: 1.25rem !important; }}
+        h3 {{ font-size: 1.1rem !important; }}
 
-        /* Headers */
-        h1 {{
-            font-size: 1.5rem !important;
-        }}
-        h2 {{
-            font-size: 1.25rem !important;
-        }}
-        h3 {{
-            font-size: 1.1rem !important;
-        }}
-
-        /* Buttons */
         .stButton > button {{
             padding: 0.625rem 1.5rem;
             font-size: 0.875rem;
         }}
-
-        /* Data frames - horizontal scroll */
-        [data-testid="stDataFrame"] {{
-            overflow-x: auto;
-        }}
-
-        /* Expanders */
-        .streamlit-expanderHeader {{
-            font-size: 0.9rem;
-        }}
-
-        /* Section headers */
-        .section-header, .subsection-header {{
-            font-size: 1rem !important;
-        }}
     }}
 
-    /* Very small mobile (480px and below) */
     @media (max-width: 480px) {{
         .block-container {{
             padding: 1rem 0.75rem;
         }}
-
         .hf-hero-container {{
             padding: 1.5rem 1rem;
-            border-radius: 16px;
         }}
-
         .hf-feature-card {{
             padding: 1.25rem;
-            border-radius: 16px;
+            border-radius: 14px;
         }}
 
-        h1 {{
-            font-size: 1.25rem !important;
-        }}
-        h2 {{
-            font-size: 1.1rem !important;
-        }}
-        h3 {{
-            font-size: 1rem !important;
-        }}
+        h1 {{ font-size: 1.25rem !important; }}
+        h2 {{ font-size: 1.1rem !important; }}
 
         .stButton > button {{
             padding: 0.5rem 1rem;
             font-size: 0.8rem;
             width: 100%;
         }}
-
-        /* Tabs - even more compact */
-        .stTabs [data-baseweb="tab"] {{
-            padding: 0.4rem 0.6rem;
-            font-size: 0.75rem;
-        }}
-
-        /* Input fields */
-        .stTextInput > div > div > input,
-        .stNumberInput > div > div > input,
-        .stSelectbox > div > div {{
-            font-size: 0.875rem;
-            padding: 0.5rem 0.75rem;
-        }}
-
-        /* Sliders */
-        .stSlider {{
-            padding: 0.5rem 0;
-        }}
-
-        /* Info/Warning/Error boxes */
-        .stAlert {{
-            padding: 0.75rem;
-            font-size: 0.85rem;
-        }}
-    }}
-
-    /* Ultra small (360px and below) */
-    @media (max-width: 360px) {{
-        .block-container {{
-            padding: 0.75rem 0.5rem;
-        }}
-
-        h1 {{
-            font-size: 1.1rem !important;
-        }}
-
-        .stTabs [data-baseweb="tab"] {{
-            padding: 0.35rem 0.5rem;
-            font-size: 0.7rem;
-        }}
-    }}
-
-    /* Headings */
-    h1 {{
-        color: {TEXT_COLOR};
-        font-weight: 800;
-        letter-spacing: -0.03em;
-    }}
-    h2 {{
-        color: {TEXT_COLOR};
-        font-weight: 700;
-        letter-spacing: -0.02em;
-    }}
-    h3 {{
-        color: {TEXT_COLOR};
-        font-weight: 600;
-    }}
-
-    /* Metrics */
-    [data-testid="stMetricValue"] {{
-        color: {TEXT_COLOR};
-        font-weight: 700;
-    }}
-
-    /* Buttons */
-    .stButton > button {{
-        background: linear-gradient(135deg, {PRIMARY_COLOR}, {SECONDARY_COLOR});
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 0.75rem 2rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 20px rgba(59,130,246,0.3);
-    }}
-
-    .stButton > button:hover {{
-        box-shadow: 0 6px 30px rgba(59,130,246,0.5);
-        transform: translateY(-2px);
-    }}
-
-    /* Input Fields */
-    .stTextInput > div > div > input {{
-        background: rgba(11,17,32,0.8);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 8px;
-        color: {TEXT_COLOR};
-        padding: 0.75rem 1rem;
-    }}
-
-    .stTextInput > div > div > input:focus {{
-        border-color: {PRIMARY_COLOR};
-        box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
-    }}
-
-    /* Legacy card classes (for backwards compatibility) */
-    .hf-section-card {{
-        border-radius: 24px;
-        background: linear-gradient(135deg, rgba(11,17,32,0.9), rgba(5,8,22,0.8));
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-        padding: 2rem;
-        margin-bottom: 1.5rem;
-    }}
-
-    .hf-section-title {{
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: {TEXT_COLOR};
-        margin-bottom: 1rem;
-    }}
-
-    .hf-section-body {{
-        color: {BODY_TEXT};
-        font-size: 1rem;
-        line-height: 1.7;
     }}
 
     </style>
     """
     st.markdown(css_string, unsafe_allow_html=True)
 
-# C. HERO HELPER (Modern Bolt/Raycast Style)
+
+# ============================================================================
+# C. HERO HELPER - HEALTHCARE STYLE
+# ============================================================================
 def hero_card(title: str, subtitle: str, pills: list[str]) -> str:
     """
-    Returns an HTML string for a premium hero section inspired by bolt.new and raycast.com
+    Returns an HTML string for a healthcare-styled hero section
     """
     pills_html = "".join([f"<span class='hf-pill'>{pill}</span>" for pill in pills])
     return f"""
@@ -697,10 +783,13 @@ def hero_card(title: str, subtitle: str, pills: list[str]) -> str:
     </div>
     """
 
+
+# ============================================================================
 # D. FEATURE CARD HELPER
+# ============================================================================
 def feature_card(icon: str, title: str, description: str, features: list[str]) -> str:
     """
-    Returns an HTML string for a feature card
+    Returns an HTML string for a healthcare-styled feature card
     """
     features_html = "".join([f"<li>{feature}</li>" for feature in features])
     return f"""
@@ -714,18 +803,36 @@ def feature_card(icon: str, title: str, description: str, features: list[str]) -
     </div>
     """
 
+
+# ============================================================================
 # E. EXPORTS
+# ============================================================================
 __all__ = [
     "apply_css",
     "hero_card",
     "feature_card",
+    # New healthcare colors
     "PRIMARY_COLOR",
     "SECONDARY_COLOR",
-    "ACCENT_PINK",
-    "ACCENT_ROSE",
+    "ACCENT_BLUE",
+    "ACCENT_LIGHT",
+    "CTA_COLOR",
+    "CTA_HOVER",
     "SUCCESS_COLOR",
     "WARNING_COLOR",
     "DANGER_COLOR",
+    "TEXT_PRIMARY",
+    "TEXT_SECONDARY",
+    "TEXT_MUTED",
+    "TEXT_LIGHT",
+    "BG_WHITE",
+    "BG_LIGHT",
+    "BG_SUBTLE",
+    "BG_CARD",
+    "BORDER_LIGHT",
+    "BORDER_DEFAULT",
+    "BORDER_ACCENT",
+    # Legacy exports
     "TEXT_COLOR",
     "BODY_TEXT",
     "SUBTLE_TEXT",
@@ -734,4 +841,6 @@ __all__ = [
     "BG_GRADIENT_START",
     "BG_GRADIENT_MID",
     "BG_GRADIENT_END",
+    "ACCENT_PINK",
+    "ACCENT_ROSE",
 ]
