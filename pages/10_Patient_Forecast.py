@@ -1136,12 +1136,13 @@ def save_forecast_to_session(
 
 
 # =============================================================================
-# HEADER
+# HEADER WITH BACKGROUND IMAGE
 # =============================================================================
-render_scifi_hero_header(
+render_page_hero(
     title="Patient Forecast",
     subtitle="View forecasts from trained models. Uses test set predictions from Benchmarks & Modeling Hub.",
-    status="SYSTEM ONLINE"
+    badge="Demand Prediction",
+    icon="🔮"
 )
 
 
