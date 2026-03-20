@@ -258,6 +258,18 @@ def map_clinical_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df[existing_cols]
 
 
+def delete_existing_hospital_data(client, table_name: str, hospital_name: str):
+    """Delete existing data for a hospital before re-uploading."""
+    try:
+        response = client.table(table_name).delete().eq("hospital_name", hospital_name).execute()
+        deleted_count = len(response.data) if response.data else 0
+        print(f"  Deleted {deleted_count} existing rows for {hospital_name}")
+        return True
+    except Exception as e:
+        print(f"  Warning: Could not delete existing data: {e}")
+        return False
+
+
 def upload_to_supabase(client, table_name: str, df: pd.DataFrame, batch_size: int = 500):
     """Upload dataframe to Supabase table in batches."""
     total_rows = len(df)
@@ -277,7 +289,7 @@ def upload_to_supabase(client, table_name: str, df: pd.DataFrame, batch_size: in
         batch = df.iloc[i:i + batch_size].to_dict(orient="records")
 
         try:
-            response = client.table(table_name).upsert(batch).execute()
+            response = client.table(table_name).insert(batch).execute()
             uploaded += len(batch)
             print(f"  Uploaded {uploaded}/{total_rows} rows...")
         except Exception as e:
