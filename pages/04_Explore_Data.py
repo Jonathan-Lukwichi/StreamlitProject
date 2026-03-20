@@ -987,7 +987,7 @@ def page_eda():
     if "eda_active_tab" not in st.session_state:
         st.session_state["eda_active_tab"] = "overview"
 
-    tab_col1, tab_col2, tab_col3, tab_col4 = st.columns(4, gap="medium")
+    tab_col1, tab_col2, tab_col3, tab_col4, tab_col5 = st.columns(5, gap="medium")
 
     with tab_col1:
         if st.button("📋 Overview", type="primary" if st.session_state["eda_active_tab"] == "overview" else "secondary",
@@ -1008,9 +1008,15 @@ def page_eda():
             st.rerun()
 
     with tab_col4:
-        if st.button("🔬 Advanced Analytics", type="primary" if st.session_state["eda_active_tab"] == "advanced" else "secondary",
+        if st.button("🔬 Advanced", type="primary" if st.session_state["eda_active_tab"] == "advanced" else "secondary",
                      use_container_width=True, key="tab_advanced"):
             st.session_state["eda_active_tab"] = "advanced"
+            st.rerun()
+
+    with tab_col5:
+        if st.button("🎓 Statistical Tests", type="primary" if st.session_state["eda_active_tab"] == "statistical" else "secondary",
+                     use_container_width=True, key="tab_statistical"):
+            st.session_state["eda_active_tab"] = "statistical"
             st.rerun()
 
     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
