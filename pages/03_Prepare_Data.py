@@ -886,11 +886,12 @@ def page_data_preparation_studio():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    render_scifi_hero_header(
+    # Premium Hero Header with Background Image
+    render_page_hero(
         title="Prepare Data",
         subtitle="Data fusion and feature engineering pipeline. Clean, merge, and prepare datasets for machine learning.",
-        status="SYSTEM ONLINE"
+        badge="Data Preparation Studio",
+        icon="🧰"
     )
 
     # Pull uploaded sources
