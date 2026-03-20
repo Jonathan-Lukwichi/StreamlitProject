@@ -781,11 +781,12 @@ def page_eda():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    render_scifi_hero_header(
+    # Premium Hero Header with Background Image
+    render_page_hero(
         title="Explore Data",
         subtitle="Uncover patterns, trends, and anomalies. Comprehensive exploratory data analysis and visualization.",
-        status="SYSTEM ONLINE"
+        badge="Analytics Studio",
+        icon="🔍"
     )
 
     processed = st.session_state.get("processed_df")
