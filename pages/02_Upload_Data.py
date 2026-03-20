@@ -434,11 +434,18 @@ def page_data_hub():
         if HOSPITAL_SERVICE_AVAILABLE and API_AVAILABLE:
             st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
 
+            # Get dynamic date range for selected hospital
+            try:
+                hospital_service = get_hospital_service()
+                min_date, max_date = hospital_service.get_hospital_date_range(selected_hospital)
+            except Exception:
+                min_date, max_date = datetime(2018, 1, 1), datetime(2023, 12, 31)
+
             col_date1, col_date2 = st.columns(2)
             with col_date1:
-                hosp_start = st.date_input("Start Date", value=datetime(2018, 1, 1), key="hosp_start")
+                hosp_start = st.date_input("Start Date", value=min_date, key="hosp_start")
             with col_date2:
-                hosp_end = st.date_input("End Date", value=datetime(2023, 12, 31), key="hosp_end")
+                hosp_end = st.date_input("End Date", value=max_date, key="hosp_end")
 
             if st.button(f"🚀 Load All Data for {selected_hospital}", use_container_width=True, type="primary"):
                 start_dt = datetime.combine(hosp_start, datetime.min.time())
