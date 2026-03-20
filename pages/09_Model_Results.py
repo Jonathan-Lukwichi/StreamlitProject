@@ -593,19 +593,31 @@ def _extract_ml_metrics(ml_results: Dict, model_name: str) -> Optional[Dict]:
         return None
 
 
+def _extract_all_metrics_from_dict(metrics: Dict) -> Dict:
+    """Helper to extract all 9 metrics from a metrics dict."""
+    return {
+        "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
+        "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
+        "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
+        "sMAPE_%": _safe_float(metrics.get("sMAPE", metrics.get("smape"))),
+        "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+        "R2": _safe_float(metrics.get("R2", metrics.get("r2"))),
+        "DA": _safe_float(metrics.get("DA", metrics.get("da", metrics.get("directional_accuracy")))),
+        "ME": _safe_float(metrics.get("ME", metrics.get("me", metrics.get("bias")))),
+        "MPE_%": _safe_float(metrics.get("MPE", metrics.get("mpe"))),
+    }
+
+
 def _extract_ensemble_metrics(ensemble_results: Dict) -> Optional[Dict]:
     """Extract metrics from ensemble results."""
     try:
         metrics = ensemble_results.get("metrics", {})
-        # Metrics stored with uppercase keys (MAE, RMSE, MAPE, Accuracy)
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": "Ensemble (Weighted)",
             "Category": "Ensemble",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
-            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
-            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
-            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(ensemble_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Models: {', '.join(ensemble_results.get('models', []))}",
@@ -618,15 +630,12 @@ def _extract_stacking_metrics(stacking_results: Dict) -> Optional[Dict]:
     """Extract metrics from stacking results."""
     try:
         metrics = stacking_results.get("metrics", {})
-        # Metrics stored with uppercase keys (MAE, RMSE, MAPE, Accuracy)
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": "Stacking Meta-Learner",
             "Category": "Stacking",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
-            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
-            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
-            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(stacking_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Meta: {stacking_results.get('meta_learner', 'Ridge')}",
@@ -639,15 +648,12 @@ def _extract_hybrid_metrics(hybrid_results: Dict) -> Optional[Dict]:
     """Extract metrics from hybrid LSTM-SARIMAX results."""
     try:
         metrics = hybrid_results.get("metrics", {})
-        # Metrics stored with uppercase keys (MAE, RMSE, MAPE, Accuracy)
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": "Hybrid LSTM-SARIMAX",
             "Category": "Hybrid",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
-            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
-            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
-            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(hybrid_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": "LSTM + SARIMAX residual correction",
@@ -659,25 +665,20 @@ def _extract_hybrid_metrics(hybrid_results: Dict) -> Optional[Dict]:
 def _extract_lstm_xgb_metrics(hybrid_results: Dict) -> Optional[Dict]:
     """Extract metrics from hybrid LSTM-XGBoost results."""
     try:
-        # Results structure: {"artifacts": artifacts, "config": config, "dataset_name": ...}
-        # artifacts.metrics contains the metrics dict
         artifacts = hybrid_results.get("artifacts")
         if artifacts is None:
             return None
 
-        # Get metrics from artifacts object
         metrics = getattr(artifacts, "metrics", {}) if hasattr(artifacts, "metrics") else {}
         if not metrics:
             metrics = hybrid_results.get("metrics", {})
 
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": "Hybrid LSTM-XGBoost",
             "Category": "Hybrid",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
-            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
-            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
-            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(hybrid_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": "LSTM + XGBoost residual correction",
@@ -689,25 +690,20 @@ def _extract_lstm_xgb_metrics(hybrid_results: Dict) -> Optional[Dict]:
 def _extract_lstm_ann_metrics(hybrid_results: Dict) -> Optional[Dict]:
     """Extract metrics from hybrid LSTM-ANN results."""
     try:
-        # Results structure: {"artifacts": artifacts, "config": config, "dataset_name": ...}
-        # artifacts.metrics contains the metrics dict
         artifacts = hybrid_results.get("artifacts")
         if artifacts is None:
             return None
 
-        # Get metrics from artifacts object
         metrics = getattr(artifacts, "metrics", {}) if hasattr(artifacts, "metrics") else {}
         if not metrics:
             metrics = hybrid_results.get("metrics", {})
 
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": "Hybrid LSTM-ANN",
             "Category": "Hybrid",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
-            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
-            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
-            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(hybrid_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": "LSTM + ANN residual correction",
