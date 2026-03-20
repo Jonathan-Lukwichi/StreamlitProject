@@ -1180,7 +1180,7 @@ def run_ml_multihorizon(
         # No successful horizons - create empty DataFrame with correct schema
         results_df = pd.DataFrame(columns=[
             "Horizon", "Model", "Train_MAE", "Train_RMSE", "Train_MAPE", "Train_Acc",
-            "Test_MAE", "Test_RMSE", "Test_MAPE", "Test_Acc", "Train_N", "Test_N"
+            "Test_MAE", "Test_RMSE", "Test_MAPE", "Test_sMAPE", "Test_Acc", "Test_R2", "Test_DA", "Test_ME", "Test_MPE", "Train_N", "Test_N"
         ])
 
     return {
