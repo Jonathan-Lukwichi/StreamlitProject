@@ -412,12 +412,13 @@ st.markdown(f"""
 
 
 # =============================================================================
-# HERO HEADER
+# HERO HEADER WITH BACKGROUND IMAGE
 # =============================================================================
-render_scifi_hero_header(
+render_page_hero(
     title="Supply Planner",
     subtitle="EOQ optimization with statistical safety stock (SS = Z × σ × √L)",
-    status="EOQ + MILP ACTIVE"
+    badge="EOQ + MILP ACTIVE",
+    icon="📦"
 )
 
 
