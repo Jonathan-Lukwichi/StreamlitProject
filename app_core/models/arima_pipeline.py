@@ -351,15 +351,40 @@ def calculate_multi_horizon_metrics(F: np.ndarray, test_eval: pd.DataFrame, L: n
             if np.any(mask):
                 direction_acc = np.mean(np.sign(da[mask]) == np.sign(dp[mask])) * 100
 
+        # =============================================
+        # NEW METRICS: sMAPE, ME, MPE
+        # =============================================
+        # sMAPE - Symmetric MAPE (treats over/under-forecasts equally)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            numerator = np.abs(actual_v - pred_v)
+            denominator = (np.abs(actual_v) + np.abs(pred_v)) / 2
+            # Handle case where both actual and pred are 0
+            smape_vals = np.where(denominator != 0, numerator / denominator, 0.0)
+            smape_h = np.mean(smape_vals) * 100
+
+        # ME - Mean Error (Bias: positive = over-forecast, negative = under-forecast)
+        me_h = np.mean(pred_v - actual_v)
+
+        # MPE - Mean Percentage Error (Relative Bias)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            nonzero_mask = actual_v != 0
+            if np.any(nonzero_mask):
+                mpe_h = np.mean((pred_v[nonzero_mask] - actual_v[nonzero_mask]) / actual_v[nonzero_mask]) * 100
+            else:
+                mpe_h = np.nan
+
         results.append({
             "Horizon": f"h={h_idx}",
             "MAE": mae_h,
             "RMSE": rmse_h,
             "MAPE_%": mape_h,
+            "sMAPE_%": smape_h,
             "Accuracy_%": acc_h,
             "R2": r2_h,
             "CI_Coverage_%": coverage,
             "Direction_Accuracy_%": direction_acc,
+            "ME": me_h,
+            "MPE_%": mpe_h,
         })
 
     metrics_df = pd.DataFrame(results)
