@@ -650,6 +650,9 @@ div[data-testid="stButton"] > button[kind="primary"]:active {{
     overflow: hidden;
     box-shadow: 0 0 60px rgba(6, 78, 145, 0.3),
                 0 25px 50px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }}
 
 .cta-section::before {{
