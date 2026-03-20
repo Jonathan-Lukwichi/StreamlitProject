@@ -679,6 +679,7 @@ div[data-testid="stButton"] > button[kind="primary"]:active {{
 .cta-subtitle {{
     color: #22d3ee;
     font-size: 1.15rem;
+    font-weight: 700;
     max-width: 600px;
     margin: 0 auto 2.5rem auto;
     position: relative;
