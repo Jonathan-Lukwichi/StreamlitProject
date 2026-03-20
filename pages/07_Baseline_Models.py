@@ -1916,11 +1916,12 @@ def page_benchmarks():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    render_scifi_hero_header(
+    # Premium Hero Header with Background Image
+    render_page_hero(
         title="Baseline Models",
         subtitle="Train and evaluate ARIMA and SARIMAX statistical forecasting models with seasonal proportions.",
-        status="SYSTEM ONLINE"
+        badge="Statistical Forecasting",
+        icon="📈"
     )
 
     # Prefer preprocessed data; fallback to merged
