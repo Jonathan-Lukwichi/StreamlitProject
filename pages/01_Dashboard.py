@@ -74,11 +74,18 @@ inject_page_hero_styles("dashboard")
 kpis = calculate_forecast_kpis()
 
 # =============================================================================
-# DASHBOARD HEADER
+# DASHBOARD HEADER WITH HERO IMAGE
 # =============================================================================
-render_dashboard_header(
+render_page_hero(
     title="HealthForecast AI Dashboard",
-    subtitle="Hospital demand forecasting and resource optimization metrics"
+    subtitle="Hospital demand forecasting and resource optimization metrics",
+    badge="Command Center",
+    icon="📊",
+    stats=[
+        {"value": f"{kpis.total_records}", "label": "Days of Data"},
+        {"value": f"{kpis.models_trained}", "label": "Models"},
+        {"value": f"{kpis.best_model_mape}%", "label": "Best MAPE"},
+    ] if kpis.has_models else None
 )
 
 # Data status indicators
