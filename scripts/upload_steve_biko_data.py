@@ -37,26 +37,33 @@ HOSPITAL_NAME = "Steve Biko Hospital"
 # =============================================================================
 
 def map_patient_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Map Steve Biko patient data columns to app format."""
+    """Map Steve Biko patient data columns to app format.
+
+    Target schema (patient_arrivals):
+    - id, date, datetime, patient_count, created_at, hospital_name
+    """
     df = df.copy()
 
-    # Rename columns to match expected format
-    column_mapping = {
-        "date": "datetime",
-        "patient_count": "Total_Arrivals",
-        # Keep other columns as-is for now
-    }
-
-    df = df.rename(columns=column_mapping)
-
     # Ensure datetime is proper format
-    if "datetime" in df.columns:
-        df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
+    if "date" in df.columns:
+        df["datetime"] = pd.to_datetime(df["date"], errors="coerce")
+        df["date"] = df["datetime"].dt.strftime("%Y-%m-%d")
+
+    # patient_count already exists in source
+    if "patient_count" not in df.columns:
+        # Try to calculate from other columns
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        if len(numeric_cols) > 0:
+            df["patient_count"] = df[numeric_cols[0]]
 
     # Add hospital name
     df["hospital_name"] = HOSPITAL_NAME
 
-    return df
+    # Select only columns that match the target schema
+    output_columns = ["date", "datetime", "patient_count", "hospital_name"]
+    existing_cols = [c for c in output_columns if c in df.columns]
+
+    return df[existing_cols]
 
 
 def map_weather_columns(df: pd.DataFrame) -> pd.DataFrame:
