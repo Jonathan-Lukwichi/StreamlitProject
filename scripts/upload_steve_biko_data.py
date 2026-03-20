@@ -67,32 +67,58 @@ def map_patient_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def map_weather_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Map Steve Biko weather data columns to app format."""
+    """Map Steve Biko weather data columns to app format.
+
+    Target schema (weather_data):
+    - id, date, datetime, average_temp, max_temp, min_temp,
+      total_precipitation, average_wind, max_wind, average_mslp,
+      moon_phase, created_at, hospital_name
+    """
     df = df.copy()
 
-    # Rename columns to match expected format
-    column_mapping = {
-        "date": "datetime",
-        "temp_mean_C": "Average_Temp",
-        "temp_max_C": "Max_Temp",
-        "temp_min_C": "Min_Temp",
-        "wind_max_kmh": "Max_wind",
-        "wind_gust_max_kmh": "Average_wind",  # Use gust as average proxy
-        "precipitation_mm": "Total_precipitation",
-        "humidity_mean_pct": "humidity",
-        "is_rainy_day": "is_rainy",
-    }
-
-    df = df.rename(columns=column_mapping)
-
     # Ensure datetime is proper format
-    if "datetime" in df.columns:
-        df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
+    if "date" in df.columns:
+        df["datetime"] = pd.to_datetime(df["date"], errors="coerce")
+        df["date"] = df["datetime"].dt.strftime("%Y-%m-%d")
+
+    # Map weather columns (Steve Biko uses Celsius, Pamplona used Kelvin)
+    # Convert to match existing format or keep as-is
+    if "temp_mean_C" in df.columns:
+        # Convert Celsius to Kelvin to match existing Pamplona data
+        df["average_temp"] = df["temp_mean_C"] + 273.15
+    if "temp_max_C" in df.columns:
+        df["max_temp"] = df["temp_max_C"] + 273.15
+    if "temp_min_C" in df.columns:
+        df["min_temp"] = df["temp_min_C"] + 273.15
+
+    # Wind (convert km/h to m/s to match Pamplona format: divide by 3.6)
+    if "wind_max_kmh" in df.columns:
+        df["max_wind"] = df["wind_max_kmh"] / 3.6
+    if "wind_gust_max_kmh" in df.columns:
+        df["average_wind"] = df["wind_gust_max_kmh"] / 3.6
+    elif "wind_max_kmh" in df.columns:
+        df["average_wind"] = df["wind_max_kmh"] / 3.6
+
+    # Precipitation
+    if "precipitation_mm" in df.columns:
+        df["total_precipitation"] = df["precipitation_mm"]
+
+    # Moon phase - Steve Biko doesn't have this, set to 0
+    df["moon_phase"] = 0
+
+    # MSLP - not available
+    df["average_mslp"] = None
 
     # Add hospital name
     df["hospital_name"] = HOSPITAL_NAME
 
-    return df
+    # Select only columns that match the target schema
+    output_columns = ["date", "datetime", "average_temp", "max_temp", "min_temp",
+                      "total_precipitation", "average_wind", "max_wind",
+                      "average_mslp", "moon_phase", "hospital_name"]
+    existing_cols = [c for c in output_columns if c in df.columns]
+
+    return df[existing_cols]
 
 
 def map_calendar_columns(df: pd.DataFrame) -> pd.DataFrame:
