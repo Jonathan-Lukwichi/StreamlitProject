@@ -334,12 +334,13 @@ st.markdown(f"""
 
 
 # =============================================================================
-# HERO HEADER
+# HERO HEADER WITH BACKGROUND IMAGE
 # =============================================================================
-render_scifi_hero_header(
+render_page_hero(
     title="Staff Planner",
     subtitle="MILP-optimized staffing with Seasonal Proportions integration",
-    status="MILP SOLVER ACTIVE" if PULP_AVAILABLE else "HEURISTIC MODE"
+    badge="MILP SOLVER ACTIVE" if PULP_AVAILABLE else "HEURISTIC MODE",
+    icon="👥"
 )
 
 
