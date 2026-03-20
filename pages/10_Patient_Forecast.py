@@ -80,6 +80,7 @@ apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
 inject_fluorescent_effects()
+inject_page_hero_styles("forecast")
 
 # =============================================================================
 # CUSTOM CSS
