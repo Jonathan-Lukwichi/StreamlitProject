@@ -51,6 +51,7 @@ from app_core.ui.kpi_components import (
     COLORS
 )
 from app_core.ui.effects import inject_fluorescent_effects, inject_tab_styling
+from app_core.ui.page_hero import inject_page_hero_styles, render_page_hero
 from app_core.services.kpi_service import calculate_forecast_kpis, ForecastKPIs
 
 # =============================================================================
