@@ -122,34 +122,46 @@ def map_weather_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def map_calendar_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Map Steve Biko calendar data columns to app format."""
+    """Map Steve Biko calendar data columns to app format.
+
+    Target schema (calendar_data):
+    - id, date, day_of_week, holiday, holiday_prev, moon_phase,
+      created_at, hospital_name
+    """
     df = df.copy()
 
-    # Rename columns to match expected format
-    column_mapping = {
-        "is_public_holiday": "Holiday",
-        "is_day_before_holiday": "Holiday_prev",
-        "holiday_name": "holiday_name",
-        "is_weekend": "is_weekend",
-        "day_of_week": "day_of_week",  # Note: Steve Biko uses 0-6 (Mon=0)
-        "is_school_holiday": "is_school_holiday",
-        "is_festive_season": "is_festive_season",
-    }
+    # Ensure date is proper format
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
 
-    df = df.rename(columns=column_mapping)
-
-    # Convert day_of_week from 0-6 to 1-7 (if needed by app)
+    # day_of_week: Steve Biko uses 0-6 (Mon=0), convert to 1-7 (Mon=1)
     if "day_of_week" in df.columns:
-        df["day_of_week"] = df["day_of_week"] + 1  # 0-6 -> 1-7
+        df["day_of_week"] = df["day_of_week"] + 1
 
-    # Ensure date column exists
-    if "date" not in df.columns and "datetime" in df.columns:
-        df["date"] = df["datetime"]
+    # Holiday mapping
+    if "is_public_holiday" in df.columns:
+        df["holiday"] = df["is_public_holiday"].astype(int)
+    else:
+        df["holiday"] = 0
+
+    # Holiday_prev
+    if "is_day_before_holiday" in df.columns:
+        df["holiday_prev"] = df["is_day_before_holiday"].astype(int)
+    else:
+        df["holiday_prev"] = 0
+
+    # Moon phase - not available in Steve Biko data, use default
+    df["moon_phase"] = 0
 
     # Add hospital name
     df["hospital_name"] = HOSPITAL_NAME
 
-    return df
+    # Select only columns that match the target schema
+    output_columns = ["date", "day_of_week", "holiday", "holiday_prev",
+                      "moon_phase", "hospital_name"]
+    existing_cols = [c for c in output_columns if c in df.columns]
+
+    return df[existing_cols]
 
 
 def map_clinical_columns(df: pd.DataFrame) -> pd.DataFrame:
