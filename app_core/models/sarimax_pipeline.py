@@ -1630,14 +1630,28 @@ def run_sarimax_multihorizon(
         within5 = float((abs_err <= 5).mean() * 100.0)
         cicov = float(((y_te >= ci.iloc[:, 0]) & (y_te <= ci.iloc[:, 1])).mean() * 100.0)
 
+        # NEW METRICS: sMAPE and MPE
+        # sMAPE - Symmetric MAPE
+        _num = np.abs(y_te.values - mean.values)
+        _den = (np.abs(y_te.values) + np.abs(mean.values)) / 2
+        _smape_vals = np.where(_den != 0, _num / _den, 0.0)
+        te_smape = float(np.mean(_smape_vals) * 100)
+
+        # MPE - Mean Percentage Error (Relative Bias)
+        _nonzero = y_te.values != 0
+        if np.any(_nonzero):
+            te_mpe = float(np.mean((mean.values[_nonzero] - y_te.values[_nonzero]) / y_te.values[_nonzero]) * 100)
+        else:
+            te_mpe = float("nan")
+
         rows.append({
             "Horizon": h,
             "Order": f"{use_order}×{use_sorder}",
             "AIC": aic_ref if not (isinstance(aic_ref, float) and np.isnan(aic_ref)) else float(fit.aic),
             "BIC": bic_ref if not (isinstance(bic_ref, float) and np.isnan(bic_ref)) else float(fit.bic),
             "Train_MAE": tr_mae, "Train_RMSE": tr_rmse, "Train_MAPE": tr_mape, "Train_Acc": tr_acc, "Train_R2": tr_r2,
-            "Test_MAE": te_mae, "Test_RMSE": te_rmse, "Test_MAPE": te_mape, "Test_Acc": te_acc, "Test_R2": te_r2,
-            "Bias": bias, "DirAcc": dacc, "Within±2": within2, "Within±5": within5, "CIcov%": cicov,
+            "Test_MAE": te_mae, "Test_RMSE": te_rmse, "Test_MAPE": te_mape, "Test_sMAPE": te_smape, "Test_Acc": te_acc, "Test_R2": te_r2,
+            "Bias": bias, "MPE": te_mpe, "DirAcc": dacc, "Within±2": within2, "Within±5": within5, "CIcov%": cicov,
             "Train_N": int(len(y_tr)), "Test_N": int(len(y_te)),
         })
 
