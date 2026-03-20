@@ -2365,7 +2365,7 @@ def calculate_multi_horizon_metrics_from_rows(results_df: pd.DataFrame) -> pd.Da
     """
     if results_df is None or results_df.empty:
         return pd.DataFrame(columns=[
-            "Horizon","MAE","RMSE","MAPE_%","Accuracy_%","R2","CI_Coverage_%","Direction_Accuracy_%"
+            "Horizon","MAE","RMSE","MAPE_%","sMAPE_%","Accuracy_%","R2","CI_Coverage_%","Direction_Accuracy_%","ME","MPE_%"
         ])
 
     m = results_df.copy()
@@ -2374,10 +2374,13 @@ def calculate_multi_horizon_metrics_from_rows(results_df: pd.DataFrame) -> pd.Da
         "MAE": m["Test_MAE"].astype(float),
         "RMSE": m["Test_RMSE"].astype(float),
         "MAPE_%": m["Test_MAPE"].astype(float),
+        "sMAPE_%": m.get("Test_sMAPE", pd.Series([np.nan]*len(m))).astype(float),
         "Accuracy_%": m["Test_Acc"].astype(float),
         "R2": m.get("Test_R2", pd.Series([np.nan]*len(m))).astype(float),
         "CI_Coverage_%": m.get("CIcov%", pd.Series([np.nan]*len(m))).astype(float),
         "Direction_Accuracy_%": m.get("DirAcc", pd.Series([np.nan]*len(m))).astype(float),
+        "ME": m.get("Bias", pd.Series([np.nan]*len(m))).astype(float),
+        "MPE_%": m.get("MPE", pd.Series([np.nan]*len(m))).astype(float),
     })
 
     # Average row
