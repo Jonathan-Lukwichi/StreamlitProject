@@ -1,5 +1,7 @@
 from __future__ import annotations
 import streamlit as st
+import base64
+from pathlib import Path
 from app_core.ui.theme import apply_css, hero_card, feature_card
 from app_core.ui.effects import inject_fluorescent_effects
 from app_core.ui.components import render_scifi_hero_header
@@ -35,619 +37,777 @@ with st.sidebar:
 # Render fluorescent effects
 inject_fluorescent_effects()
 
-# Login button and feature card hover styles (non-animated)
-st.markdown("""
+
+# ============================================================================
+# IMAGE HELPER FUNCTIONS
+# ============================================================================
+def get_image_base64(image_path: str) -> str:
+    """Convert image to base64 for CSS background."""
+    try:
+        img_path = Path(image_path)
+        if img_path.exists():
+            with open(img_path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    except Exception:
+        pass
+    return ""
+
+
+def get_image_css_url(image_name: str) -> str:
+    """Get base64 data URL for image."""
+    base_path = Path(__file__).parent / "images" / image_name
+    b64 = get_image_base64(str(base_path))
+    if b64:
+        return f"data:image/jpeg;base64,{b64}"
+    return ""
+
+
+# ============================================================================
+# LOAD IMAGES
+# ============================================================================
+IMAGES_DIR = Path(__file__).parent / "images"
+hero_bg = get_image_css_url("hero-bg1.jpg")
+login_bg = get_image_css_url("login-bg1.jpg")
+carousel_1 = get_image_css_url("carousel-1.jpg")
+carousel_2 = get_image_css_url("carousel-2.jpg")
+carousel_3 = get_image_css_url("carousel-3.jpg")
+team_bg1 = get_image_css_url("team-bg1.jpg")
+team_bg2 = get_image_css_url("team-bg2.jpg")
+team_bg3 = get_image_css_url("team-bg3.jpg")
+team_bg4 = get_image_css_url("team-bg4.jpg")
+
+
+# ============================================================================
+# HERO SECTION WITH BACKGROUND IMAGE
+# ============================================================================
+st.markdown(f"""
 <style>
 /* ========================================
-   LOGIN BUTTON STYLING
+   HERO SECTION WITH BACKGROUND IMAGE
    ======================================== */
 
-.login-button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
-    padding: 1.5rem 2rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-align: center;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.login-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-    border-color: rgba(255, 255, 255, 0.4);
-}
-
-.login-button h3 {
-    margin: 0;
-    color: white;
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.login-button p {
-    margin: 0.5rem 0 0 0;
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 0.95rem;
-}
-
-/* Admin button variant */
-.login-button-admin {
-    background: linear-gradient(135deg, #f59e0b 0%, #dc2626 100%);
-    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-.login-button-admin:hover {
-    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.4);
-}
-
-/* Feature Cards - Subtle Hover */
-.hf-feature-card:hover {
-    filter: brightness(1.1);
-}
-
-.hf-feature-card:hover .hf-feature-icon {
-    transform: scale(1.05);
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================================
-# HERO SECTION - Premium Header
-# ============================================================================
-render_scifi_hero_header(
-    title="HealthForecast AI",
-    subtitle="Enterprise Healthcare Intelligence Platform. Transform hospital operations with AI-powered forecasting and optimization.",
-    status="SYSTEM ONLINE"
-)
-
-# ============================================================================
-# START HERE SECTION - Beautiful Entry Point with Fluorescent Card
-# ============================================================================
-
-st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-
-# Enhanced CSS for fluorescent cards and dark blue button
-st.markdown("""
-<style>
-/* ========================================
-   FLUORESCENT CARD STYLING
-   ======================================== */
-
-@keyframes card-glow {
-    0%, 100% {
-        box-shadow:
-            0 0 20px rgba(6, 78, 145, 0.3),
-            0 0 40px rgba(6, 78, 145, 0.2),
-            0 0 60px rgba(34, 211, 238, 0.1),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-    50% {
-        box-shadow:
-            0 0 30px rgba(6, 78, 145, 0.4),
-            0 0 60px rgba(6, 78, 145, 0.3),
-            0 0 80px rgba(34, 211, 238, 0.15),
-            inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }
-}
-
-@keyframes button-pulse {
-    0%, 100% {
-        box-shadow:
-            0 0 15px rgba(6, 78, 145, 0.6),
-            0 0 30px rgba(6, 78, 145, 0.4),
-            0 0 45px rgba(6, 78, 145, 0.2),
-            0 4px 20px rgba(0, 0, 0, 0.4);
-    }
-    50% {
-        box-shadow:
-            0 0 25px rgba(6, 78, 145, 0.8),
-            0 0 50px rgba(6, 78, 145, 0.5),
-            0 0 75px rgba(34, 211, 238, 0.3),
-            0 8px 30px rgba(0, 0, 0, 0.5);
-    }
-}
-
-@keyframes text-glow-cyan {
-    0%, 100% {
-        text-shadow: 0 0 10px rgba(34, 211, 238, 0.5), 0 0 20px rgba(34, 211, 238, 0.3);
-    }
-    50% {
-        text-shadow: 0 0 20px rgba(34, 211, 238, 0.7), 0 0 40px rgba(34, 211, 238, 0.4);
-    }
-}
-
-/* Fluorescent Start Here Card */
-.fluorescent-cta-card {
-    background: linear-gradient(145deg, rgba(6, 78, 145, 0.15) 0%, rgba(15, 23, 42, 0.9) 50%, rgba(6, 78, 145, 0.1) 100%);
-    border: 1px solid rgba(6, 78, 145, 0.4);
-    border-radius: 24px;
-    padding: 3rem 2rem;
-    text-align: center;
-    animation: card-glow 3s ease-in-out infinite;
+.hero-section {{
     position: relative;
-    overflow: hidden;
-    margin: 1rem auto;
-    max-width: 700px;
-}
-
-.fluorescent-cta-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
     width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent);
-    animation: shimmer-sweep 4s infinite;
-}
-
-@keyframes shimmer-sweep {
-    0% { left: -100%; }
-    100% { left: 100%; }
-}
-
-.cta-title {
-    color: #ffffff;
-    font-size: 2rem;
-    font-weight: 800;
-    margin-bottom: 1rem;
-    animation: text-glow-cyan 3s ease-in-out infinite;
-    letter-spacing: 1px;
-}
-
-.cta-subtitle {
-    color: #94a3b8;
-    font-size: 1.1rem;
-    line-height: 1.6;
-    margin-bottom: 0;
-    max-width: 550px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-/* Dark Blue Fluorescent Button */
-div[data-testid="stButton"] > button[kind="primary"] {
-    background: linear-gradient(135deg, #064e91 0%, #0a3d6e 40%, #041e42 100%) !important;
-    border: 2px solid rgba(34, 211, 238, 0.4) !important;
-    border-radius: 16px !important;
-    padding: 1.25rem 3rem !important;
-    font-size: 1.35rem !important;
-    font-weight: 800 !important;
-    color: #22d3ee !important;
-    text-transform: uppercase !important;
-    letter-spacing: 3px !important;
-    animation: button-pulse 2s ease-in-out infinite !important;
-    transition: all 0.3s ease !important;
-    min-height: 70px !important;
-    text-shadow: 0 0 10px rgba(34, 211, 238, 0.5) !important;
-}
-
-div[data-testid="stButton"] > button[kind="primary"]:hover {
-    transform: translateY(-3px) scale(1.03) !important;
-    border-color: rgba(34, 211, 238, 0.8) !important;
-    color: #67e8f9 !important;
-    text-shadow: 0 0 20px rgba(34, 211, 238, 0.8) !important;
-}
-
-div[data-testid="stButton"] > button[kind="primary"]:active {
-    transform: translateY(-1px) scale(1.01) !important;
-}
-
-/* Override all feature cards to have consistent fluorescent styling */
-.hf-feature-card {
-    animation: card-glow 4s ease-in-out infinite !important;
-    border: 1px solid rgba(6, 78, 145, 0.3) !important;
-}
-
-.hf-feature-title {
-    text-align: center !important;
-}
-
-.hf-feature-description {
-    text-align: center !important;
-}
-
-/* CENTER FEATURE LISTS */
-.hf-feature-list {
-    text-align: center !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    padding: 0 !important;
-    list-style: none !important;
-}
-
-.hf-feature-list li {
-    text-align: center !important;
-    padding-left: 0 !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 0.5rem !important;
-    justify-content: center !important;
-}
-
-.hf-feature-list li::before {
-    position: static !important;
-    margin-right: 0 !important;
-}
-
-/* ========================================
-   MOBILE RESPONSIVE STYLES
-   ======================================== */
-
-/* Tablet (768px and below) */
-@media (max-width: 768px) {
-    .fluorescent-cta-card {
-        padding: 2rem 1.5rem;
-        border-radius: 20px;
-    }
-    .cta-title {
-        font-size: 1.5rem;
-    }
-    .cta-subtitle {
-        font-size: 1rem;
-    }
-
-    /* Button */
-    div[data-testid="stButton"] > button[kind="primary"] {
-        padding: 1rem 2rem !important;
-        font-size: 1.1rem !important;
-        letter-spacing: 2px !important;
-        min-height: 56px !important;
-    }
-
-    /* Feature cards */
-    .hf-feature-card {
-        padding: 1.5rem !important;
-    }
-    .hf-feature-title {
-        font-size: 1.1rem !important;
-    }
-    .hf-feature-description {
-        font-size: 0.9rem !important;
-    }
-    .hf-feature-list li {
-        font-size: 0.85rem !important;
-    }
-}
-
-/* Phone (480px and below) */
-@media (max-width: 480px) {
-    .fluorescent-cta-card {
-        padding: 1.5rem 1rem;
-        border-radius: 16px;
-        margin: 0.5rem;
-    }
-    .cta-title {
-        font-size: 1.25rem;
-        letter-spacing: 0.5px;
-    }
-    .cta-subtitle {
-        font-size: 0.9rem;
-        line-height: 1.5;
-    }
-
-    /* Button - Full width on mobile */
-    div[data-testid="stButton"] > button[kind="primary"] {
-        padding: 0.875rem 1.5rem !important;
-        font-size: 0.95rem !important;
-        letter-spacing: 1.5px !important;
-        min-height: 48px !important;
-        border-radius: 12px !important;
-    }
-
-    /* Feature cards - Compact */
-    .hf-feature-card {
-        padding: 1.25rem !important;
-        border-radius: 16px !important;
-    }
-    .hf-feature-title {
-        font-size: 1rem !important;
-    }
-    .hf-feature-description {
-        font-size: 0.85rem !important;
-    }
-    .hf-feature-list li {
-        font-size: 0.8rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-}
-</style>
-
-<div class='fluorescent-cta-card'>
-    <h2 class='cta-title'>Ready to Transform Healthcare?</h2>
-    <p class='cta-subtitle'>
-        Experience AI-powered patient forecasting that helps hospitals
-        optimize operations and improve patient care.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# Centered Start Here button
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-    if st.button("START HERE", type="primary", use_container_width=True, key="start_here_btn"):
-        # Set authentication state for demo mode
-        st.session_state.authenticated = True
-        st.session_state.role = "admin"
-        st.session_state.username = "demo_user"
-        st.session_state.name = "Demo User"
-        # Redirect to Dashboard
-        st.switch_page("pages/01_Dashboard.py")
-
-# ============================================================================
-# FEATURE GRID - Showcase Core Capabilities
-# ============================================================================
-st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
-st.markdown("<div class='hf-feature-grid'>", unsafe_allow_html=True)
-
-# Feature columns
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    card1 = feature_card(
-        icon="🤖",
-        title="Advanced AI Models",
-        description="State-of-the-art forecasting architecture combining statistical rigor with deep learning innovation.",
-        features=[
-            "LSTM Neural Networks for complex temporal patterns",
-            "XGBoost gradient boosting with feature importance",
-            "SARIMAX statistical modeling with exogenous variables",
-            "Hybrid ensemble methods for superior accuracy",
-            "Multi-horizon forecasting (1-7 days ahead)",
-            "Automated hyperparameter optimization"
-        ]
-    )
-    st.markdown(card1, unsafe_allow_html=True)
-
-with col2:
-    card2 = feature_card(
-        icon="📡",
-        title="Intelligent Data Fusion",
-        description="Seamlessly integrate multi-source data streams for comprehensive operational intelligence.",
-        features=[
-            "Patient arrival data with automated datetime parsing",
-            "Weather impact analysis (temperature, precipitation, wind)",
-            "Calendar integration (holidays, seasonality, events)",
-            "Smart feature engineering with lag detection",
-            "Automated missing value imputation",
-            "Real-time data validation and quality checks"
-        ]
-    )
-    st.markdown(card2, unsafe_allow_html=True)
-
-with col3:
-    card3 = feature_card(
-        icon="⚙️",
-        title="Operational Excellence",
-        description="Deploy enterprise-grade forecasting that integrates seamlessly with hospital workflows.",
-        features=[
-            "Staff scheduling optimization based on demand",
-            "Inventory management with predictive restocking",
-            "Decision command center with AI recommendations",
-            "Explainable AI with SHAP feature importance",
-            "Model performance monitoring and diagnostics",
-            "Export-ready predictions with confidence intervals"
-        ]
-    )
-    st.markdown(card3, unsafe_allow_html=True)
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ============================================================================
-# SECONDARY FEATURE CARDS - Additional Capabilities
-# ============================================================================
-st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-st.markdown("<div class='hf-feature-grid'>", unsafe_allow_html=True)
-
-col4, col5 = st.columns(2)
-
-with col4:
-    card4 = feature_card(
-        icon="🔍",
-        title="Comprehensive Analytics Suite",
-        description="Deep exploratory analysis and visualization tools for data-driven insights.",
-        features=[
-            "Automated EDA with statistical summaries",
-            "Time series decomposition and stationarity tests",
-            "ACF/PACF analysis for pattern identification",
-            "Interactive Plotly visualizations",
-            "Day-of-week and seasonal pattern detection",
-            "Distribution analysis and outlier detection"
-        ]
-    )
-    st.markdown(card4, unsafe_allow_html=True)
-
-with col5:
-    card5 = feature_card(
-        icon="🎓",
-        title="Research-Grade Framework",
-        description="Built on proven scientific methods with full reproducibility and transparency.",
-        features=[
-            "Time-series aware cross-validation",
-            "Expanding and rolling window evaluation",
-            "Comprehensive metrics (MAE, RMSE, MAPE, R²)",
-            "Residual diagnostics and model validation",
-            "Bayesian optimization with Optuna",
-            "Artifact versioning and experiment tracking"
-        ]
-    )
-    st.markdown(card5, unsafe_allow_html=True)
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ============================================================================
-# VALUE PROPOSITION SECTION - Fluorescent Stats Card
-# ============================================================================
-st.markdown("<div style='margin-top: 3rem;'></div>", unsafe_allow_html=True)
-
-st.markdown("""
-<style>
-/* Stats Card Fluorescent Styling */
-.stats-card {
-    background: linear-gradient(145deg, rgba(6, 78, 145, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(6, 78, 145, 0.08) 100%);
-    border: 1px solid rgba(6, 78, 145, 0.35);
+    min-height: 500px;
+    background: linear-gradient(135deg, rgba(10, 14, 39, 0.85) 0%, rgba(6, 78, 145, 0.6) 50%, rgba(10, 14, 39, 0.9) 100%),
+                url('{hero_bg}');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     border-radius: 24px;
-    padding: 2.5rem 2rem;
-    text-align: center !important;
-    animation: card-glow 4s ease-in-out infinite;
-    position: relative;
-    overflow: hidden;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-.stats-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.08), transparent);
-    animation: shimmer-sweep 5s infinite;
-}
-
-.stats-title {
-    color: #ffffff;
-    font-size: 1.75rem;
-    font-weight: 800;
-    margin-bottom: 1rem;
-    animation: text-glow-cyan 3s ease-in-out infinite;
-    text-align: center !important;
-    width: 100% !important;
-}
-
-.stats-description {
-    color: #94a3b8;
-    font-size: 1rem;
-    line-height: 1.7;
-    max-width: 800px;
-    margin: 0 auto 2rem auto !important;
-    text-align: center !important;
-    width: 100% !important;
-    display: block !important;
-}
-
-.stats-grid {
-    display: flex;
-    gap: 2.5rem;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-top: 1.5rem;
-    width: 100%;
-}
-
-.stat-item {
-    text-align: center;
-    padding: 1rem;
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
-}
+    align-items: center;
+    padding: 4rem 2rem;
+    margin-bottom: 2rem;
+    overflow: hidden;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    box-shadow: 0 0 60px rgba(6, 78, 145, 0.3),
+                inset 0 0 120px rgba(0, 0, 0, 0.5);
+}}
 
-.stat-number {
+.hero-section::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(10, 14, 39, 0.4) 100%);
+    pointer-events: none;
+}}
+
+.hero-badge {{
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    border-radius: 50px;
+    padding: 0.5rem 1.5rem;
+    font-size: 0.85rem;
+    color: #22d3ee;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(10px);
+    z-index: 1;
+}}
+
+.hero-title {{
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: #ffffff;
+    text-align: center;
+    margin: 0 0 0.5rem 0;
+    text-shadow: 0 0 40px rgba(34, 211, 238, 0.5),
+                 0 4px 20px rgba(0, 0, 0, 0.5);
+    z-index: 1;
+    line-height: 1.2;
+}}
+
+.hero-title-accent {{
+    background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 50%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}}
+
+.hero-subtitle {{
+    font-size: 1.25rem;
+    color: #94a3b8;
+    text-align: center;
+    max-width: 700px;
+    margin: 1rem auto 2rem auto;
+    line-height: 1.7;
+    z-index: 1;
+}}
+
+.hero-stats {{
+    display: flex;
+    gap: 3rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+    z-index: 1;
+}}
+
+.hero-stat {{
+    text-align: center;
+    padding: 1rem 1.5rem;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 16px;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    backdrop-filter: blur(10px);
+}}
+
+.hero-stat-value {{
+    font-size: 2rem;
+    font-weight: 800;
+    color: #22d3ee;
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
+}}
+
+.hero-stat-label {{
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+
+/* ========================================
+   CTA BUTTONS
+   ======================================== */
+
+.hero-buttons {{
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    z-index: 1;
+    flex-wrap: wrap;
+    justify-content: center;
+}}
+
+.hero-btn {{
+    padding: 1rem 2.5rem;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}}
+
+.hero-btn-primary {{
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: 2px solid rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+}}
+
+.hero-btn-primary:hover {{
+    transform: translateY(-3px);
+    box-shadow: 0 0 50px rgba(59, 130, 246, 0.6);
+}}
+
+.hero-btn-secondary {{
+    background: rgba(15, 23, 42, 0.8);
+    color: #22d3ee;
+    border: 2px solid rgba(34, 211, 238, 0.4);
+}}
+
+.hero-btn-secondary:hover {{
+    background: rgba(34, 211, 238, 0.1);
+    border-color: rgba(34, 211, 238, 0.8);
+}}
+
+/* ========================================
+   TEAM IMAGE STRIP
+   ======================================== */
+
+.team-strip {{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin: 3rem 0;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    box-shadow: 0 0 40px rgba(6, 78, 145, 0.2);
+}}
+
+.team-strip-item {{
+    position: relative;
+    height: 180px;
+    background-size: cover;
+    background-position: center;
+    overflow: hidden;
+}}
+
+.team-strip-item::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(10, 14, 39, 0.3) 0%, rgba(10, 14, 39, 0.7) 100%);
+    transition: all 0.3s ease;
+}}
+
+.team-strip-item:hover::before {{
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.2) 0%, rgba(10, 14, 39, 0.5) 100%);
+}}
+
+.team-strip-label {{
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    z-index: 1;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}}
+
+/* ========================================
+   PLATFORM CAPABILITIES SECTION
+   ======================================== */
+
+.capabilities-header {{
+    text-align: center;
+    margin: 4rem 0 2rem 0;
+}}
+
+.capabilities-badge {{
+    color: #22d3ee;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 1rem;
+}}
+
+.capabilities-title {{
     font-size: 2.5rem;
     font-weight: 800;
-    animation: text-glow-cyan 2s ease-in-out infinite;
-    text-align: center;
-}
+    color: white;
+    margin: 0.5rem 0;
+}}
 
-.stat-label {
+.capabilities-subtitle {{
     color: #94a3b8;
-    margin-top: 0.5rem;
-    font-size: 0.9rem;
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+}}
+
+/* ========================================
+   FEATURE CARDS WITH IMAGES
+   ======================================== */
+
+.feature-card-enhanced {{
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.9) 0%, rgba(6, 78, 145, 0.1) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: 20px;
+    padding: 2rem;
+    height: 100%;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}}
+
+.feature-card-enhanced:hover {{
+    transform: translateY(-5px);
+    border-color: rgba(34, 211, 238, 0.5);
+    box-shadow: 0 20px 40px rgba(6, 78, 145, 0.3);
+}}
+
+.feature-card-enhanced::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.05), transparent);
+    transition: left 0.5s ease;
+}}
+
+.feature-card-enhanced:hover::before {{
+    left: 100%;
+}}
+
+.feature-icon-box {{
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1.25rem;
+}}
+
+.feature-icon-cyan {{
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0.1) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.3);
+}}
+
+.feature-icon-blue {{
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}}
+
+.feature-icon-purple {{
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}}
+
+.feature-icon-green {{
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 100%);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}}
+
+.feature-icon-orange {{
+    background: linear-gradient(135deg, rgba(251, 146, 60, 0.2) 0%, rgba(251, 146, 60, 0.1) 100%);
+    border: 1px solid rgba(251, 146, 60, 0.3);
+}}
+
+.feature-icon-pink {{
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.2) 0%, rgba(244, 63, 94, 0.1) 100%);
+    border: 1px solid rgba(244, 63, 94, 0.3);
+}}
+
+.feature-badge {{
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+
+.feature-title-enhanced {{
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 0.75rem;
+}}
+
+.feature-description-enhanced {{
+    color: #94a3b8;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}}
+
+/* ========================================
+   CTA SECTION WITH BACKGROUND
+   ======================================== */
+
+.cta-section {{
+    position: relative;
+    background: linear-gradient(135deg, rgba(6, 78, 145, 0.3) 0%, rgba(10, 14, 39, 0.95) 100%),
+                url('{login_bg}');
+    background-size: cover;
+    background-position: center;
+    border-radius: 24px;
+    padding: 4rem 2rem;
     text-align: center;
-}
+    margin: 4rem 0;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    overflow: hidden;
+}}
 
-/* Mobile Responsive - Tablet */
-@media (max-width: 768px) {
-    .stats-card {
-        padding: 1.75rem 1.25rem;
-        border-radius: 20px;
-    }
-    .stats-title {
-        font-size: 1.35rem;
-    }
-    .stats-description {
-        font-size: 0.9rem;
-        margin-bottom: 1.5rem !important;
-    }
-    .stats-grid {
-        gap: 1.5rem;
-    }
-    .stat-number {
+.cta-section::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+    pointer-events: none;
+}}
+
+.cta-title {{
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: white;
+    margin-bottom: 1rem;
+    position: relative;
+    z-index: 1;
+}}
+
+.cta-subtitle {{
+    color: #94a3b8;
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto 2rem auto;
+    position: relative;
+    z-index: 1;
+}}
+
+/* ========================================
+   PERFORMANCE METRICS
+   ======================================== */
+
+.metrics-grid {{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin: 3rem 0;
+}}
+
+.metric-card {{
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.8) 0%, rgba(6, 78, 145, 0.1) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.15);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+}}
+
+.metric-value {{
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #22d3ee;
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+}}
+
+.metric-label {{
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+
+/* ========================================
+   MOBILE RESPONSIVE
+   ======================================== */
+
+@media (max-width: 768px) {{
+    .hero-section {{
+        min-height: 400px;
+        padding: 2rem 1rem;
+    }}
+    .hero-title {{
         font-size: 2rem;
-    }
-    .stat-label {
-        font-size: 0.8rem;
-    }
-}
-
-/* Mobile Responsive - Phone */
-@media (max-width: 480px) {
-    .stats-card {
-        padding: 1.25rem 1rem;
-        border-radius: 16px;
-    }
-    .stats-title {
-        font-size: 1.15rem;
-    }
-    .stats-description {
-        font-size: 0.85rem;
-        line-height: 1.6;
-    }
-    .stats-grid {
+    }}
+    .hero-subtitle {{
+        font-size: 1rem;
+    }}
+    .hero-stats {{
         gap: 1rem;
-    }
-    .stat-item {
-        padding: 0.5rem;
-        min-width: 70px;
-    }
-    .stat-number {
+    }}
+    .hero-stat {{
+        padding: 0.75rem 1rem;
+    }}
+    .hero-stat-value {{
         font-size: 1.5rem;
-    }
-    .stat-label {
+    }}
+    .team-strip {{
+        grid-template-columns: repeat(2, 1fr);
+    }}
+    .team-strip-item {{
+        height: 120px;
+    }}
+    .capabilities-title {{
+        font-size: 1.75rem;
+    }}
+    .metrics-grid {{
+        grid-template-columns: repeat(2, 1fr);
+    }}
+    .cta-title {{
+        font-size: 1.75rem;
+    }}
+}}
+
+@media (max-width: 480px) {{
+    .hero-section {{
+        min-height: 350px;
+        padding: 1.5rem 1rem;
+        border-radius: 16px;
+    }}
+    .hero-title {{
+        font-size: 1.5rem;
+    }}
+    .hero-badge {{
         font-size: 0.7rem;
-    }
-}
+        padding: 0.35rem 1rem;
+    }}
+    .team-strip {{
+        grid-template-columns: 1fr 1fr;
+    }}
+    .team-strip-item {{
+        height: 100px;
+    }}
+    .metrics-grid {{
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }}
+    .metric-card {{
+        padding: 1rem;
+    }}
+    .metric-value {{
+        font-size: 1.75rem;
+    }}
+}}
+
+/* ========================================
+   LOGIN BUTTON STYLING (existing)
+   ======================================== */
+
+div[data-testid="stButton"] > button[kind="primary"] {{
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+    border: 2px solid rgba(59, 130, 246, 0.5) !important;
+    border-radius: 14px !important;
+    padding: 1.25rem 3rem !important;
+    font-size: 1.2rem !important;
+    font-weight: 700 !important;
+    color: white !important;
+    text-transform: uppercase !important;
+    letter-spacing: 2px !important;
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4) !important;
+    transition: all 0.3s ease !important;
+    min-height: 60px !important;
+}}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover {{
+    transform: translateY(-3px) !important;
+    box-shadow: 0 0 50px rgba(59, 130, 246, 0.6) !important;
+    border-color: rgba(59, 130, 246, 0.8) !important;
+}}
+
+/* Feature cards hover */
+.hf-feature-card:hover {{
+    filter: brightness(1.1);
+}}
 </style>
 
-<div class='stats-card'>
-    <h2 class='stats-title'>Built for Healthcare Leaders</h2>
-    <p class='stats-description'>
-        HealthForecast AI empowers hospital executives, operations managers, and clinical teams
-        to make data-driven decisions with confidence. Our platform combines cutting-edge AI
-        with healthcare domain expertise to deliver actionable insights that improve patient
-        outcomes and operational efficiency.
+<!-- HERO SECTION -->
+<div class="hero-section">
+    <div class="hero-badge">Intelligent Hospital Resource Planning</div>
+    <h1 class="hero-title">Smarter Hospitals,<br><span class="hero-title-accent">Powered by AI</span></h1>
+    <p class="hero-subtitle">
+        Forecast patient demand, optimize staff schedules, and manage supplies with confidence.
+        HealthForecast AI transforms hospital data into actionable insights that save time,
+        reduce costs, and improve patient care.
     </p>
-    <div class='stats-grid'>
-        <div class='stat-item'>
-            <div class='stat-number' style='color: #22d3ee; text-shadow: 0 0 25px rgba(34, 211, 238, 0.6);'>8+</div>
-            <div class='stat-label'>Forecasting Models</div>
+    <div class="hero-stats">
+        <div class="hero-stat">
+            <div class="hero-stat-value">7-Day</div>
+            <div class="hero-stat-label">Forecast Horizon</div>
         </div>
-        <div class='stat-item'>
-            <div class='stat-number' style='color: #3b82f6; text-shadow: 0 0 25px rgba(59, 130, 246, 0.6);'>4</div>
-            <div class='stat-label'>Data Sources</div>
+        <div class="hero-stat">
+            <div class="hero-stat-value">24/7</div>
+            <div class="hero-stat-label">Real-time Monitoring</div>
         </div>
-        <div class='stat-item'>
-            <div class='stat-number' style='color: #8b5cf6; text-shadow: 0 0 25px rgba(139, 92, 246, 0.6);'>1-7</div>
-            <div class='stat-label'>Day Horizons</div>
+        <div class="hero-stat">
+            <div class="hero-stat-value">&lt; 5%</div>
+            <div class="hero-stat-label">Prediction Error</div>
         </div>
-        <div class='stat-item'>
-            <div class='stat-number' style='color: #06b6d4; text-shadow: 0 0 25px rgba(6, 182, 212, 0.6);'>100%</div>
-            <div class='stat-label'>Explainable AI</div>
+        <div class="hero-stat">
+            <div class="hero-stat-value">30%</div>
+            <div class="hero-stat-label">Cost Reduction</div>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ============================================================================
+# START HERE BUTTON
+# ============================================================================
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+    if st.button("START HERE", type="primary", use_container_width=True, key="start_here_btn"):
+        st.session_state.authenticated = True
+        st.session_state.role = "admin"
+        st.session_state.username = "demo_user"
+        st.session_state.name = "Demo User"
+        st.switch_page("pages/01_Dashboard.py")
+
+# ============================================================================
+# TEAM IMAGE STRIP
+# ============================================================================
+st.markdown(f"""
+<div class="team-strip">
+    <div class="team-strip-item" style="background-image: url('{team_bg1}');">
+        <div class="team-strip-label">Our Team</div>
+    </div>
+    <div class="team-strip-item" style="background-image: url('{carousel_1}');">
+        <div class="team-strip-label">Analytics</div>
+    </div>
+    <div class="team-strip-item" style="background-image: url('{team_bg2}');">
+        <div class="team-strip-label">Supply Chain</div>
+    </div>
+    <div class="team-strip-item" style="background-image: url('{carousel_2}');">
+        <div class="team-strip-label">Collaboration</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================================
+# PLATFORM CAPABILITIES SECTION
+# ============================================================================
+st.markdown("""
+<div class="capabilities-header">
+    <div class="capabilities-badge">Platform Capabilities</div>
+    <h2 class="capabilities-title">Everything You Need to Manage Hospital Demand</h2>
+    <p class="capabilities-subtitle">
+        From data ingestion to actionable recommendations - a complete end-to-end platform for hospital resource planning.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# Feature Cards Row 1
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("""
+    <div class="feature-card-enhanced">
+        <div class="feature-badge">Core</div>
+        <div class="feature-icon-box feature-icon-cyan">
+            <span>📈</span>
+        </div>
+        <h3 class="feature-title-enhanced">Demand Forecasting</h3>
+        <p class="feature-description-enhanced">
+            Predict patient arrivals up to 7 days ahead. Understand trends, seasonality,
+            and patterns in emergency department visits.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    <div class="feature-card-enhanced">
+        <div class="feature-badge">Core</div>
+        <div class="feature-icon-box feature-icon-blue">
+            <span>👥</span>
+        </div>
+        <h3 class="feature-title-enhanced">Staff Optimization</h3>
+        <p class="feature-description-enhanced">
+            Generate optimal staff schedules that balance coverage, costs, and preferences.
+            Minimize overtime while ensuring patient safety.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col3:
+    st.markdown("""
+    <div class="feature-card-enhanced">
+        <div class="feature-badge">Core</div>
+        <div class="feature-icon-box feature-icon-purple">
+            <span>📦</span>
+        </div>
+        <h3 class="feature-title-enhanced">Supply Management</h3>
+        <p class="feature-description-enhanced">
+            Optimize inventory levels, reduce waste, and prevent stockouts.
+            Smart reorder alerts keep you prepared.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Feature Cards Row 2
+st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+col4, col5, col6 = st.columns(3)
+
+with col4:
+    st.markdown("""
+    <div class="feature-card-enhanced">
+        <div class="feature-icon-box feature-icon-green">
+            <span>📊</span>
+        </div>
+        <h3 class="feature-title-enhanced">Data Exploration</h3>
+        <p class="feature-description-enhanced">
+            Visualize distributions, correlations, and temporal patterns.
+            Understand what drives demand before making decisions.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col5:
+    st.markdown("""
+    <div class="feature-card-enhanced">
+        <div class="feature-icon-box feature-icon-orange">
+            <span>💡</span>
+        </div>
+        <h3 class="feature-title-enhanced">AI-Powered Insights</h3>
+        <p class="feature-description-enhanced">
+            Receive intelligent recommendations tailored to your hospital.
+            Actionable advice prioritized by impact.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col6:
+    st.markdown("""
+    <div class="feature-card-enhanced">
+        <div class="feature-icon-box feature-icon-pink">
+            <span>📱</span>
+        </div>
+        <h3 class="feature-title-enhanced">Real-time Dashboard</h3>
+        <p class="feature-description-enhanced">
+            Monitor KPIs at a glance. Track forecasts, model performance,
+            staff coverage, and supply levels.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ============================================================================
+# CTA SECTION WITH BACKGROUND
+# ============================================================================
+st.markdown(f"""
+<div class="cta-section">
+    <h2 class="cta-title">Ready to Transform Your Hospital Operations?</h2>
+    <p class="cta-subtitle">
+        Start forecasting patient demand, optimizing schedules, and making
+        data-driven decisions today.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# Second CTA Button
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("START HERE", type="primary", use_container_width=True, key="start_here_btn_2"):
+        st.session_state.authenticated = True
+        st.session_state.role = "admin"
+        st.session_state.username = "demo_user"
+        st.session_state.name = "Demo User"
+        st.switch_page("pages/01_Dashboard.py")
 
 # ============================================================================
 # PIPELINE STATUS DASHBOARD (for authenticated users)
@@ -658,7 +818,7 @@ if st.session_state.get("authenticated", False):
     render_pipeline_status_dashboard()
 
 # ============================================================================
-# FOOTER - Fluorescent Styling
+# FOOTER
 # ============================================================================
 st.markdown("<div style='margin-top: 4rem;'></div>", unsafe_allow_html=True)
 st.markdown(
