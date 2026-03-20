@@ -165,64 +165,97 @@ def map_calendar_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def map_clinical_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Map Steve Biko clinical/reason data columns to app format."""
+    """Map Steve Biko clinical/reason data columns to app format.
+
+    Target schema (clinical_visits):
+    - id, date, datetime, asthma, pneumonia, shortness_of_breath, chest_pain,
+      arrhythmia, hypertensive_emergency, fracture, laceration, burn, fall_injury,
+      abdominal_pain, vomiting, diarrhea, flu_symptoms, fever, viral_infection,
+      headache, dizziness, allergic_reaction, mental_health, total_arrivals,
+      created_at, hospital_name
+
+    Steve Biko data has different categories (trauma, violence, specialties).
+    We'll map what we can and estimate/distribute the rest.
+    """
     df = df.copy()
 
-    # Rename date column
-    df = df.rename(columns={"date": "datetime"})
-
     # Ensure datetime is proper format
-    if "datetime" in df.columns:
-        df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
+    if "date" in df.columns:
+        df["datetime"] = pd.to_datetime(df["date"], errors="coerce")
+        df["date"] = df["datetime"].dt.strftime("%Y-%m-%d")
 
-    # Create aggregated clinical categories from Steve Biko's detailed data
-    # Map to app's expected categories: RESPIRATORY, CARDIAC, TRAUMA, etc.
+    # Calculate total arrivals from specialties if not available
+    spec_cols = ["spec_medicine", "spec_orthopaedics", "spec_surgery", "spec_gynae",
+                 "spec_maternity", "spec_paediatrics", "spec_psychiatry"]
+    existing_specs = [c for c in spec_cols if c in df.columns]
 
-    # TRAUMA = accidents + violence + falls
-    if "total_trauma" in df.columns:
-        df["TRAUMA"] = df["total_trauma"]
+    if existing_specs:
+        df["total_arrivals"] = df[existing_specs].fillna(0).sum(axis=1).astype(int)
     else:
-        trauma_cols = ["total_accidents", "total_violence", "total_falls"]
-        existing_cols = [c for c in trauma_cols if c in df.columns]
-        if existing_cols:
-            df["TRAUMA"] = df[existing_cols].fillna(0).sum(axis=1)
+        df["total_arrivals"] = 0
 
-    # INFECTIOUS = tb, malaria, measles, meningitis
-    infectious_cols = ["tb", "malaria", "measles", "meningitis", "total_infectious_disease"]
-    existing_inf = [c for c in infectious_cols if c in df.columns]
-    if "total_infectious_disease" in df.columns:
-        df["INFECTIOUS"] = df["total_infectious_disease"]
-    elif existing_inf:
-        df["INFECTIOUS"] = df[existing_inf].fillna(0).sum(axis=1)
+    # Map Steve Biko data to expected clinical columns
+    # Using proportional distribution based on typical ED visit patterns
 
-    # GASTROINTESTINAL - use poisoning as proxy
-    if "total_poisoning" in df.columns:
-        df["GASTROINTESTINAL"] = df["total_poisoning"]
+    # RESPIRATORY conditions (estimate from medicine specialty)
+    medicine = df.get("spec_medicine", pd.Series([0] * len(df))).fillna(0)
+    df["asthma"] = (medicine * 0.08).astype(int)
+    df["pneumonia"] = (medicine * 0.06).astype(int)
+    df["shortness_of_breath"] = (medicine * 0.10).astype(int)
 
-    # NEUROLOGICAL - use substance abuse as proxy (affects CNS)
-    if "total_substance_abuse" in df.columns:
-        df["NEUROLOGICAL"] = df["total_substance_abuse"]
+    # CARDIAC conditions
+    df["chest_pain"] = (medicine * 0.12).astype(int)
+    df["arrhythmia"] = (medicine * 0.03).astype(int)
+    df["hypertensive_emergency"] = (medicine * 0.08).astype(int)
 
-    # OTHER - animal bites + gynae + suicide attempts
-    other_cols = ["total_animal_bites", "total_gynae", "total_suicide_attempts"]
-    existing_other = [c for c in other_cols if c in df.columns]
-    if existing_other:
-        df["OTHER"] = df[existing_other].fillna(0).sum(axis=1)
+    # TRAUMA conditions (from Steve Biko trauma data)
+    trauma = df.get("total_trauma", pd.Series([0] * len(df))).fillna(0)
+    ortho = df.get("spec_orthopaedics", pd.Series([0] * len(df))).fillna(0)
+    surgery = df.get("spec_surgery", pd.Series([0] * len(df))).fillna(0)
 
-    # RESPIRATORY and CARDIAC - not directly available, set to 0 or estimate
-    # Could use spec_medicine as a proxy
-    if "spec_medicine" in df.columns:
-        # Split medicine into respiratory/cardiac estimates
-        df["RESPIRATORY"] = (df["spec_medicine"] * 0.4).fillna(0).astype(int)
-        df["CARDIAC"] = (df["spec_medicine"] * 0.3).fillna(0).astype(int)
-    else:
-        df["RESPIRATORY"] = 0
-        df["CARDIAC"] = 0
+    df["fracture"] = (ortho * 0.5 + trauma * 0.2).astype(int)
+    df["laceration"] = (surgery * 0.3 + trauma * 0.15).astype(int)
+    df["burn"] = (surgery * 0.1).astype(int)
+    df["fall_injury"] = df.get("total_falls", pd.Series([0] * len(df))).fillna(0).astype(int)
+
+    # GASTROINTESTINAL conditions
+    poisoning = df.get("total_poisoning", pd.Series([0] * len(df))).fillna(0)
+    df["abdominal_pain"] = (medicine * 0.08).astype(int)
+    df["vomiting"] = (poisoning * 0.3 + medicine * 0.04).astype(int)
+    df["diarrhea"] = (medicine * 0.05).astype(int)
+
+    # INFECTIOUS conditions
+    infectious = df.get("total_infectious_disease", pd.Series([0] * len(df))).fillna(0)
+    df["flu_symptoms"] = (infectious * 0.3 + medicine * 0.05).astype(int)
+    df["fever"] = (infectious * 0.4 + medicine * 0.04).astype(int)
+    df["viral_infection"] = (infectious * 0.3).astype(int)
+
+    # NEUROLOGICAL conditions
+    substance = df.get("total_substance_abuse", pd.Series([0] * len(df))).fillna(0)
+    df["headache"] = (medicine * 0.06 + substance * 0.1).astype(int)
+    df["dizziness"] = (medicine * 0.04).astype(int)
+
+    # OTHER conditions
+    paed = df.get("spec_paediatrics", pd.Series([0] * len(df))).fillna(0)
+    psych = df.get("spec_psychiatry", pd.Series([0] * len(df))).fillna(0)
+    animal = df.get("total_animal_bites", pd.Series([0] * len(df))).fillna(0)
+
+    df["allergic_reaction"] = (paed * 0.1 + animal * 0.2).astype(int)
+    df["mental_health"] = (psych * 0.8 + substance * 0.2).astype(int)
 
     # Add hospital name
     df["hospital_name"] = HOSPITAL_NAME
 
-    return df
+    # Select only columns that match the target schema
+    output_columns = ["date", "datetime", "asthma", "pneumonia", "shortness_of_breath",
+                      "chest_pain", "arrhythmia", "hypertensive_emergency", "fracture",
+                      "laceration", "burn", "fall_injury", "abdominal_pain", "vomiting",
+                      "diarrhea", "flu_symptoms", "fever", "viral_infection", "headache",
+                      "dizziness", "allergic_reaction", "mental_health", "total_arrivals",
+                      "hospital_name"]
+    existing_cols = [c for c in output_columns if c in df.columns]
+
+    return df[existing_cols]
 
 
 def upload_to_supabase(client, table_name: str, df: pd.DataFrame, batch_size: int = 500):
