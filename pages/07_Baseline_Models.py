@@ -1749,6 +1749,7 @@ def page_benchmarks():
     inject_sidebar_style()
     render_sidebar_brand()
     init_state()
+    inject_page_hero_styles("baseline")
 
     # Fluorescent effects + Custom Tab Styling
     st.markdown(f"""
