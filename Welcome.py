@@ -211,14 +211,22 @@ st.markdown(f"""
 }}
 
 .hero-title-accent {{
-    display: block;
-    font-size: 4rem;
-    background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 40%, #8b5cf6 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    filter: drop-shadow(0 0 30px rgba(34, 211, 238, 0.5));
+    display: inline-block;
+    font-size: 3.5rem;
+    color: #22d3ee;
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.15) 0%, rgba(59, 130, 246, 0.2) 100%);
+    padding: 0.5rem 1.5rem;
+    border-radius: 12px;
+    border: 2px solid rgba(34, 211, 238, 0.5);
+    text-shadow:
+        0 0 20px rgba(34, 211, 238, 0.8),
+        0 0 40px rgba(34, 211, 238, 0.5),
+        0 0 60px rgba(34, 211, 238, 0.3);
+    box-shadow:
+        0 0 30px rgba(34, 211, 238, 0.3),
+        inset 0 0 20px rgba(34, 211, 238, 0.1);
     animation: text-glow 3s ease-in-out infinite;
+    margin-top: 0.5rem;
 }}
 
 .hero-subtitle {{
