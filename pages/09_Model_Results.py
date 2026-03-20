@@ -2287,6 +2287,151 @@ with tab_performance:
     else:
         st.info("Train multi-horizon models to see per-horizon analysis.")
 
+    # Per-Horizon Breakdown Table (NEW - Expandable)
+    with st.expander("📊 Per-Horizon Performance Breakdown (All Metrics)", expanded=False):
+        st.caption("Detailed metrics for each forecast horizon - essential for thesis evaluation")
+
+        # Get per-horizon data from session state
+        horizon_data_found = False
+
+        # Try ARIMA first
+        arima_results = st.session_state.get("arima_mh_results")
+        if arima_results and arima_results.get("results_df") is not None:
+            results_df = arima_results["results_df"]
+            if not results_df.empty:
+                st.markdown("##### ARIMA Per-Horizon Metrics")
+                # Select relevant columns
+                horizon_cols = ["Horizon", "MAE", "RMSE", "MAPE_%", "sMAPE_%", "Accuracy_%", "R2", "Direction_Accuracy_%", "ME", "MPE_%"]
+                horizon_cols = [c for c in horizon_cols if c in results_df.columns]
+                if horizon_cols:
+                    st.dataframe(
+                        results_df[horizon_cols].style.format(
+                            {c: METRIC_FORMATTERS.get(c, "{:.4f}") for c in horizon_cols if c in METRIC_FORMATTERS},
+                            na_rep="—"
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    horizon_data_found = True
+
+        # Try SARIMAX
+        sarimax_results = st.session_state.get("sarimax_results")
+        if sarimax_results and sarimax_results.get("results_df") is not None:
+            results_df = sarimax_results["results_df"]
+            if not results_df.empty:
+                st.markdown("##### SARIMAX Per-Horizon Metrics")
+                horizon_cols = ["Horizon", "Test_MAE", "Test_RMSE", "Test_MAPE", "Test_sMAPE", "Test_Acc", "Test_R2", "DirAcc", "Bias", "MPE"]
+                horizon_cols = [c for c in horizon_cols if c in results_df.columns]
+                if horizon_cols:
+                    st.dataframe(
+                        results_df[horizon_cols].style.format(
+                            {c: "{:.4f}" if "MAE" in c or "RMSE" in c else "{:.2f}" for c in horizon_cols if c != "Horizon"},
+                            na_rep="—"
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    horizon_data_found = True
+
+        # Try ML models
+        for model_name in ["XGBoost", "LSTM", "ANN"]:
+            ml_results = st.session_state.get(f"ml_mh_results_{model_name.lower()}")
+            if ml_results and ml_results.get("results_df") is not None:
+                results_df = ml_results["results_df"]
+                if not results_df.empty:
+                    st.markdown(f"##### {model_name} Per-Horizon Metrics")
+                    horizon_cols = ["Horizon", "Test_MAE", "Test_RMSE", "Test_MAPE", "Test_sMAPE", "Test_Acc", "Test_R2", "Test_DA", "Test_ME", "Test_MPE"]
+                    horizon_cols = [c for c in horizon_cols if c in results_df.columns]
+                    if horizon_cols:
+                        st.dataframe(
+                            results_df[horizon_cols].style.format(
+                                {c: "{:.4f}" if "MAE" in c or "RMSE" in c else "{:.2f}" for c in horizon_cols if c != "Horizon"},
+                                na_rep="—"
+                            ),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                        horizon_data_found = True
+
+        if not horizon_data_found:
+            st.info("Train multi-horizon models to see detailed per-horizon breakdown.")
+
+    st.divider()
+
+    # Section 4b: Bias Analysis (NEW)
+    st.markdown("#### ⚖️ Forecast Bias Analysis")
+    st.caption("Systematic over/under-forecasting detection - critical for hospital resource planning")
+
+    if not all_models_df.empty and "ME" in all_models_df.columns:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Bias metrics table
+            bias_cols = ["Model", "ME", "MPE_%"]
+            bias_cols = [c for c in bias_cols if c in all_models_df.columns]
+            if len(bias_cols) > 1:
+                bias_df = all_models_df[bias_cols].copy()
+
+                # Add interpretation column
+                def interpret_bias(row):
+                    me = row.get("ME", np.nan)
+                    if pd.isna(me):
+                        return "—"
+                    elif abs(me) < 1:
+                        return "✅ No significant bias"
+                    elif me > 0:
+                        return f"⬆️ Over-forecasts by {abs(me):.1f}"
+                    else:
+                        return f"⬇️ Under-forecasts by {abs(me):.1f}"
+
+                bias_df["Bias Status"] = bias_df.apply(interpret_bias, axis=1)
+
+                st.dataframe(
+                    bias_df.style.format({"ME": "{:+.2f}", "MPE_%": "{:+.2f}%"}, na_rep="—"),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with col2:
+            # Bias interpretation
+            best_model_idx = all_models_df["RMSE"].idxmin() if "RMSE" in all_models_df.columns else 0
+            best_me = all_models_df.loc[best_model_idx, "ME"] if "ME" in all_models_df.columns else np.nan
+            best_mpe = all_models_df.loc[best_model_idx, "MPE_%"] if "MPE_%" in all_models_df.columns else np.nan
+            best_name = all_models_df.loc[best_model_idx, "Model"]
+
+            if pd.notna(best_me):
+                if abs(best_me) < 1:
+                    bias_color = "#22c55e"  # Green
+                    bias_icon = "✅"
+                elif abs(best_me) < 5:
+                    bias_color = "#facc15"  # Yellow
+                    bias_icon = "⚠️"
+                else:
+                    bias_color = "#f97373"  # Red
+                    bias_icon = "❌"
+
+                direction = "over-forecasts" if best_me > 0 else "under-forecasts"
+
+                st.markdown(f"""
+                <div style="background: rgba(30, 41, 59, 0.8); border: 1px solid {bias_color}50;
+                            border-radius: 12px; padding: 1rem;">
+                    <div style="font-size: 1.2rem; margin-bottom: 0.5rem;">
+                        {bias_icon} <strong style="color: {bias_color}">{best_name}</strong>
+                    </div>
+                    <div style="color: #d1d5db; font-size: 0.9rem;">
+                        Model {direction} by an average of <strong>{abs(best_me):.1f}</strong> patients
+                        (MPE: <strong>{best_mpe:+.1f}%</strong>)
+                    </div>
+                    <div style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.5rem;">
+                        {'In healthcare, under-forecasting is more dangerous as it leads to stockouts and understaffing.' if best_me < 0 else 'Over-forecasting leads to resource waste but is safer than under-forecasting.'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Train models to see bias analysis.")
+    else:
+        st.info("Train models with new metrics to see bias analysis. The ME (Mean Error) and MPE (Mean Percentage Error) metrics detect systematic forecast bias.")
+
     st.divider()
 
     # Section 5: Rankings with Heatmap
