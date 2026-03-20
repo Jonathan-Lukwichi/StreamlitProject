@@ -1429,12 +1429,13 @@ def generate_markdown_report(
 
 
 # =============================================================================
-# HERO HEADER
+# HERO HEADER WITH BACKGROUND IMAGE
 # =============================================================================
-render_scifi_hero_header(
+render_page_hero(
     title="Action Center",
     subtitle="Unified dashboard with ML-powered recommendations and export capabilities",
-    status="SYSTEM ONLINE"
+    badge="Command Center",
+    icon="🏥"
 )
 
 # Current date display
