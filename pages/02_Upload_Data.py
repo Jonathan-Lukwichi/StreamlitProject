@@ -431,11 +431,14 @@ def page_data_hub():
 
         # Detect hospital change and reset date pickers
         prev_hospital = st.session_state.get("_prev_hospital", None)
-        if prev_hospital != selected_hospital:
-            # Hospital changed - clear cached date values
+        if prev_hospital is not None and prev_hospital != selected_hospital:
+            # Hospital changed - clear cached date values and rerun
             for key in ["hosp_start", "hosp_end"]:
                 if key in st.session_state:
                     del st.session_state[key]
+            st.session_state["_prev_hospital"] = selected_hospital
+            st.rerun()
+        elif prev_hospital is None:
             st.session_state["_prev_hospital"] = selected_hospital
 
         st.session_state["selected_hospital"] = selected_hospital
