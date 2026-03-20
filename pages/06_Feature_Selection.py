@@ -1073,6 +1073,7 @@ def main():
     apply_css()
     inject_sidebar_style()
     render_sidebar_brand()
+    inject_page_hero_styles("feature_selection")
 
     # Fluorescent effects
     st.markdown("""
