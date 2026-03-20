@@ -291,8 +291,12 @@ class BaseMLPipeline(ABC):
             "MAE": [],
             "RMSE": [],
             "MAPE": [],
+            "sMAPE": [],
             "Accuracy": [],
-            "R2": []
+            "R2": [],
+            "DA": [],
+            "ME": [],
+            "MPE": [],
         }
 
         for train_idx, val_idx in tscv.split(X):
