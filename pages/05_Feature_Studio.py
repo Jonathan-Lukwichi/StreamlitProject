@@ -1306,6 +1306,7 @@ def main():
     inject_sidebar_style()
     render_sidebar_brand()
     init_state()
+    inject_page_hero_styles("feature_studio")
 
     # Fluorescent effects
     st.markdown("""
