@@ -92,6 +92,65 @@ class HospitalDataService:
         # Default if nothing found
         return ["Pamplona Spain Hospital"]
 
+    def get_hospital_date_range(self, hospital_name: str) -> tuple:
+        """
+        Get the min and max dates for a hospital's data.
+
+        Args:
+            hospital_name: Name of the hospital
+
+        Returns:
+            Tuple of (min_date, max_date) as datetime objects
+            Returns default range if data not found
+        """
+        if not self.is_connected():
+            return (datetime(2018, 1, 1), datetime(2023, 12, 31))
+
+        min_date = None
+        max_date = None
+
+        # Check patient_arrivals table for date range
+        try:
+            # Get minimum date
+            response = (
+                self.client.table("patient_arrivals")
+                .select("datetime")
+                .eq("hospital_name", hospital_name)
+                .order("datetime", desc=False)
+                .limit(1)
+                .execute()
+            )
+            if response.data and response.data[0].get("datetime"):
+                min_date = pd.to_datetime(response.data[0]["datetime"])
+
+            # Get maximum date
+            response = (
+                self.client.table("patient_arrivals")
+                .select("datetime")
+                .eq("hospital_name", hospital_name)
+                .order("datetime", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if response.data and response.data[0].get("datetime"):
+                max_date = pd.to_datetime(response.data[0]["datetime"])
+
+        except Exception:
+            pass
+
+        # Return defaults if not found
+        if min_date is None:
+            min_date = datetime(2018, 1, 1)
+        else:
+            min_date = min_date.to_pydatetime() if hasattr(min_date, 'to_pydatetime') else min_date
+
+        if max_date is None:
+            max_date = datetime(2023, 12, 31)
+        else:
+            max_date = max_date.to_pydatetime() if hasattr(max_date, 'to_pydatetime') else max_date
+
+        return (min_date, max_date)
+
     def fetch_dataset_by_hospital(
         self,
         dataset_type: str,
