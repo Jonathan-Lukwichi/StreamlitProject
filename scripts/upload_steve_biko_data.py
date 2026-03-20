@@ -359,6 +359,9 @@ def main():
             table_name = table_mapping[dataset_type]
             print(f"  Uploading to table: {table_name}")
 
+            # Delete existing data for this hospital first
+            delete_existing_hospital_data(client, table_name, HOSPITAL_NAME)
+
             uploaded, errors = upload_to_supabase(client, table_name, df)
 
             results[dataset_type] = {
