@@ -711,16 +711,14 @@ div[data-testid="stButton"] > button[kind="primary"]:hover {{
 .cta-subtitle {{
     color: #334155;
     font-size: 1.1rem;
-    max-width: 550px;
-    margin: 0 auto 2rem auto;
+    max-width: 600px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    margin-bottom: 2rem;
     position: relative;
     z-index: 1;
     line-height: 1.7;
     text-align: center !important;
-    display: block;
-    width: 100%;
-    left: 0;
-    right: 0;
 }}
 
 /* ========================================
