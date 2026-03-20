@@ -716,14 +716,12 @@ def _extract_optimized_metrics(opt_results: Dict, model_type: str) -> Optional[D
     """Extract metrics from hyperparameter-optimized model results."""
     try:
         metrics = opt_results.get("best_metrics", opt_results.get("metrics", {}))
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": f"{model_type} (Optimized)",
             "Category": _get_model_category(model_type),
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("mae", metrics.get("MAE"))),
-            "RMSE": _safe_float(metrics.get("rmse", metrics.get("RMSE"))),
-            "MAPE_%": _safe_float(metrics.get("mape", metrics.get("MAPE"))),
-            "Accuracy_%": _safe_float(metrics.get("accuracy", metrics.get("Accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(opt_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Optimized via {opt_results.get('method', 'Grid Search')}",
@@ -736,14 +734,12 @@ def _extract_generic_hybrid_metrics(hybrid_data: Dict, hybrid_name: str) -> Opti
     """Extract metrics from generic hybrid pipeline results."""
     try:
         metrics = hybrid_data.get("metrics", {})
+        extracted = _extract_all_metrics_from_dict(metrics)
         return {
             "Model": f"Hybrid {hybrid_name}",
             "Category": "Hybrid",
             "Source": "Modeling Hub",
-            "MAE": _safe_float(metrics.get("MAE", metrics.get("mae"))),
-            "RMSE": _safe_float(metrics.get("RMSE", metrics.get("rmse"))),
-            "MAPE_%": _safe_float(metrics.get("MAPE", metrics.get("mape"))),
-            "Accuracy_%": _safe_float(metrics.get("Accuracy", metrics.get("accuracy"))),
+            **extracted,
             "Runtime_s": _safe_float(hybrid_data.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Hybrid pipeline: {hybrid_name}",
