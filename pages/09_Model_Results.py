@@ -2180,10 +2180,10 @@ with tab_performance:
                 lambda x: (1 - x / naive_rmse) * 100 if pd.notna(x) and naive_rmse > 0 else np.nan
             )
 
-    # Select columns to display
-    display_cols = ["Model", "Category", "MAE", "RMSE", "MAPE_%", "Accuracy_%"]
+    # Select columns to display - including new metrics
+    display_cols = ["Model", "Category", "MAE", "RMSE", "MAPE_%", "sMAPE_%", "Accuracy_%", "R2", "DA", "ME", "MPE_%"]
     if "Skill_%" in display_df.columns:
-        display_cols.insert(4, "Skill_%")
+        display_cols.insert(6, "Skill_%")
     display_cols = [c for c in display_cols if c in display_df.columns]
 
     # Apply formatting
@@ -2193,10 +2193,10 @@ with tab_performance:
 
     st.dataframe(
         display_df[display_cols].style.format(format_dict, na_rep="—").background_gradient(
-            subset=[c for c in ["MAE", "RMSE", "MAPE_%"] if c in display_cols],
+            subset=[c for c in ["MAE", "RMSE", "MAPE_%", "sMAPE_%"] if c in display_cols],
             cmap="RdYlGn_r"
         ).background_gradient(
-            subset=[c for c in ["Accuracy_%", "Skill_%"] if c in display_cols],
+            subset=[c for c in ["Accuracy_%", "Skill_%", "R2", "DA"] if c in display_cols],
             cmap="RdYlGn"
         ),
         use_container_width=True,
