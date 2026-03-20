@@ -68,11 +68,67 @@ def mape(y_true, y_pred, eps: float = 1e-8) -> float:
     denom = np.clip(np.abs(y_true), eps, None)
     return float(np.mean(np.abs((y_true - y_pred) / denom)) * 100.0)
 
+def smape(y_true, y_pred) -> float:
+    """Compute Symmetric Mean Absolute Percentage Error."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    numerator = np.abs(y_true - y_pred)
+    denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
+    smape_vals = np.where(denominator != 0, numerator / denominator, 0.0)
+    return float(np.mean(smape_vals) * 100)
+
+def r2_score_safe(y_true, y_pred) -> float:
+    """Compute R² with safety for edge cases."""
+    from sklearn.metrics import r2_score
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    if len(y_true) < 2 or np.std(y_true) == 0:
+        return float("nan")
+    try:
+        return float(r2_score(y_true, y_pred))
+    except:
+        return float("nan")
+
+def directional_accuracy(y_true, y_pred) -> float:
+    """Compute Directional Accuracy (DA)."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    if len(y_true) < 2:
+        return float("nan")
+    actual_dir = np.diff(y_true)
+    pred_dir = np.diff(y_pred)
+    agreement = (actual_dir * pred_dir > 0) | ((actual_dir == 0) & (pred_dir == 0))
+    return float(np.mean(agreement) * 100)
+
+def mean_error(y_true, y_pred) -> float:
+    """Compute Mean Error (ME) - Bias indicator."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    return float(np.mean(y_pred - y_true))
+
+def mean_percentage_error(y_true, y_pred) -> float:
+    """Compute Mean Percentage Error (MPE) - Relative bias."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    nonzero_mask = y_true != 0
+    if not np.any(nonzero_mask):
+        return float("nan")
+    return float(np.mean((y_pred[nonzero_mask] - y_true[nonzero_mask]) / y_true[nonzero_mask]) * 100)
+
 def compute_metrics(y_true, y_pred) -> dict:
-    """Computes a dictionary of standard regression metrics."""
-    return {"rmse": rmse(y_true, y_pred),
-            "mae": mae(y_true, y_pred),
-            "mape": mape(y_true, y_pred)}
+    """Computes a comprehensive dictionary of forecast performance metrics."""
+    _mape = mape(y_true, y_pred)
+    return {
+        "MAE": mae(y_true, y_pred),
+        "RMSE": rmse(y_true, y_pred),
+        "MAPE": _mape,
+        "sMAPE": smape(y_true, y_pred),
+        "Accuracy": max(0.0, 100.0 - _mape) if np.isfinite(_mape) else float("nan"),
+        "R2": r2_score_safe(y_true, y_pred),
+        "DA": directional_accuracy(y_true, y_pred),
+        "ME": mean_error(y_true, y_pred),
+        "MPE": mean_percentage_error(y_true, y_pred),
+    }
 
 def save_artifacts(obj: Any, path: str):
     """Save an object to a file using joblib."""
