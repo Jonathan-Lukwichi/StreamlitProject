@@ -126,6 +126,7 @@ st.set_page_config(
 apply_css()
 inject_sidebar_style()
 render_sidebar_brand()
+inject_page_hero_styles("results")
 
 # =============================================================================
 # CONSTANTS & STYLING
