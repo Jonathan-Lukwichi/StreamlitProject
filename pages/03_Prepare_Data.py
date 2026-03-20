@@ -19,6 +19,7 @@ from app_core.ui.theme import (
 from app_core.ui.sidebar_brand import inject_sidebar_style, render_sidebar_brand, render_cache_management
 from app_core.ui.page_navigation import render_page_navigation
 from app_core.ui.components import render_scifi_hero_header
+from app_core.ui.page_hero import inject_page_hero_styles, render_page_hero
 from app_core.cache import save_to_cache, get_cache_manager
 
 # ============================================================================
