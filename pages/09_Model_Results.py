@@ -1825,11 +1825,12 @@ This evaluation was conducted using:
 # MAIN PAGE RENDERING
 # =============================================================================
 
-# Premium Hero Header
-render_scifi_hero_header(
+# Premium Hero Header with Background Image
+render_page_hero(
     title="Model Results",
     subtitle="Performance analysis and model comparison. Comprehensive metrics and thesis-quality reporting.",
-    status="SYSTEM ONLINE"
+    badge="Performance Analytics",
+    icon="📊"
 )
 
 # =============================================================================
