@@ -84,6 +84,7 @@ inject_sidebar_style()
 render_sidebar_brand()
 add_logout_button()
 render_cache_management()
+inject_page_hero_styles("train")
 
 # Fluorescent effects + Custom Tab Styling
 st.markdown(f"""
