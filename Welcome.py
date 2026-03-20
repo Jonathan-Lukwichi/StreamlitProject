@@ -674,7 +674,7 @@ div[data-testid="stButton"] > button[kind="primary"]:active {{
 }}
 
 .cta-subtitle {{
-    color: #cbd5e1;
+    color: #e2e8f0;
     font-size: 1.15rem;
     max-width: 600px;
     margin: 0 auto 2.5rem auto;
@@ -683,7 +683,16 @@ div[data-testid="stButton"] > button[kind="primary"]:active {{
     line-height: 1.7;
     text-align: center;
     display: block;
-    width: 100%;
+    width: fit-content;
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.8) 100%);
+    padding: 1.25rem 2rem;
+    border-radius: 16px;
+    border: 1px solid rgba(34, 211, 238, 0.3);
+    backdrop-filter: blur(10px);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 0 20px rgba(34, 211, 238, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }}
 
 /* ========================================
