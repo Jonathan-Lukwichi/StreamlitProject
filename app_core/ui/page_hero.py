@@ -169,6 +169,10 @@ def inject_page_hero_styles(page_id: str) -> None:
         position: relative;
         z-index: 1;
         text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     }}
 
     .page-hero-badge {{
