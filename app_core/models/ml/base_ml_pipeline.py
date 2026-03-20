@@ -191,14 +191,14 @@ class BaseMLPipeline(ABC):
 
     def evaluate(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
         """
-        Calculate standard forecasting metrics.
+        Calculate comprehensive forecasting metrics.
 
         Args:
             y_true: Ground truth values
             y_pred: Predicted values
 
         Returns:
-            Dictionary of metrics (MAE, RMSE, MAPE, Accuracy, R²)
+            Dictionary of metrics (MAE, RMSE, MAPE, sMAPE, Accuracy, R², DA, ME, MPE)
         """
         from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
@@ -206,25 +206,69 @@ class BaseMLPipeline(ABC):
         y_true = np.array(y_true).flatten()
         y_pred = np.array(y_pred).flatten()
 
-        # Calculate metrics
+        # Remove NaN values
+        mask = ~(np.isnan(y_true) | np.isnan(y_pred))
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
+
+        if len(y_true) == 0:
+            return {
+                "MAE": np.nan, "RMSE": np.nan, "MAPE": np.nan, "sMAPE": np.nan,
+                "Accuracy": np.nan, "R2": np.nan, "DA": np.nan, "ME": np.nan, "MPE": np.nan,
+            }
+
+        # Calculate base metrics
         mae = float(mean_absolute_error(y_true, y_pred))
         rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
         # MAPE with safety for zero values
-        mape = float(np.mean(np.abs((y_true - y_pred) / (np.abs(y_true) + 1e-9))) * 100)
-        accuracy = float(100 - mape)
+        nonzero_mask = y_true != 0
+        if np.any(nonzero_mask):
+            mape = float(np.mean(np.abs((y_true[nonzero_mask] - y_pred[nonzero_mask]) / y_true[nonzero_mask])) * 100)
+        else:
+            mape = np.nan
+        accuracy = float(100 - mape) if np.isfinite(mape) else np.nan
 
+        # R² (Coefficient of Determination)
         try:
             r2 = float(r2_score(y_true, y_pred))
         except:
             r2 = np.nan
 
+        # sMAPE - Symmetric MAPE
+        numerator = np.abs(y_true - y_pred)
+        denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
+        smape_vals = np.where(denominator != 0, numerator / denominator, 0.0)
+        smape = float(np.mean(smape_vals) * 100)
+
+        # Directional Accuracy (DA)
+        if len(y_true) > 1:
+            actual_dir = np.diff(y_true)
+            pred_dir = np.diff(y_pred)
+            agreement = (actual_dir * pred_dir > 0) | ((actual_dir == 0) & (pred_dir == 0))
+            da = float(np.mean(agreement) * 100)
+        else:
+            da = np.nan
+
+        # ME - Mean Error (Bias)
+        me = float(np.mean(y_pred - y_true))
+
+        # MPE - Mean Percentage Error (Relative Bias)
+        if np.any(nonzero_mask):
+            mpe = float(np.mean((y_pred[nonzero_mask] - y_true[nonzero_mask]) / y_true[nonzero_mask]) * 100)
+        else:
+            mpe = np.nan
+
         return {
             "MAE": mae,
             "RMSE": rmse,
             "MAPE": mape,
+            "sMAPE": smape,
             "Accuracy": accuracy,
             "R2": r2,
+            "DA": da,
+            "ME": me,
+            "MPE": mpe,
         }
 
     def cross_validate(self, X: np.ndarray, y: np.ndarray,
