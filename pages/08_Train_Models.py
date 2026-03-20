@@ -252,12 +252,13 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Premium Hero Header
+# Premium Hero Header with Background Image
 # -----------------------------------------------------------------------------
-render_scifi_hero_header(
+render_page_hero(
     title="Modelling Studio",
     subtitle="Configure and train machine learning models. XGBoost, LSTM, ANN, and hybrid architectures.",
-    status="SYSTEM ONLINE"
+    badge="Machine Learning",
+    icon="🧠"
 )
 
 # -----------------------------------------------------------------------------
