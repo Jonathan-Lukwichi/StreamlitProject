@@ -717,6 +717,7 @@ def page_eda():
     apply_css()
     inject_sidebar_style()
     render_sidebar_brand()
+    inject_page_hero_styles("explore")
 
     # Apply fluorescent effects
     st.markdown("""
