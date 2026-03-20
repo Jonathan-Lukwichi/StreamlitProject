@@ -137,14 +137,31 @@ METRIC_FORMATTERS = {
     "RMSE": "{:.4f}",
     "MAPE_%": "{:.2f}",
     "MAPE": "{:.2f}",
+    "sMAPE_%": "{:.2f}",
+    "sMAPE": "{:.2f}",
     "Accuracy_%": "{:.2f}",
     "Accuracy": "{:.2f}",
     "R2": "{:.4f}",
     "R²": "{:.4f}",
+    "DA": "{:.2f}",
+    "Direction_Accuracy_%": "{:.2f}",
+    "ME": "{:+.2f}",
+    "MPE_%": "{:+.2f}",
+    "MPE": "{:+.2f}",
     "Runtime_s": "{:.2f}",
     "AIC": "{:.1f}",
     "BIC": "{:.1f}",
 }
+
+# Import metrics utilities
+try:
+    from app_core.analytics.metrics_utils import (
+        get_metric_color, get_metric_status, format_metric_value,
+        get_bias_interpretation, METRIC_THRESHOLDS
+    )
+    METRICS_UTILS_AVAILABLE = True
+except ImportError:
+    METRICS_UTILS_AVAILABLE = False
 
 # Model category colors
 MODEL_COLORS = {
