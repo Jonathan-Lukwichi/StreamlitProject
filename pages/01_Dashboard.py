@@ -64,6 +64,7 @@ add_logout_button()
 inject_kpi_styles()
 inject_fluorescent_effects()
 inject_tab_styling()
+inject_page_hero_styles("dashboard")
 
 # =============================================================================
 # CALCULATE KPIs FROM REAL DATA
