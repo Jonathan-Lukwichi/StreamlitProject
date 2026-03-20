@@ -750,6 +750,7 @@ def page_data_preparation_studio():
     render_sidebar_brand()
     add_logout_button()
     render_cache_management()
+    inject_page_hero_styles("prepare")
 
     # Apply fluorescent effects + Custom Tab Styling
     st.markdown(f"""
