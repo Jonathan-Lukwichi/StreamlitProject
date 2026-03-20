@@ -1485,11 +1485,12 @@ def main():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    render_scifi_hero_header(
+    # Premium Hero Header with Background Image
+    render_page_hero(
         title="Feature Studio",
         subtitle="Create temporal and cyclical features. Build predictive signals with lag features and rolling statistics.",
-        status="SYSTEM ONLINE"
+        badge="Feature Engineering",
+        icon="🧪"
     )
     page_feature_engineering()
 
