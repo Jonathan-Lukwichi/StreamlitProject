@@ -716,7 +716,11 @@ div[data-testid="stButton"] > button[kind="primary"]:hover {{
     position: relative;
     z-index: 1;
     line-height: 1.7;
-    text-align: center;
+    text-align: center !important;
+    display: block;
+    width: 100%;
+    left: 0;
+    right: 0;
 }}
 
 /* ========================================
