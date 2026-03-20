@@ -204,9 +204,10 @@ def inject_page_hero_styles(page_id: str) -> None:
         font-size: 1.1rem;
         color: #cbd5e1;
         max-width: 600px;
+        width: 100%;
         margin: 1rem auto 0 auto;
         line-height: 1.6;
-        text-align: center;
+        text-align: center !important;
         text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
     }}
 
