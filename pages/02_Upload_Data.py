@@ -379,11 +379,12 @@ def page_data_hub():
     <div class="sparkle sparkle-3"></div>
     """, unsafe_allow_html=True)
 
-    # Premium Hero Header
-    render_scifi_hero_header(
+    # Premium Hero Header with Background Image
+    render_page_hero(
         title="Upload Data",
         subtitle="Upload and manage your patient, weather, and calendar data for comprehensive healthcare forecasting.",
-        status="SYSTEM ONLINE"
+        badge="Data Integration Hub",
+        icon="📤"
     )
 
     # Ensure session keys exist
