@@ -670,6 +670,9 @@ div[data-testid="stButton"] > button[kind="primary"]:active {{
     position: relative;
     z-index: 1;
     line-height: 1.7;
+    text-align: center;
+    display: block;
+    width: 100%;
 }}
 
 /* ========================================
