@@ -516,7 +516,12 @@ def _aggregate_horizon_metrics(results_df: pd.DataFrame, model_name: str) -> Opt
         mae_col = "Test_MAE" if "Test_MAE" in results_df.columns else "MAE"
         rmse_col = "Test_RMSE" if "Test_RMSE" in results_df.columns else "RMSE"
         mape_col = "Test_MAPE" if "Test_MAPE" in results_df.columns else "MAPE_%"
+        smape_col = "Test_sMAPE" if "Test_sMAPE" in results_df.columns else "sMAPE_%"
         acc_col = "Test_Acc" if "Test_Acc" in results_df.columns else "Accuracy_%"
+        r2_col = "Test_R2" if "Test_R2" in results_df.columns else "R2"
+        da_col = "DirAcc" if "DirAcc" in results_df.columns else "Direction_Accuracy_%"
+        me_col = "Bias" if "Bias" in results_df.columns else "ME"
+        mpe_col = "MPE" if "MPE" in results_df.columns else "MPE_%"
 
         return {
             "Model": f"{model_name} (Avg)",
@@ -525,7 +530,12 @@ def _aggregate_horizon_metrics(results_df: pd.DataFrame, model_name: str) -> Opt
             "MAE": _safe_float(results_df[mae_col].mean()) if mae_col in results_df.columns else np.nan,
             "RMSE": _safe_float(results_df[rmse_col].mean()) if rmse_col in results_df.columns else np.nan,
             "MAPE_%": _safe_float(results_df[mape_col].mean()) if mape_col in results_df.columns else np.nan,
+            "sMAPE_%": _safe_float(results_df[smape_col].mean()) if smape_col in results_df.columns else np.nan,
             "Accuracy_%": _safe_float(results_df[acc_col].mean()) if acc_col in results_df.columns else np.nan,
+            "R2": _safe_float(results_df[r2_col].mean()) if r2_col in results_df.columns else np.nan,
+            "DA": _safe_float(results_df[da_col].mean()) if da_col in results_df.columns else np.nan,
+            "ME": _safe_float(results_df[me_col].mean()) if me_col in results_df.columns else np.nan,
+            "MPE_%": _safe_float(results_df[mpe_col].mean()) if mpe_col in results_df.columns else np.nan,
             "Runtime_s": np.nan,
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Horizons: {len(results_df)}",
