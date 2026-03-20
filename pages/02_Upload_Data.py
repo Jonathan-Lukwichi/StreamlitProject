@@ -428,6 +428,16 @@ def page_data_hub():
             key="hospital_selector",
             help="Select the hospital to fetch data from"
         )
+
+        # Detect hospital change and reset date pickers
+        prev_hospital = st.session_state.get("_prev_hospital", None)
+        if prev_hospital != selected_hospital:
+            # Hospital changed - clear cached date values
+            for key in ["hosp_start", "hosp_end"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.session_state["_prev_hospital"] = selected_hospital
+
         st.session_state["selected_hospital"] = selected_hospital
 
         # Quick fetch all button
@@ -440,6 +450,9 @@ def page_data_hub():
                 min_date, max_date = hospital_service.get_hospital_date_range(selected_hospital)
             except Exception:
                 min_date, max_date = datetime(2018, 1, 1), datetime(2023, 12, 31)
+
+            # Display the detected date range
+            st.caption(f"📅 Detected range: {min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}")
 
             col_date1, col_date2 = st.columns(2)
             with col_date1:
