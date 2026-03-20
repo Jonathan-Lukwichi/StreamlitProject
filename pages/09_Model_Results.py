@@ -563,7 +563,12 @@ def _extract_ml_metrics(ml_results: Dict, model_name: str) -> Optional[Dict]:
         mae_avg = results_df["Test_MAE"].mean() if "Test_MAE" in results_df.columns else np.nan
         rmse_avg = results_df["Test_RMSE"].mean() if "Test_RMSE" in results_df.columns else np.nan
         mape_avg = results_df["Test_MAPE"].mean() if "Test_MAPE" in results_df.columns else np.nan
+        smape_avg = results_df["Test_sMAPE"].mean() if "Test_sMAPE" in results_df.columns else np.nan
         acc_avg = results_df["Test_Acc"].mean() if "Test_Acc" in results_df.columns else np.nan
+        r2_avg = results_df["Test_R2"].mean() if "Test_R2" in results_df.columns else np.nan
+        da_avg = results_df["Test_DA"].mean() if "Test_DA" in results_df.columns else np.nan
+        me_avg = results_df["Test_ME"].mean() if "Test_ME" in results_df.columns else np.nan
+        mpe_avg = results_df["Test_MPE"].mean() if "Test_MPE" in results_df.columns else np.nan
 
         return {
             "Model": f"{model_name} (Avg)",
@@ -572,7 +577,12 @@ def _extract_ml_metrics(ml_results: Dict, model_name: str) -> Optional[Dict]:
             "MAE": _safe_float(mae_avg),
             "RMSE": _safe_float(rmse_avg),
             "MAPE_%": _safe_float(mape_avg),
+            "sMAPE_%": _safe_float(smape_avg),
             "Accuracy_%": _safe_float(acc_avg),
+            "R2": _safe_float(r2_avg),
+            "DA": _safe_float(da_avg),
+            "ME": _safe_float(me_avg),
+            "MPE_%": _safe_float(mpe_avg),
             "Runtime_s": _safe_float(ml_results.get("runtime_s")),
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Parameters": f"Horizons: {len(successful) if successful else len(results_df)}",
