@@ -375,16 +375,19 @@ def render_page_hero(
     badge_html = f'<div class="page-hero-badge">{badge}</div>' if badge else ""
     icon_html = f"{icon} " if icon else ""
 
-    st.markdown(f"""
-    <div class="page-hero">
-        <div class="page-hero-content">
-            {badge_html}
-            <h1 class="page-hero-title">{icon_html}{title}</h1>
-            <p class="page-hero-subtitle">{subtitle}</p>
-            {stats_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Build HTML without extra whitespace to avoid rendering issues
+    html_parts = [
+        '<div class="page-hero">',
+        '<div class="page-hero-content">',
+        badge_html,
+        f'<h1 class="page-hero-title">{icon_html}{title}</h1>',
+        f'<p class="page-hero-subtitle">{subtitle}</p>',
+        stats_html,
+        '</div>',
+        '</div>'
+    ]
+
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
 def render_section_divider(title: str, subtitle: Optional[str] = None, icon: str = "") -> None:
