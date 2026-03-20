@@ -15,8 +15,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # Statistical tools
-from statsmodels.tsa.stattools import acf as sm_acf, pacf as sm_pacf, adfuller
+from statsmodels.tsa.stattools import acf as sm_acf, pacf as sm_pacf, adfuller, kpss
 from statsmodels.tsa.seasonal import seasonal_decompose
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from scipy.stats import shapiro, normaltest, pearsonr, spearmanr, ttest_ind, f_oneway
 
 # App core
 from app_core.ui.theme import (
