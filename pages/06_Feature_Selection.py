@@ -760,11 +760,12 @@ def _pick_target(df: pd.DataFrame) -> List[str]:
 
 # ---------- Page ----------
 def page_feature_selection():
-    # Premium Hero Header
-    render_scifi_hero_header(
+    # Premium Hero Header with Background Image
+    render_page_hero(
         title="Feature Selection",
         subtitle="Select the most impactful features. Optimize model performance with advanced selection algorithms.",
-        status="SYSTEM ONLINE"
+        badge="Feature Optimization",
+        icon="🎯"
     )
 
     variants, train_idx, cal_idx, test_idx = _variants_from_session()
