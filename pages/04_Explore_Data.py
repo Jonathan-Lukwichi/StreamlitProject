@@ -1426,6 +1426,601 @@ def page_eda():
             except Exception as e:
                 st.error(f"FFT analysis failed: {e}")
 
+    # ==========================================================================
+    # STATISTICAL TESTS TAB - Thesis-Grade EDA
+    # ==========================================================================
+    if st.session_state["eda_active_tab"] == "statistical":
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 1.5rem 0 1rem 0;'>
+              <span style='font-size: 2rem;'>🎓</span>
+              <h2 class='hf-feature-title' style='margin: 0.5rem 0; font-size: 1.5rem;'>Statistical Tests for ML Modeling</h2>
+              <p class='hf-feature-description'>Academically rigorous hypothesis tests to justify feature engineering and model selection</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Prepare target series
+        target_series = df["Target_1"].dropna()
+
+        # =====================================================================
+        # SECTION 1: NORMALITY TESTS
+        # =====================================================================
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+              <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                <span style='font-size: 1.5rem;'>📊</span>
+                <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>1. Normality Tests</h3>
+              </div>
+              <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                <strong>ML Justification:</strong> Normality assumption affects choice of loss functions.
+                Non-normal distributions may require log transformation or robust models (XGBoost, LSTM).
+              </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col_norm1, col_norm2 = st.columns(2)
+
+        with col_norm1:
+            # Shapiro-Wilk Test (for n < 5000)
+            if len(target_series) < 5000:
+                shapiro_stat, shapiro_p = shapiro(target_series)
+                shapiro_result = "Reject H₀ (Non-Normal)" if shapiro_p < 0.05 else "Fail to Reject H₀ (Normal)"
+                shapiro_color = DANGER_COLOR if shapiro_p < 0.05 else SUCCESS_COLOR
+
+                st.markdown(
+                    f"""
+                    <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                                padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3);'>
+                      <h4 style='margin: 0 0 0.5rem 0; font-size: 1rem;'>Shapiro-Wilk Test</h4>
+                      <p style='font-size: 0.8rem; color: {SUBTLE_TEXT}; margin-bottom: 0.75rem;'>
+                        H₀: Data is normally distributed
+                      </p>
+                      <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;'>
+                        <div><span style='color: {SUBTLE_TEXT};'>W-statistic:</span> <strong>{shapiro_stat:.4f}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>p-value:</span> <strong>{shapiro_p:.4e}</strong></div>
+                      </div>
+                      <div style='margin-top: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px;'>
+                        <span style='color: {shapiro_color}; font-weight: 600;'>{shapiro_result}</span>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("Shapiro-Wilk skipped (n > 5000)")
+
+        with col_norm2:
+            # D'Agostino-Pearson Test
+            dagostino_stat, dagostino_p = normaltest(target_series)
+            dagostino_result = "Reject H₀ (Non-Normal)" if dagostino_p < 0.05 else "Fail to Reject H₀ (Normal)"
+            dagostino_color = DANGER_COLOR if dagostino_p < 0.05 else SUCCESS_COLOR
+
+            st.markdown(
+                f"""
+                <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                            padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3);'>
+                  <h4 style='margin: 0 0 0.5rem 0; font-size: 1rem;'>D'Agostino-Pearson Test</h4>
+                  <p style='font-size: 0.8rem; color: {SUBTLE_TEXT}; margin-bottom: 0.75rem;'>
+                    H₀: Data is normally distributed (skewness & kurtosis)
+                  </p>
+                  <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;'>
+                    <div><span style='color: {SUBTLE_TEXT};'>K²-statistic:</span> <strong>{dagostino_stat:.4f}</strong></div>
+                    <div><span style='color: {SUBTLE_TEXT};'>p-value:</span> <strong>{dagostino_p:.4e}</strong></div>
+                  </div>
+                  <div style='margin-top: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px;'>
+                    <span style='color: {dagostino_color}; font-weight: 600;'>{dagostino_result}</span>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Distribution metrics
+        skewness = target_series.skew()
+        kurtosis = target_series.kurtosis()
+        st.markdown(
+            f"""
+            <div style='margin-top: 1rem; padding: 0.75rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 3px solid {PRIMARY_COLOR};'>
+              <strong>Distribution Metrics:</strong> Skewness = {skewness:.3f} | Kurtosis = {kurtosis:.3f}<br>
+              <span style='font-size: 0.85rem; color: {SUBTLE_TEXT};'>
+                {'Right-skewed (consider log transform)' if skewness > 1 else 'Left-skewed' if skewness < -1 else 'Approximately symmetric'}
+                {' | Heavy tails (consider robust loss)' if kurtosis > 3 else ' | Light tails' if kurtosis < -1 else ''}
+              </span>
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # =====================================================================
+        # SECTION 2: STATIONARITY TESTS
+        # =====================================================================
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+              <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                <span style='font-size: 1.5rem;'>📉</span>
+                <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>2. Stationarity Tests</h3>
+              </div>
+              <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                <strong>ML Justification:</strong> Stationarity is required for ARIMA/SARIMAX validity.
+                Non-stationary series need differencing (d parameter) or detrending before modeling.
+              </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col_stat1, col_stat2 = st.columns(2)
+
+        with col_stat1:
+            # ADF Test
+            try:
+                adf_result = adfuller(target_series, autolag='AIC')
+                adf_stat, adf_p = adf_result[0], adf_result[1]
+                adf_lags = adf_result[2]
+                adf_conclusion = "Stationary (Reject H₀)" if adf_p < 0.05 else "Non-Stationary (Fail to Reject H₀)"
+                adf_color = SUCCESS_COLOR if adf_p < 0.05 else WARNING_COLOR
+
+                st.markdown(
+                    f"""
+                    <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                                padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3);'>
+                      <h4 style='margin: 0 0 0.5rem 0; font-size: 1rem;'>Augmented Dickey-Fuller (ADF)</h4>
+                      <p style='font-size: 0.8rem; color: {SUBTLE_TEXT}; margin-bottom: 0.75rem;'>
+                        H₀: Unit root exists (non-stationary)
+                      </p>
+                      <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;'>
+                        <div><span style='color: {SUBTLE_TEXT};'>Test Stat:</span> <strong>{adf_stat:.4f}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>p-value:</span> <strong>{adf_p:.4e}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>Lags Used:</span> <strong>{adf_lags}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>Critical 5%:</span> <strong>{adf_result[4]['5%']:.4f}</strong></div>
+                      </div>
+                      <div style='margin-top: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px;'>
+                        <span style='color: {adf_color}; font-weight: 600;'>{adf_conclusion}</span>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                st.error(f"ADF test failed: {e}")
+
+        with col_stat2:
+            # KPSS Test
+            try:
+                kpss_result = kpss(target_series, regression='c', nlags='auto')
+                kpss_stat, kpss_p = kpss_result[0], kpss_result[1]
+                kpss_lags = kpss_result[2]
+                # KPSS: H0 is stationarity (opposite of ADF)
+                kpss_conclusion = "Non-Stationary (Reject H₀)" if kpss_p < 0.05 else "Stationary (Fail to Reject H₀)"
+                kpss_color = WARNING_COLOR if kpss_p < 0.05 else SUCCESS_COLOR
+
+                st.markdown(
+                    f"""
+                    <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                                padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3);'>
+                      <h4 style='margin: 0 0 0.5rem 0; font-size: 1rem;'>KPSS Test</h4>
+                      <p style='font-size: 0.8rem; color: {SUBTLE_TEXT}; margin-bottom: 0.75rem;'>
+                        H₀: Series is stationary (trend-stationary)
+                      </p>
+                      <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;'>
+                        <div><span style='color: {SUBTLE_TEXT};'>Test Stat:</span> <strong>{kpss_stat:.4f}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>p-value:</span> <strong>{kpss_p:.4f}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>Lags Used:</span> <strong>{kpss_lags}</strong></div>
+                        <div><span style='color: {SUBTLE_TEXT};'>Critical 5%:</span> <strong>{kpss_result[3]['5%']:.4f}</strong></div>
+                      </div>
+                      <div style='margin-top: 0.75rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px;'>
+                        <span style='color: {kpss_color}; font-weight: 600;'>{kpss_conclusion}</span>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                st.error(f"KPSS test failed: {e}")
+
+        # Combined interpretation
+        st.markdown(
+            f"""
+            <div style='margin-top: 1rem; padding: 0.75rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 3px solid {PRIMARY_COLOR};'>
+              <strong>Combined Interpretation:</strong><br>
+              <span style='font-size: 0.85rem;'>
+                • ADF Reject + KPSS Don't Reject → <strong style='color: {SUCCESS_COLOR};'>Stationary</strong><br>
+                • ADF Don't Reject + KPSS Reject → <strong style='color: {DANGER_COLOR};'>Non-Stationary</strong> (apply differencing d=1)<br>
+                • Both Reject → Trend-Stationary (detrend required)<br>
+                • Neither Reject → Inconclusive (more tests needed)
+              </span>
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # =====================================================================
+        # SECTION 3: LJUNG-BOX TEST FOR SERIAL CORRELATION
+        # =====================================================================
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+              <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                <span style='font-size: 1.5rem;'>🔗</span>
+                <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>3. Ljung-Box Test (Serial Correlation)</h3>
+              </div>
+              <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                <strong>ML Justification:</strong> Significant autocorrelation justifies inclusion of lag features
+                (ED_1, ED_7) and validates use of ARIMA-family models.
+              </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        try:
+            lags_to_test = [7, 14, 21, 30]
+            lb_results = acorr_ljungbox(target_series, lags=lags_to_test, return_df=True)
+
+            lb_html = "<table style='width: 100%; border-collapse: collapse;'>"
+            lb_html += "<tr style='background: rgba(59, 130, 246, 0.2);'><th style='padding: 0.5rem; text-align: left;'>Lag</th><th>Q-Statistic</th><th>p-value</th><th>Conclusion</th></tr>"
+
+            for lag in lags_to_test:
+                q_stat = lb_results.loc[lag, 'lb_stat']
+                p_val = lb_results.loc[lag, 'lb_pvalue']
+                conclusion = "Serial Correlation" if p_val < 0.05 else "No Correlation"
+                color = SUCCESS_COLOR if p_val < 0.05 else SUBTLE_TEXT
+                lb_html += f"<tr><td style='padding: 0.5rem;'>{lag}</td><td>{q_stat:.2f}</td><td>{p_val:.4e}</td><td style='color: {color};'>{conclusion}</td></tr>"
+
+            lb_html += "</table>"
+            st.markdown(lb_html, unsafe_allow_html=True)
+
+            # Autocorrelation values at key lags
+            acf_vals = sm_acf(target_series, nlags=14, fft=True)
+            st.markdown(
+                f"""
+                <div style='margin-top: 1rem; padding: 0.75rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border-left: 3px solid {SUCCESS_COLOR};'>
+                  <strong>Key Autocorrelations (ACF):</strong><br>
+                  Lag-1: <strong>{acf_vals[1]:.4f}</strong> (yesterday) |
+                  Lag-7: <strong>{acf_vals[7]:.4f}</strong> (same day last week) |
+                  Lag-14: <strong>{acf_vals[14]:.4f}</strong> (two weeks ago)<br>
+                  <span style='font-size: 0.85rem; color: {SUBTLE_TEXT};'>
+                    → Include ED_1, ED_7 as features if ACF > 0.2
+                  </span>
+                </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        except Exception as e:
+            st.error(f"Ljung-Box test failed: {e}")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # =====================================================================
+        # SECTION 4: OUTLIER DETECTION (IQR METHOD)
+        # =====================================================================
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+              <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                <span style='font-size: 1.5rem;'>🎯</span>
+                <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>4. Outlier Detection (IQR Method)</h3>
+              </div>
+              <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                <strong>ML Justification:</strong> Outliers can bias model training. Identify whether extreme values
+                are data errors or real events (holidays/emergencies) requiring special handling.
+              </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        Q1 = target_series.quantile(0.25)
+        Q3 = target_series.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+
+        outliers_mask = (target_series < lower_bound) | (target_series > upper_bound)
+        n_outliers = outliers_mask.sum()
+        pct_outliers = 100 * n_outliers / len(target_series)
+
+        col_out1, col_out2 = st.columns([1, 2])
+
+        with col_out1:
+            st.markdown(
+                f"""
+                <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                            padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3);'>
+                  <h4 style='margin: 0 0 0.75rem 0; font-size: 1rem;'>IQR Statistics</h4>
+                  <div style='font-size: 0.9rem;'>
+                    <div style='margin-bottom: 0.5rem;'><span style='color: {SUBTLE_TEXT};'>Q1 (25%):</span> <strong>{Q1:.1f}</strong></div>
+                    <div style='margin-bottom: 0.5rem;'><span style='color: {SUBTLE_TEXT};'>Q3 (75%):</span> <strong>{Q3:.1f}</strong></div>
+                    <div style='margin-bottom: 0.5rem;'><span style='color: {SUBTLE_TEXT};'>IQR:</span> <strong>{IQR:.1f}</strong></div>
+                    <div style='margin-bottom: 0.5rem;'><span style='color: {SUBTLE_TEXT};'>Lower Bound:</span> <strong>{lower_bound:.1f}</strong></div>
+                    <div style='margin-bottom: 0.5rem;'><span style='color: {SUBTLE_TEXT};'>Upper Bound:</span> <strong>{upper_bound:.1f}</strong></div>
+                    <div style='margin-top: 1rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 8px;'>
+                      <span style='color: {WARNING_COLOR if pct_outliers > 5 else SUCCESS_COLOR}; font-weight: 600;'>
+                        {n_outliers} outliers ({pct_outliers:.2f}%)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with col_out2:
+            # Box plot with outliers
+            fig_box = go.Figure()
+            fig_box.add_trace(go.Box(
+                y=target_series,
+                name="Patient Arrivals",
+                boxpoints="outliers",
+                marker=dict(color=PRIMARY_COLOR, outliercolor=DANGER_COLOR),
+                line=dict(color=PRIMARY_COLOR),
+            ))
+            fig_box.update_layout(
+                title="Box Plot with Outliers Highlighted",
+                height=300,
+                margin=dict(l=20, r=20, t=40, b=20),
+                paper_bgcolor=CARD_BG,
+                plot_bgcolor=CARD_BG,
+                font=dict(color=TEXT_COLOR),
+            )
+            st.plotly_chart(fig_box, use_container_width=True)
+
+        # Top outlier days
+        if n_outliers > 0:
+            outlier_df = df[outliers_mask].copy()
+            outlier_df["_arrivals"] = target_series[outliers_mask]
+            top_outliers = outlier_df.nlargest(5, "_arrivals")
+
+            st.markdown("<h4 style='margin: 1rem 0 0.5rem 0;'>Top 5 Highest Arrival Days (Potential Outliers)</h4>", unsafe_allow_html=True)
+            outlier_table = "<table style='width: 100%; border-collapse: collapse;'>"
+            outlier_table += "<tr style='background: rgba(239, 68, 68, 0.2);'><th style='padding: 0.5rem;'>Date</th><th>Arrivals</th><th>Day</th></tr>"
+
+            for idx, row in top_outliers.iterrows():
+                date_str = idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx)
+                day_name = idx.strftime('%A') if hasattr(idx, 'strftime') else "N/A"
+                outlier_table += f"<tr><td style='padding: 0.5rem;'>{date_str}</td><td>{row['_arrivals']:.0f}</td><td>{day_name}</td></tr>"
+
+            outlier_table += "</table>"
+            st.markdown(outlier_table, unsafe_allow_html=True)
+
+        st.markdown(
+            f"""
+            <div style='margin-top: 1rem; padding: 0.75rem; background: rgba(251, 191, 36, 0.1); border-radius: 8px; border-left: 3px solid {WARNING_COLOR};'>
+              <strong>Handling Recommendations:</strong><br>
+              <span style='font-size: 0.85rem;'>
+                • <strong>Real events (holidays):</strong> Keep data, add binary indicator feature<br>
+                • <strong>Data errors:</strong> Impute with rolling median or remove<br>
+                • <strong>Robust modeling:</strong> Use XGBoost with Huber loss or winsorize at 1st/99th percentile
+              </span>
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # =====================================================================
+        # SECTION 5: DAY-OF-WEEK ANOVA TEST
+        # =====================================================================
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+              <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                <span style='font-size: 1.5rem;'>📅</span>
+                <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>5. Day-of-Week Effect (ANOVA)</h3>
+              </div>
+              <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                <strong>ML Justification:</strong> Significant day-of-week effect justifies including
+                <code>day_of_week</code> as a categorical feature or cyclical encoding (sin/cos).
+              </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if "day_of_week" in df.columns:
+            try:
+                day_groups = [df[df["day_of_week"] == d]["Target_1"].dropna().values for d in range(1, 8)]
+                day_groups = [g for g in day_groups if len(g) > 0]
+
+                if len(day_groups) >= 2:
+                    f_stat, anova_p = f_oneway(*day_groups)
+                    anova_conclusion = "Significant DOW Effect" if anova_p < 0.05 else "No Significant DOW Effect"
+                    anova_color = SUCCESS_COLOR if anova_p < 0.05 else SUBTLE_TEXT
+
+                    st.markdown(
+                        f"""
+                        <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                                    padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3); margin-bottom: 1rem;'>
+                          <h4 style='margin: 0 0 0.5rem 0; font-size: 1rem;'>One-Way ANOVA Results</h4>
+                          <p style='font-size: 0.8rem; color: {SUBTLE_TEXT}; margin-bottom: 0.75rem;'>
+                            H₀: Mean arrivals are equal across all days of the week
+                          </p>
+                          <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;'>
+                            <div><span style='color: {SUBTLE_TEXT};'>F-statistic:</span> <strong>{f_stat:.2f}</strong></div>
+                            <div><span style='color: {SUBTLE_TEXT};'>p-value:</span> <strong>{anova_p:.4e}</strong></div>
+                            <div style='color: {anova_color}; font-weight: 600;'>{anova_conclusion}</div>
+                          </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # DOW means
+                    dow_means = df.groupby("day_of_week")["Target_1"].agg(['mean', 'std', 'count']).reset_index()
+                    day_names = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
+                    dow_means["day_name"] = dow_means["day_of_week"].map(day_names)
+
+                    fig_dow = px.bar(dow_means, x="day_name", y="mean", error_y="std",
+                                     title="Mean Arrivals by Day of Week (±1 SD)",
+                                     labels={"day_name": "Day", "mean": "Mean Arrivals"},
+                                     color_discrete_sequence=[PRIMARY_COLOR])
+                    fig_dow.update_layout(
+                        height=300,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        paper_bgcolor=CARD_BG,
+                        plot_bgcolor=CARD_BG,
+                        font=dict(color=TEXT_COLOR),
+                    )
+                    st.plotly_chart(fig_dow, use_container_width=True)
+            except Exception as e:
+                st.error(f"ANOVA test failed: {e}")
+        else:
+            st.info("day_of_week column not found - run Feature Engineering first")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # =====================================================================
+        # SECTION 6: HOLIDAY EFFECT T-TEST
+        # =====================================================================
+        holiday_cols = [c for c in df.columns if 'holiday' in c.lower() or 'public' in c.lower()]
+
+        if holiday_cols:
+            st.markdown(
+                f"""
+                <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+                  <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                    <span style='font-size: 1.5rem;'>🎉</span>
+                    <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>6. Holiday Effect (T-Test)</h3>
+                  </div>
+                  <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                    <strong>ML Justification:</strong> Significant holiday effect justifies including
+                    <code>is_holiday</code> binary feature for improved forecast accuracy.
+                  </p>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            for hol_col in holiday_cols[:2]:  # Test first 2 holiday columns
+                try:
+                    hol_data = df[[hol_col, "Target_1"]].dropna()
+                    group0 = hol_data[hol_data[hol_col] == 0]["Target_1"]
+                    group1 = hol_data[hol_data[hol_col] == 1]["Target_1"]
+
+                    if len(group0) > 5 and len(group1) > 5:
+                        t_stat, t_p = ttest_ind(group0, group1)
+                        effect_pct = ((group1.mean() - group0.mean()) / group0.mean() * 100) if group0.mean() != 0 else 0
+                        t_conclusion = "Significant Difference" if t_p < 0.05 else "No Significant Difference"
+                        t_color = SUCCESS_COLOR if t_p < 0.05 else SUBTLE_TEXT
+
+                        st.markdown(
+                            f"""
+                            <div style='background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+                                        padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3); margin-bottom: 1rem;'>
+                              <h4 style='margin: 0 0 0.5rem 0; font-size: 1rem;'>{hol_col}</h4>
+                              <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; font-size: 0.9rem;'>
+                                <div><span style='color: {SUBTLE_TEXT};'>Non-Holiday Mean:</span> <strong>{group0.mean():.1f}</strong></div>
+                                <div><span style='color: {SUBTLE_TEXT};'>Holiday Mean:</span> <strong>{group1.mean():.1f}</strong></div>
+                                <div><span style='color: {SUBTLE_TEXT};'>Effect:</span> <strong>{effect_pct:+.1f}%</strong></div>
+                                <div><span style='color: {SUBTLE_TEXT};'>p-value:</span> <strong>{t_p:.4e}</strong></div>
+                              </div>
+                              <div style='margin-top: 0.5rem; color: {t_color}; font-weight: 600;'>{t_conclusion}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                except Exception as e:
+                    st.warning(f"Could not test {hol_col}: {e}")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # =====================================================================
+        # SECTION 7: ML MODEL RECOMMENDATIONS
+        # =====================================================================
+        st.markdown(
+            f"""
+            <div class='hf-feature-card' style='padding: 1.5rem; margin-bottom: 1.5rem;'>
+              <div style='display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;'>
+                <span style='font-size: 1.5rem;'>🤖</span>
+                <h3 style='margin: 0; font-size: 1.25rem; font-weight: 700;'>7. ML Model Selection Recommendations</h3>
+              </div>
+              <p style='color: {BODY_TEXT}; font-size: 0.9rem; margin-bottom: 1rem;'>
+                Based on the statistical tests above, here are evidence-based model recommendations:
+              </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        recommendations = []
+
+        # Based on normality
+        if dagostino_p < 0.05:
+            recommendations.append(("Non-Normal Distribution", "Use tree-based models (XGBoost, Random Forest) or LSTM which don't assume normality. Avoid pure linear regression.", WARNING_COLOR))
+        else:
+            recommendations.append(("Normal Distribution", "Linear models (ARIMA, SARIMAX) are appropriate. Consider Gaussian loss functions.", SUCCESS_COLOR))
+
+        # Based on stationarity
+        try:
+            if adf_p >= 0.05:
+                recommendations.append(("Non-Stationary Series", "Apply differencing (d=1 in ARIMA) or use first differences as features. Consider LSTM for trend capture.", WARNING_COLOR))
+            else:
+                recommendations.append(("Stationary Series", "ARIMA/SARIMAX can be applied directly. Include seasonal component (S) for weekly patterns.", SUCCESS_COLOR))
+        except:
+            pass
+
+        # Based on autocorrelation
+        try:
+            if acf_vals[1] > 0.3 or acf_vals[7] > 0.3:
+                recommendations.append(("Strong Autocorrelation", f"Include lag features: ED_1 (r={acf_vals[1]:.2f}), ED_7 (r={acf_vals[7]:.2f}). ARIMA AR terms justified.", SUCCESS_COLOR))
+        except:
+            pass
+
+        # Based on outliers
+        if pct_outliers > 5:
+            recommendations.append(("High Outlier Rate", f"{pct_outliers:.1f}% outliers detected. Use robust loss (Huber) or winsorize data. XGBoost handles outliers well.", WARNING_COLOR))
+
+        for title, desc, color in recommendations:
+            st.markdown(
+                f"""
+                <div style='background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 8px; margin-bottom: 0.5rem; border-left: 3px solid {color};'>
+                  <strong style='color: {color};'>{title}</strong><br>
+                  <span style='font-size: 0.9rem;'>{desc}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            f"""
+            <div style='margin-top: 1.5rem; padding: 1rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.1)); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);'>
+              <h4 style='margin: 0 0 0.75rem 0; color: {PRIMARY_COLOR};'>📚 Academic References</h4>
+              <ul style='font-size: 0.85rem; margin: 0; padding-left: 1.25rem;'>
+                <li>Box, G.E.P., Jenkins, G.M., Reinsel, G.C., & Ljung, G.M. (2015). <em>Time Series Analysis: Forecasting and Control.</em> Wiley.</li>
+                <li>Hyndman, R.J. & Athanasopoulos, G. (2021). <em>Forecasting: Principles and Practice.</em> 3rd ed. OTexts.</li>
+                <li>Dickey, D.A. & Fuller, W.A. (1979). Distribution of the estimators for autoregressive time series with a unit root. <em>JASA</em>, 74(366), 427-431.</li>
+                <li>Kwiatkowski, D., Phillips, P.C.B., Schmidt, P., & Shin, Y. (1992). Testing the null hypothesis of stationarity against the alternative of a unit root. <em>Journal of Econometrics</em>, 54(1-3), 159-178.</li>
+              </ul>
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Save statistical test results to session state for thesis documentation
+        st.session_state["thesis_statistical_tests"] = {
+            "normality": {
+                "dagostino_stat": float(dagostino_stat),
+                "dagostino_p": float(dagostino_p),
+                "skewness": float(skewness),
+                "kurtosis": float(kurtosis),
+            },
+            "stationarity": {
+                "adf_stat": float(adf_stat) if 'adf_stat' in dir() else None,
+                "adf_p": float(adf_p) if 'adf_p' in dir() else None,
+                "kpss_stat": float(kpss_stat) if 'kpss_stat' in dir() else None,
+                "kpss_p": float(kpss_p) if 'kpss_p' in dir() else None,
+            },
+            "outliers": {
+                "n_outliers": int(n_outliers),
+                "pct_outliers": float(pct_outliers),
+                "lower_bound": float(lower_bound),
+                "upper_bound": float(upper_bound),
+            },
+            "generated_at": pd.Timestamp.now().isoformat(),
+        }
+        st.success("💾 Statistical test results saved to session state for thesis documentation")
 
 
 init_state()
