@@ -1344,22 +1344,28 @@ def _init_comparison_table():
     if "model_comparison" not in st.session_state or not isinstance(st.session_state["model_comparison"], pd.DataFrame):
         st.session_state["model_comparison"] = pd.DataFrame(columns=[
             "Timestamp", "Model", "TrainRatio",
-            "MAE", "RMSE", "MAPE_%", "Accuracy_%",
+            "MAE", "RMSE", "MAPE_%", "sMAPE_%", "Accuracy_%", "R2", "DA", "ME", "MPE_%",
             "Runtime_s", "ModelParams"
         ])
 
 def _append_to_comparison(model_name: str, train_ratio: float, kpis: dict, model_params: str, runtime_s: float | None = None):
     _init_comparison_table()
+    mape_val = _safe_float(kpis.get("MAPE"))
     row = {
         "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Model": model_name,
         "TrainRatio": f"{int(train_ratio*100)}%",
         "MAE": _safe_float(kpis.get("MAE")),
         "RMSE": _safe_float(kpis.get("RMSE")),
-        "MAPE_%": _safe_float(kpis.get("MAPE")),
+        "MAPE_%": mape_val,
+        "sMAPE_%": _safe_float(kpis.get("sMAPE")),
         "Accuracy_%": _safe_float(kpis.get("Accuracy")) if kpis.get("Accuracy") is not None else (
-            100.0 - _safe_float(kpis.get("MAPE")) if np.isfinite(_safe_float(kpis.get("MAPE"))) else np.nan
+            100.0 - mape_val if np.isfinite(mape_val) else np.nan
         ),
+        "R2": _safe_float(kpis.get("R2")),
+        "DA": _safe_float(kpis.get("DA", kpis.get("Direction_Accuracy"))),
+        "ME": _safe_float(kpis.get("ME", kpis.get("Bias"))),
+        "MPE_%": _safe_float(kpis.get("MPE")),
         "Runtime_s": round(float(runtime_s), 3) if runtime_s is not None else np.nan,
         "ModelParams": model_params
     }
