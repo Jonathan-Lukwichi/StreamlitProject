@@ -949,7 +949,7 @@ div[data-testid="stButton"] > button[kind="primary"]:active {{
 <div class="hero-section">
     <div class="hero-badge">Intelligent Hospital Resource Planning</div>
     <h1 class="hero-title">
-        Smarter Hospitals,
+        Smarter Hospitals
         <span class="hero-title-accent">Powered by AI</span>
     </h1>
     <p class="hero-subtitle">
