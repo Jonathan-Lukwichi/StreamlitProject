@@ -41,6 +41,9 @@ def map_patient_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     Target schema (patient_arrivals):
     - id, date, datetime, patient_count, created_at, hospital_name
+
+    NOTE: The original CSV has a 'patient_count' column with wrong values (0, 1).
+    The ACTUAL patient count = arrival_normal_hours + arrival_after_hours
     """
     df = df.copy()
 
@@ -49,9 +52,13 @@ def map_patient_columns(df: pd.DataFrame) -> pd.DataFrame:
         df["datetime"] = pd.to_datetime(df["date"], errors="coerce")
         df["date"] = df["datetime"].dt.strftime("%Y-%m-%d")
 
-    # patient_count already exists in source
-    if "patient_count" not in df.columns:
-        # Try to calculate from other columns
+    # Calculate CORRECT patient_count from arrival columns
+    # The CSV's patient_count column is WRONG (contains 0, 1 values)
+    if "arrival_normal_hours" in df.columns and "arrival_after_hours" in df.columns:
+        df["patient_count"] = df["arrival_normal_hours"].fillna(0) + df["arrival_after_hours"].fillna(0)
+        print(f"  Calculated patient_count from arrivals: min={df['patient_count'].min()}, max={df['patient_count'].max()}, mean={df['patient_count'].mean():.1f}")
+    elif "patient_count" not in df.columns:
+        # Fallback: Try to calculate from other columns
         numeric_cols = df.select_dtypes(include=['number']).columns
         if len(numeric_cols) > 0:
             df["patient_count"] = df[numeric_cols[0]]
